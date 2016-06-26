@@ -1,7 +1,17 @@
 #!/usr/bin/env bash
 
 if [ "$1" = "" ]; then
-echo "Usage: $0 <path to dockapp>"
+>&2 echo "Usage: $0 <path to dockapp>"
+exit 1
+fi
+
+if [ ! -d $1/STATIONS ]; then
+>&2 echo "STATIONS directory not found in dockapp path"
+exit 1
+fi
+
+if [ ! -f $1/STATIONS/list ]; then
+>&2 echo "STATIONS/list not found in dockapp path"
 exit 1
 fi
 
@@ -17,6 +27,21 @@ print_station()
   unset default_app
   unset possible_apps
   unset DM
+
+  if [ ! -d $1/STATIONS/$station_name ]; then
+  >&2 echo "Station directory STATIONS/$station_name not found in dockapp path"
+  exit 1
+  fi
+
+  if [ ! -f $1/STATIONS/$station_name/station.cfg ]; then
+  >&2 echo "Station configuration STATIONS/$station_name/station.cfg not found in dockapp path"
+  exit 1
+  fi
+
+  if [ ! -f $1/STATIONS/$station_name/startup.cfg ]; then
+  >&2 echo "Station configuration STATIONS/$station_name/startup.cfg not found in dockapp path"
+  exit 1
+  fi
 
   source $1/STATIONS/$station_name/station.cfg
   source $1/STATIONS/$station_name/startup.cfg
@@ -54,9 +79,7 @@ print_station()
   unset DM
 }
 
-echo "{"
-
-echo "\"stations\": ["
+echo "["
 
 first=1
 for station_name in $(cat $1/STATIONS/list) ; do
@@ -69,4 +92,3 @@ for station_name in $(cat $1/STATIONS/list) ; do
 done
 
 echo "]"
-echo "}"
