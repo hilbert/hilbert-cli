@@ -82,7 +82,7 @@ print_station()
 echo "["
 
 first=1
-for station_name in $(cat $1/STATIONS/list) ; do
+for station_name in $(cat $1/STATIONS/list | grep -v -E '^ *(#.*)? *$') ; do
   if [ "$first" -eq "1" ]; then
     first=0
   else
