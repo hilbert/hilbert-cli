@@ -1,24 +1,23 @@
 #!/usr/bin/env bash
 
-if [ "$1" = "" ]; then
->&2 echo "Usage: $0 <path to dockapp>"
+if [ -z "$DOCKAPP_PATH" ]; then
+>&2 echo "The DOCKAPP_PATH environment variable is not set. Set it to the directory where DockApp is installed".
 exit 1
 fi
 
-if [ ! -d $1/STATIONS ]; then
+if [ ! -d $DOCKAPP_PATH/STATIONS ]; then
 >&2 echo "STATIONS directory not found in dockapp path"
 exit 1
 fi
 
-if [ ! -f $1/STATIONS/list ]; then
+if [ ! -f $DOCKAPP_PATH/STATIONS/list ]; then
 >&2 echo "STATIONS/list not found in dockapp path"
 exit 1
 fi
 
 print_station()
 {
-  root_path=$1
-  station_name=$2
+  station_name=$1
 
   unset station_id
   unset station_type
@@ -28,23 +27,23 @@ print_station()
   unset possible_apps
   unset DM
 
-  if [ ! -d $1/STATIONS/$station_name ]; then
+  if [ ! -d $DOCKAPP_PATH/STATIONS/$station_name ]; then
   >&2 echo "Station directory STATIONS/$station_name not found in dockapp path"
   exit 1
   fi
 
-  if [ ! -f $1/STATIONS/$station_name/station.cfg ]; then
+  if [ ! -f $DOCKAPP_PATH/STATIONS/$station_name/station.cfg ]; then
   >&2 echo "Station configuration STATIONS/$station_name/station.cfg not found in dockapp path"
   exit 1
   fi
 
-  if [ ! -f $1/STATIONS/$station_name/startup.cfg ]; then
+  if [ ! -f $DOCKAPP_PATH/STATIONS/$station_name/startup.cfg ]; then
   >&2 echo "Station configuration STATIONS/$station_name/startup.cfg not found in dockapp path"
   exit 1
   fi
 
-  source $1/STATIONS/$station_name/station.cfg
-  source $1/STATIONS/$station_name/startup.cfg
+  source $DOCKAPP_PATH/STATIONS/$station_name/station.cfg
+  source $DOCKAPP_PATH/STATIONS/$station_name/startup.cfg
 
   echo "{"
   echo "\"id\": \"$station_id\","
@@ -82,13 +81,13 @@ print_station()
 echo "["
 
 first=1
-for station_name in $(cat $1/STATIONS/list | grep -v -E '^ *(#.*)? *$') ; do
+for station_name in $(cat $DOCKAPP_PATH/STATIONS/list | grep -v -E '^ *(#.*)? *$') ; do
   if [ "$first" -eq "1" ]; then
     first=0
   else
     echo ","
   fi
-  print_station $1 $station_name
+  print_station $station_name
 done
 
 echo "]"
