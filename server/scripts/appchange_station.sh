@@ -22,10 +22,11 @@ echo "Changing top app of station $station_id to $app_id"
 
 cd $DOCKAPP_PATH
 ./topswitch_update.sh $station_id $app_id
+last_rc=$?
 
-if [ "$?" -ne "0" ]; then
-  echo >&2 "topswitch_update.sh returned $?. Changing top app of station $station_id cancelled."
-  exit $?;
+if [ "$last_rc" -ne "0" ]; then
+  echo >&2 "topswitch_update.sh returned $last_rc. Changing top app of station $station_id cancelled."
+  exit 1;
 fi
 
 echo "Finished changing top app of $station_id"
