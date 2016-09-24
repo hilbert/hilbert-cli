@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-if [ -z "$DOCKAPP_PATH" ]; then
->&2 echo "The DOCKAPP_PATH environment variable is not set. Set it to the directory where DockApp is installed".
+if [ -z "$HILBERT_CLI_PATH" ]; then
+>&2 echo "The HILBERT_CLI_PATH environment variable is not set. Set it to the directory where hilbert-cli is installed".
 exit 1
 fi
 
@@ -20,7 +20,7 @@ app_id=$2
 
 echo "Changing top app of station $station_id to $app_id"
 
-cd $DOCKAPP_PATH
+cd $HILBERT_CLI_PATH
 ./topswitch_update.sh $station_id $app_id
 last_rc=$?
 

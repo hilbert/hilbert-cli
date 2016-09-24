@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-if [ -z "$DOCKAPP_PATH" ]; then
-  >&2 echo "The DOCKAPP_PATH environment variable is not set. Set it to the directory where DockApp is installed".
+if [ -z "$HILBERT_CLI_PATH" ]; then
+  >&2 echo "The HILBERT_CLI_PATH environment variable is not set. Set it to the directory where hilbert-cli is installed".
   exit 1
 fi
 
@@ -15,7 +15,7 @@ station_id=$1
 echo "Starting station $station_id"
 
 echo "1. Call start.sh"
-cd $DOCKAPP_PATH
+cd $HILBERT_CLI_PATH
 ./start.sh $station_id
 last_rc=$?
 
@@ -25,7 +25,7 @@ if [ "$last_rc" -ne "0" ]; then
 fi
 
 echo "2. Call deploy.sh"
-cd $DOCKAPP_PATH
+cd $HILBERT_CLI_PATH
 ./deploy.sh $station_id
 last_rc=$?
 
@@ -35,7 +35,7 @@ if [ "$last_rc" -ne "0" ]; then
 fi
 
 echo "3. Call prepare.sh"
-cd $DOCKAPP_PATH
+cd $HILBERT_CLI_PATH
 ./prepare.sh $station_id
 last_rc=$?
 
@@ -45,7 +45,7 @@ if [ "$last_rc" -ne "0" ]; then
 fi
 
 echo "4. Call default_update.sh"
-cd $DOCKAPP_PATH
+cd $HILBERT_CLI_PATH
 ./default_update.sh $station_id
 last_rc=$?
 

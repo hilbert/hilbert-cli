@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-if [ -z "$DOCKAPP_PATH" ]; then
->&2 echo "The DOCKAPP_PATH environment variable is not set. Set it to the directory where DockApp is installed".
+if [ -z "$HILBERT_CLI_PATH" ]; then
+>&2 echo "The HILBERT_CLI_PATH environment variable is not set. Set it to the directory where hilbert-cli is installed".
 exit 1
 fi
 
@@ -14,7 +14,7 @@ station_id=$1
 
 echo "Stopping station $station_id"
 echo "1. Call finishall.sh"
-cd $DOCKAPP_PATH
+cd $HILBERT_CLI_PATH
 ./finishall.sh $station_id
 last_rc=$?
 
@@ -24,7 +24,7 @@ if [ "$last_rc" -ne "0" ]; then
 fi
 
 echo "2. Call shutdown.sh"
-cd $DOCKAPP_PATH
+cd $HILBERT_CLI_PATH
 ./shutdown.sh $station_id -h now
 last_rc=$?
 

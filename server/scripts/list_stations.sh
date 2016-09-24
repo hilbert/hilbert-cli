@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 
-if [ -z "$DOCKAPP_PATH" ]; then
->&2 echo "The DOCKAPP_PATH environment variable is not set. Set it to the directory where DockApp is installed".
+if [ -z "$HILBERT_CLI_PATH" ]; then
+>&2 echo "The HILBERT_CLI_PATH environment variable is not set. Set it to the directory where hilbert-cli is installed".
 exit 1
 fi
 
-if [ ! -d $DOCKAPP_PATH/STATIONS ]; then
->&2 echo "STATIONS directory not found in dockapp path"
+if [ ! -d $HILBERT_CLI_PATH/STATIONS ]; then
+>&2 echo "STATIONS directory not found in the hilbert-cli path"
 exit 1
 fi
 
-if [ ! -f $DOCKAPP_PATH/STATIONS/list ]; then
->&2 echo "STATIONS/list not found in dockapp path"
+if [ ! -f $HILBERT_CLI_PATH/STATIONS/list ]; then
+>&2 echo "STATIONS/list not found in the hilbert-cli path"
 exit 1
 fi
 
@@ -27,23 +27,23 @@ print_station()
   unset possible_apps
   unset DM
 
-  if [ ! -d $DOCKAPP_PATH/STATIONS/$station_name ]; then
-  >&2 echo "Station directory STATIONS/$station_name not found in dockapp path"
+  if [ ! -d $HILBERT_CLI_PATH/STATIONS/$station_name ]; then
+  >&2 echo "Station directory STATIONS/$station_name not found in the hilbert-cli path"
   exit 1
   fi
 
-  if [ ! -f $DOCKAPP_PATH/STATIONS/$station_name/station.cfg ]; then
-  >&2 echo "Station configuration STATIONS/$station_name/station.cfg not found in dockapp path"
+  if [ ! -f $HILBERT_CLI_PATH/STATIONS/$station_name/station.cfg ]; then
+  >&2 echo "Station configuration STATIONS/$station_name/station.cfg not found in the hilbert-cli path"
   exit 1
   fi
 
-  if [ ! -f $DOCKAPP_PATH/STATIONS/$station_name/startup.cfg ]; then
-  >&2 echo "Station configuration STATIONS/$station_name/startup.cfg not found in dockapp path"
+  if [ ! -f $HILBERT_CLI_PATH/STATIONS/$station_name/startup.cfg ]; then
+  >&2 echo "Station configuration STATIONS/$station_name/startup.cfg not found in the hilbert-cli path"
   exit 1
   fi
 
-  source $DOCKAPP_PATH/STATIONS/$station_name/station.cfg
-  source $DOCKAPP_PATH/STATIONS/$station_name/startup.cfg
+  source $HILBERT_CLI_PATH/STATIONS/$station_name/station.cfg
+  source $HILBERT_CLI_PATH/STATIONS/$station_name/startup.cfg
 
   echo "{"
   echo "\"id\": \"$station_id\","
@@ -81,7 +81,7 @@ print_station()
 echo "["
 
 first=1
-for station_name in $(cat $DOCKAPP_PATH/STATIONS/list | grep -v -E '^ *(#.*)? *$') ; do
+for station_name in $(cat $HILBERT_CLI_PATH/STATIONS/list | grep -v -E '^ *(#.*)? *$') ; do
   if [ "$first" -eq "1" ]; then
     first=0
   else
