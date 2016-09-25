@@ -1,1 +1,0 @@
-dockapp_dashboard/server/scripts/list_stations.sh
