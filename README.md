@@ -2,11 +2,11 @@
 
 ## Minimal `hilbert` interfaces:
 
-![Minimal `hilbert` interfaces](HilbertDD.png)
+![Minimal `hilbert` interfaces](docs/HilbertDD.png)
 
 ## Current management structure:
 
-![Detailed current management structure](mng.png)
+![Detailed current management structure](docs/mng.png)
 
 # General notes about shell scripts:
 
