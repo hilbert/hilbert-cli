@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
 
+__SELFDIR=`dirname "$0"`
+__SELFDIR=`cd "${SELFDIR}" && pwd`
+
+unset HILBERT_CLI_PATH # Note: disable external specification of the CLI path for now
+HILBERT_CLI_PATH="${HILBERT_CLI_PATH:-${__SELFDIR}}"
+unset __SELFDIR
+
 if [ -z "$HILBERT_CLI_PATH" ]; then
   >&2 echo "The HILBERT_CLI_PATH environment variable is not set. Set it to the directory where hilbert-cli is installed".
   exit 1
