@@ -1,6 +1,10 @@
 # Management scripts
 
-## Minimal `hilbert` interfaces:
+## General System Overview
+
+![System structure](docs/GeneralDD.png)
+
+## Distilled `Hilbert` interfaces/interactions:
 
 ![Minimal `hilbert` interfaces](docs/HilbertDD.png)
 
