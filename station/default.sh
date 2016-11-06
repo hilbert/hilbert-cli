@@ -11,7 +11,8 @@ cd "${SELFDIR}/"
 ## unset DISPLAY
 
 #! NOTE: cleanup all previously started containers:
-# docker ps -aq | xargs docker rm -fv
+# docker ps -aq | xargs --no-run-if-empty docker rm -fv
+# docker images -q -a | xargs --no-run-if-empty docker rmi
 
 if [ -r "./station.cfg" ]; then
     . "./station.cfg"

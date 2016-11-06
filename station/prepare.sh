@@ -44,8 +44,10 @@ chmod a+x ./compose
 #### ./finishall.sh # NOTE: no clean-up for left-overs for now
 
 #! Clean-up the rest of containers
-## TODO: FIXME: corner case: nothing to kill - do nothing! 
-#?# docker ps -aq | xargs docker rm -fv
+#?# docker ps -aq | xargs --no-run-if-empty docker rm -fv
+
+#! All images??
+# docker images -q -a | xargs --no-run-if-empty docker rmi
 
 ## cd ./tmp/
 ### TODO: add the plugin for global installation?
