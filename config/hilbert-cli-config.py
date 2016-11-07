@@ -7,9 +7,10 @@ from sys import argv, version_info
 ###############################################################
 up_arrow = '↑'
 
+
 def key_error(key, value, line, col, error_message, e='K'):
     print('{}[line: {}, column: {}]: {}'.format(e, line+1, col+1, error_message.format(key)))
-    print('{}{}: {}'.format(' '*col, key, value))
+    print('{}{}: {}'.format(' '*col, key, value)) #! TODO: try to get access to original ruamel.yaml buffered lines...?
     print('{}{}'.format(' '*(col), up_arrow))
     print('---')
 
@@ -22,7 +23,7 @@ def key_note(key, line, col, key_message, e='K'):
 def value_error(key, value, line, col, error, e='E'):
     val_col = col + len(key) + 2
     print('{}[line: {}, column: {}]: {}'.format(e, line+1, val_col+1, error . format(key)))
-    print('{}{}: {}'.format(' '*col, key, value))
+    print('{}{}: {}'.format(' '*col, key, value)) #! TODO: try to get access to original ruamel.yaml buffered lines...?
     print('{}{}'.format(' '*(val_col), up_arrow))
     print('---')
 
@@ -669,7 +670,7 @@ class Application(Service):
     
         self._default_type = "compose" # ServiceType("compose")?
         
-        compose_rule = {
+        compose_rule = { #! NOTE: duplicates the definition of a Service! TODO: Extension?
             self._type_tag: (True,  ServiceType), # Mandatory
             self._hook_tag: (False, AutoDetectionScript),
             self._name_tag: (True,  DockerComposeServiceName),
@@ -695,7 +696,8 @@ class Profile(BaseRecord):
             "name":         (True,  BaseUIString),
             "description":  (True,  BaseUIString),
             "icon":         (False, Icon),
-            "services":     (True, ServiceList)
+            "services":     (True, ServiceList),
+            "supported_types": (False, ServiceTypeList)
         }
         
         self._types = { self._default_type: default_rule }
@@ -902,13 +904,15 @@ class BaseList(Base):
 
         _lc = data.lc
 
-        if not issequenceforme(data):
-            data = [data]
+#        #! TODO: FIXME: BUG: String is a sequence! 
+#        if not issequenceforme(data): #! Check for alist or dictionary?
+#            data = [data] # NOTE: will have no lc!
+#            data.lc = _lc #???
             
         _d = []
         
         _ret = True
-        for idx, i in enumerate(data):
+        for idx, i in enumerate(data): # What about a string?
             _v = _type(self)
             if not _v.validate(version, i):
                 # TODO: error # show _lc
@@ -940,6 +944,17 @@ class GroupIDList(BaseList):
 
         self._default_type = "default_GroupID_list"
         self._types = { self._default_type: GroupID }
+
+###############################################################
+class ServiceTypeList(BaseList):
+    """List of ServiceType's or a single ServiceType!"""
+    
+    def __init__(self, parent):
+        BaseList.__init__(self, parent)
+
+        self._default_type = "default_ServiceType_list"
+        self._types = { self._default_type: ServiceType }
+
         
 ###############################################################
 class Group(BaseRecord): #? TODO: GroupSet & its .parent?
