@@ -102,24 +102,24 @@ def load_yaml(filename):
         raise ConfigurationError(u"{}: {}".format(error_name, e))
     
 ###############################################################
-from ruamel.yaml.compat import PY2, PY3, text_type
+from ruamel.yaml.compat import PY2, PY3, text_type, string_types
 from abc import *
 
 if PY3 and (version_info[1] >= 4):
-    class Abstract(ABC):
+    class AbstractValidator(ABC):
         """Abstract Base class for any concrete implementation of entities appearing in the general configuration file"""
         @abstractmethod
         def validate(self, data):
             pass
 elif PY2 or PY3:
-    class Abstract:
+    class AbstractValidator:
         """Abstract Base class for any concrete implementation of entities appearing in the general configuration file"""
         __metaclass__ = ABCMeta
         @abstractmethod
         def validate(self, data):
             pass
 #elif PY3:
-#    class Abstract(metaclass=ABCMeta):
+#    class AbstractValidator(metaclass=ABCMeta):
 #        """Abstract Base class for any concrete implementation of entities appearing in the general configuration file"""
 #        @abstractmethod
 #        def validate(self, data):
@@ -128,15 +128,15 @@ else:
     raise NotImplementedError("Unsupported Python version: '{}'".format(version_info))
     
 ###############################################################
-class Base(Abstract):
-    """Actual Base Class for the Config entities"""
+class Base(AbstractValidator):
+    """Abstract Base Class for the Config entities"""
 
     __version = [None]
     _data = None
     _parent = None
 
     def __init__(self, parent):
-        Abstract.__init__(self)
+        AbstractValidator.__init__(self)
         assert self._parent is None
         self._parent = parent
     
@@ -250,19 +250,27 @@ class BaseRecord(Base):
                     value_error(k, v, l, c, "Error: invalid field '{}' value (type: '%s')" % (_type)) # Raise Exception?
                     _ret = False
             else:
-                _key_rule = self.detect_extra_rule(version, k, v)
+                _extra_rule = self.detect_extra_rule(version, k, v) # (KeyValidator, ValueValidator)
 
-                if _key_rule is None:
+                if _extra_rule is None:
                     key_error(k, v, l, c, "Error: Unhandled Key: '{}' (type: '%s')" % (_type)) # Raise Exception?
                     _ret = False
-                else:                    
-                    _d[k] = _key_rule(self)
+                else:
+                    _k = _extra_rule[0](self)
                     
-                    if not _d[k].validate(version, v): # TODO: save to self!
-                        value_error(k, v, l, c, "Error: invalid field '{}' value (type: '%s')" % (_type)) # Raise Exception?
-                        _ret = False
-                        
-        self.set_data(_d)
+                    if not _k.validate(version, k):
+                        key_error(k, v, l, c, "Error: invalid key '{}' value (type: '%s')" % (_type)) # Raise Exception?
+                        _ret = False                    
+                    else:
+                        _v = _extra_rule[1](self)
+                        if not _v.validate(version, v): #! TODO: FIXME: wrong col (it was for key - not value)!
+                            value_error(k, v, l, c, "Error: invalid field value '{}' value (type: '%s')" % (_type)) # Raise Exception?
+                            _ret = False
+                        else:
+                            _d[_k] = _v 
+
+        if _ret:
+            self.set_data(_d)
 
         return _ret    
     
@@ -275,41 +283,13 @@ class BaseScalar(Base):
 
     def validate(self, version, data):
         """check that data is a scalar: not a sequence of mapping"""
-
-        _ret = True
-#        #! NOTE: test that data is non-iterable! TODO: BUG: strings are iterable :(
-#        try:
-#            for x in data:
-#                break
-#            _ret = False
-#        except:
-#            _ret = True
-            
+        
+        _ret = not isinstance(data, (list, dict, tuple, set)) #! Check if data is not a container?
+        
         self.set_data( data )
         
         return _ret
         
-###############################################################
-#import semver
-import semantic_version # supports partial versions
-    
-class SemanticVersion(BaseScalar):
-    def __init__(self, parent):
-        BaseScalar.__init__(self, parent)
-        
-    def validate(self, version, data):
-        """check the string data to be a valid semantic verions"""
-        
-        if version == '': # the only initial validation: may be a partial version
-            self._data = semantic_version.Version(data, partial=True) #!?            
-            return True
-
-#        try:
-        self.set_data( semantic_version.validate(data) )
-        return True
-#        except:
-#            return False
-
 ###############################################################
 class BaseString(BaseScalar):
     def __init__(self, parent):
@@ -318,13 +298,36 @@ class BaseString(BaseScalar):
     def validate(self, version, data):
         """check whether data is a valid string"""
         ### TODO: Detect other YAML scalar types?
-        try:
+
+        if isinstance(data, string_types):
             self.set_data( text_type(data) )
             return True
-        except:
-            print( "ERROR: Cannot conver '{}' into string!" % format(data) )
-            self.set_data( data )
+        
+        return False
 
+
+###############################################################
+#import semver
+import semantic_version # supports partial versions
+    
+class SemanticVersion(BaseString):
+    def __init__(self, parent):
+        BaseString.__init__(self, parent)
+        
+    def validate(self, version, data):
+        """check the string data to be a valid semantic verions"""
+                   
+        try:
+            _v = None
+            if version == '': # the only initial validation: may be a partial version
+                _v = semantic_version.Version(data, partial=True)
+            else:
+                _v = semantic_version.validate(data)
+                   
+            self.set_data( _v )
+            return True
+        except:                
+            return False
 
 ###############################################################
 class BaseUIString(BaseString): # visible to user => non empty!
@@ -893,7 +896,7 @@ class BaseList(Base):
     def detect_type(self, version, data):
         """determine the class of items based on the version and sample data"""
         
-        assert not (self._default_type is None)
+        assert self._default_type is not None
         assert len(self._types) > 0
         
         return self._types[self._default_type]
@@ -902,28 +905,44 @@ class BaseList(Base):
         _type = self.detect_type(version, data)
         assert _type is not None
 
-        _lc = data.lc
-
-#        #! TODO: FIXME: BUG: String is a sequence! 
-#        if not issequenceforme(data): #! Check for alist or dictionary?
-#            data = [data] # NOTE: will have no lc!
-#            data.lc = _lc #???
-            
+        _ret = True
+        
         _d = []
         
-        _ret = True
-        for idx, i in enumerate(data): # What about a string?
+        if not isinstance(data, (list, tuple, dict, set)): #! data is Scalar?
             _v = _type(self)
-            if not _v.validate(version, i):
-                # TODO: error # show _lc
-                print( "Error insequence at {}" . format(idx) ) 
+            
+            if not _v.validate(version, data):
+                print( "Error: Wrong entity: {}" . format(data) )  # use _lc!?
                 _ret = False
             else:
-                _d.insert(idx, _v) # append?
+                _d.append(_v)
+        else: # list!?
+            _lc = data.lc
+
+            for idx, i in enumerate(data): # What about a string?
+                _v = _type(self)
+                if not _v.validate(version, i):
+                    # TODO: error # show _lc
+                    print( "Error insequence at {}" . format(idx) ) 
+                    _ret = False
+                else:
+                    _d.insert(idx, _v) # append?
+
+        if _ret:
+            self.set_data(_d)
         
-        self.set_data(_d)
         return _ret
     
+###############################################################
+class GroupIDList(BaseList):
+    """List of GroupIDs or a single GroupID!"""
+    
+    def __init__(self, parent):
+        BaseList.__init__(self, parent)
+
+        self._default_type = "default_GroupID_list"
+        self._types = { self._default_type: GroupID }
 
 ###############################################################
 class ServiceList(BaseList):
@@ -935,15 +954,6 @@ class ServiceList(BaseList):
         self._default_type = "default_ServiceID_list"
         self._types = { self._default_type: ServiceID }    
 
-###############################################################
-class GroupIDList(BaseList):
-    """List of GroupIDs or a single GroupID!"""
-    
-    def __init__(self, parent):
-        BaseList.__init__(self, parent)
-
-        self._default_type = "default_GroupID_list"
-        self._types = { self._default_type: GroupID }
 
 ###############################################################
 class ServiceTypeList(BaseList):
@@ -982,7 +992,7 @@ class Group(BaseRecord): #? TODO: GroupSet & its .parent?
 
     def detect_extra_rule(self, version, key, value): # Any extra unlisted keys in the mapping?
         if value is None: # Set item!
-            return GroupID        
+            return (GroupID, BaseScalar)
         return None
         
     def validate(self, version, data):       
@@ -1058,6 +1068,8 @@ class Global(BaseRecord):
 
         self._types = { self._default_type: default_rule }
 
+        self._default_data = None
+
     @classmethod
     def parse(cls, data, parent=None):
         self = cls(parent)
@@ -1080,7 +1092,6 @@ class Global(BaseRecord):
         _ret = self.validate(_version, data) ## TODO: FIXME: should not need version...!?
             
         print( "\nValidation result: '{}'" . format(_ret) )
-
         return self
         
     def validate(self, version, data):
@@ -1135,6 +1146,7 @@ if __name__ == "__main__":
             print( "\nValidation starts:\n")
             hilbert_configuration = Global.parse(data)
 
+            
             print( hilbert_configuration.get_data() )
 
     else:
