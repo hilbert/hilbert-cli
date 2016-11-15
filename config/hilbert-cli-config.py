@@ -932,7 +932,7 @@ class DockerComposeService(BaseRecord):
 
         self._type_tag = "type"
         self._hook_tag = "auto_detections"
-        self._name_tag = "id"
+        self._name_tag = "ref"
         self._file_tag = "file"
 
         _compose_rule = {
