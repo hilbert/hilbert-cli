@@ -1,0 +1,7 @@
+version: '2'
+services:
+  omd:
+    image: malex984/dockapp:base
+    environment:
+     - HV
+
