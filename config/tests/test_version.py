@@ -17,22 +17,23 @@ from semantic_version import Version # supports partial versions
 class TestVersions:
     def test_1(self):
         v = '0.0'
-        assert Version.parse(v, partial=True, coerce=True) == SemanticVersion.parse(load("'{}'" . format(v)), parent=self)
+        assert Version.parse(v, partial=True, coerce=True) == SemanticVersion.parse(load("'{}'" . format(v)))
 
         v = '0.1'
-        assert Version.parse(v, partial=True, coerce=True) == SemanticVersion.parse(load("'{}'" . format(v)), parent=self)
+        assert Version.parse(v, partial=True, coerce=True) == SemanticVersion.parse(load("'{}'" . format(v)))
 
         v = '1.2'
-        assert Version.parse(v, partial=True, coerce=True) == SemanticVersion.parse(load("'{}'" . format(v)), parent=self)
+        assert Version.parse(v, partial=True, coerce=True) == SemanticVersion.parse(load("'{}'" . format(v)))
 
         
+    def test_2(self):
         v = '0.0.1'
-        assert Version.parse(v, partial=True, coerce=True) == SemanticVersion.parse(load("'{}'" . format(v)), parent=self)
+        assert Version.parse(v, partial=True, coerce=True) == SemanticVersion.parse(load("'{}'" . format(v)))
 
         v = '0.1.2'
-        assert Version.parse(v, partial=True, coerce=True) == SemanticVersion.parse(load("'{}'" . format(v)), parent=self)
+        assert Version.parse(v, partial=True, coerce=True) == SemanticVersion.parse(load("'{}'" . format(v)))
 
         v = '1.2.3'
-        assert Version.parse(v, partial=True, coerce=True) == SemanticVersion.parse(load("'{}'" . format(v)), parent=self)
+        assert Version.parse(v, partial=True, coerce=True) == SemanticVersion.parse(load("'{}'" . format(v)))
         
         
