@@ -1,9 +1,11 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # encoding: utf-8
 # coding: utf-8
 
 from __future__ import absolute_import, print_function, unicode_literals
+
+import logging
+# log = logging.getLogger(__name__)
 
 PEDANTIC = False  # NOTE: to treat invalid values/keys as errors?
 INPUT_DIRNAME = './'
@@ -38,7 +40,13 @@ def _get_line_col(lc):
 
     return l, c
 
-def key_error(key, value, lc, error_message, e='K'):
+
+###############################################################
+class ConfigurationError(Exception):
+    def __init__(self, msg):
+        self._msg = msg
+
+def _key_error(key, value, lc, error_message, e='K'):
     (line, col) = _get_line_col(lc)
 
     if key is None:
@@ -51,7 +59,7 @@ def key_error(key, value, lc, error_message, e='K'):
     print('---')
 
 
-def key_note(key, lc, key_message, e='K'):
+def _key_note(key, lc, key_message, e='K'):
     (line, col) = _get_line_col(lc)
 
     if key is None:
@@ -61,7 +69,7 @@ def key_note(key, lc, key_message, e='K'):
     print('---')
 
 
-def value_error(key, value, lc, error, e='E'):
+def _value_error(key, value, lc, error, e='E'):
     (line, col) = _get_line_col(lc)
 
     if key is None:
@@ -76,7 +84,7 @@ def value_error(key, value, lc, error, e='E'):
 
 # Unused???
 # def value_warning(key, value, lc, error):
-#    value_error(key, value, lc, error, e='W')
+#    _value_error(key, value, lc, error, e='W')
 
 
 ###############################################################
@@ -118,8 +126,8 @@ class VerboseRoundTripConstructor(RoundTripConstructor):
                 old = starts[key]
 
                 print("WARNING: Key re-definition within some mapping: ")  # mapping details?
-                key_error(key, old[1], old[0], "Previous Value: ")
-                key_error(key, value, key_node.start_mark, "New Value: ")
+                _key_error(key, old[1], old[0], "Previous Value: ")
+                _key_error(key, value, key_node.start_mark, "New Value: ")
                 print('===')
 
             starts[key] = (key_node.start_mark, value)  # in order to find all such problems!
@@ -140,22 +148,12 @@ class VerboseRoundTripLoader(Reader, RoundTripScanner, RoundTripParser, Composer
 
 
 ###############################################################
-class ConfigurationError(Exception):
-    def __init__(self, msg):
-        self._msg = msg
-
-###############################################################
 def load_yaml(f, Loader=VerboseRoundTripLoader, version=(1, 2), preserve_quotes=True):
     try:
         return yaml.load(f, Loader=Loader, version=version, preserve_quotes=preserve_quotes)
     except (IOError, yaml.YAMLError) as e:
         error_name = getattr(e, '__module__', '') + '.' + e.__class__.__name__
         raise ConfigurationError(u"{}: {}".format(error_name, e))
-
-
-def load_yaml_file(filename):
-    with open(filename, 'r') as fh:
-        return load_yaml(fh)
 
 
 ###############################################################
@@ -294,7 +292,7 @@ class BaseRecord(Base):
         for k in _rule.keys():
             r = _rule[k]
             if r[0] and (k not in d):
-                key_note(k, _lc, "ERROR: Missing mandatory key `{}` (type: '%s')" % (_type))  # Raise Exception?
+                _key_note(k, _lc, "ERROR: Missing mandatory key `{}` (type: '%s')" % (_type))  # Raise Exception?
                 _ret = False
             # NOTE: the following will add all the missing default values
             elif (not r[0]) and self._create_optional:  # Optional Values should have some default values!
@@ -309,7 +307,7 @@ class BaseRecord(Base):
                 r = _rule[k][1](self)
 
                 if not r.validate(v):  # TODO: save to self!
-                    value_error(k, v, lc, "Error: invalid field '{}' value (type: '%s')" % _type)
+                    _value_error(k, v, lc, "Error: invalid field '{}' value (type: '%s')" % _type)
                     _ret = False
 
                 _d[k] = r.get_data()
@@ -317,18 +315,18 @@ class BaseRecord(Base):
                 _extra_rule = self.detect_extra_rule(k, v)  # (KeyValidator, ValueValidator)
 
                 if _extra_rule is None:
-                    key_error(k, v, lc, "WARNING: Unhandled extra Key: '{}' (type: '%s')" % _type)
+                    _key_error(k, v, lc, "WARNING: Unhandled extra Key: '{}' (type: '%s')" % _type)
                     _ret = False
                 else:
                     _k = _extra_rule[0](self)
 
                     if not _k.validate(k):
-                        key_error(k, v, lc, "Error: invalid key '{}' (type: '%s')" % _type)
+                        _key_error(k, v, lc, "Error: invalid key '{}' (type: '%s')" % _type)
                         _ret = False
                     else:
                         _v = _extra_rule[1](self)
                         if not _v.validate(v):  # TODO: FIXME: wrong col (it was for key - not value)!
-                            value_error(k, v, lc, "Error: invalid field value '{}' value (type: '%s')" % _type)
+                            _value_error(k, v, lc, "Error: invalid field value '{}' value (type: '%s')" % _type)
                             _ret = False
                         else:
                             _d[_k.get_data()] = _v.get_data()
@@ -752,7 +750,7 @@ class HostMACAddress(BaseString):
         v = BaseString.parse(d, parent=self)
 
         if not re.match("[0-9a-f]{2}([-:])[0-9a-f]{2}(\\1[0-9a-f]{2}){4}$", v.lower()):
-            value_error(None, d, d.lc, "ERROR: Wrong MAC Address: [{}]")
+            _value_error(None, d, d.lc, "ERROR: Wrong MAC Address: [{}]")
             return False
 
         # TODO: verify the existence of that MAC address?
@@ -817,21 +815,21 @@ class VariadicRecordWrapper(Base):
 
         if self._type_tag not in d:
             _lc = d.lc  # start of the current mapping
-            key_error(self._type_tag, d, _lc, "ERROR: Missing mandatory key `{}`")
+            _key_error(self._type_tag, d, _lc, "ERROR: Missing mandatory key `{}`")
             return False
 
         t = self._type_cls.parse(d[self._type_tag], parent=self)
 
         if t not in _rule:
             _lc = d.lc  # start of the current mapping
-            key_error(self._type_tag, t, _lc, "ERROR: unsupported/wrong variadic type: '{}'")
+            _key_error(self._type_tag, t, _lc, "ERROR: unsupported/wrong variadic type: '{}'")
             return False
 
         tt = _rule[t](self)
 
         if not tt.validate(d):
             _lc = d.lc.key(self._type_tag)
-            value_error('*', d, _lc, "ERROR: invalid mapping value '{}' for type '%s'" % t)
+            _value_error('*', d, _lc, "ERROR: invalid mapping value '{}' for type '%s'" % t)
             return False
 
         self.set_data(tt.get_data())
@@ -1123,13 +1121,13 @@ class BaseIDMap(Base):
             id = _id(self)
 
             if not id.validate(k):
-                key_error(k, v, _lc, "Invalid Key ID: '{}' (type: '%s')" % (_type))  # Raise Exception?
+                _key_error(k, v, _lc, "Invalid Key ID: '{}' (type: '%s')" % (_type))  # Raise Exception?
                 _ret = False
             else:
                 vv = _rule(self)
 
                 if not vv.validate(v):
-                    value_error(k, v, _lc, "invalid value '{}' value (type: '%s')" % (_type))  # Raise Exception?
+                    _value_error(k, v, _lc, "invalid value '{}' value (type: '%s')" % (_type))  # Raise Exception?
                     _ret = False
                 elif _ret:
                     _d[id.get_data()] = vv.get_data()
@@ -1301,7 +1299,7 @@ class BaseList(Base):
             _v = _type(self)
             if not _v.validate(i):
                 _lc = d.lc
-                value_error("[%d]" % idx, d, _lc, "Wrong item in the given sequence!")
+                _value_error("[%d]" % idx, d, _lc, "Wrong item in the given sequence!")
                 _ret = False
             else:
                 _d.insert(idx, _v.get_data())  # append?
@@ -1459,13 +1457,13 @@ class Global(BaseRecord):
         self = cls(parent)
 
         if self._version_tag not in d:
-            key_note(self._version_tag, d.lc, "ERROR: Missing mandatory '{}' key field!")
+            _key_note(self._version_tag, d.lc, "ERROR: Missing mandatory '{}' key field!")
             raise ConfigurationError(u"{}: {}".format("ERROR:", "Missing version tag '{0}' in the input: '{1}'!".format(self._version_tag, d)))
 
         try:
             _v = SemanticVersion.parse(d[self._version_tag], parent=self)
         except:
-            value_error(self._version_tag, d, d.lc, "Wrong value of global '{}' specification!")
+            _value_error(self._version_tag, d, d.lc, "Wrong value of global '{}' specification!")
             raise
 
         self.set_version(_v)  # NOTE: globally available now!
@@ -1495,10 +1493,10 @@ class Global(BaseRecord):
 
             if k in _applications:
                 print("Error: '{}' is both a ServiceID and an ApplicationID:".format(k))
-                key_error(k, _services[k], _lc, "Service key: {}")
+                _key_error(k, _services[k], _lc, "Service key: {}")
 
                 _alc = _applications.lc.key(k)
-                key_error(k, _applications[k], _alc, "Application key: {}")
+                _key_error(k, _applications[k], _alc, "Application key: {}")
 
         # ! TODO: check Uniqueness of keys among (Profiles/Stations/Groups) !!!!
         # ! TODO: check for GroupID <-> StationID <-> ProfileID
@@ -1506,305 +1504,15 @@ class Global(BaseRecord):
 
 
 ###############################################################
-# import pickle
-# import cPickle as pickle
-import dill as pickle
+def load_yaml_file(filename):
+    with open(filename, 'r') as fh:
+        return load_yaml(fh)
 
-from arghandler import *
-import argparse
+# class Hilbert(object):
 
-import logging
-import pprint
-
-def _version():
-    print("## Python Version: '{}'".format(sys.version_info))
-    print("## ruamel.yaml Version: '{}'".format(yaml.__version__))
-    # pickle.HIGHEST_PROTOCOL ?
-    # arghandler
-
-def _load(f):
-    print("## YAML Validation: ")
-    return load_yaml_file(f)  # TODO: check that this is a dictionary!
-
-
-def _yaml_dump(d, stream=None):
+def yaml_dump(d, stream=None):
     print(yaml.round_trip_dump(d, stream=stream))
 
-
-def _pprint(cfg):
-    print("## Validated/Parsed pretty Result: ")
-    pp = pprint.PrettyPrinter(indent=2)
-    pp.pprint(cfg)
-
-
-def _pickle_dump(f, d):
-    # f = '{}.pickle' . format(fn)
-    with open(f, 'wb') as p:
-        # Pickle the 'data' dictionary using the highest protocol available.
-        pickle.dump(d, p, pickle.HIGHEST_PROTOCOL)
-
-
-def _parse(d, parent=None):
+def parse(d, parent=None):
     return Global.parse(d, parent=parent)
 
-
-
-@subcmd('test', help='Validate/parse/dump given general Hilbert configuration (YAML) file')
-def cmd_test(parser, context, args):
-    global PEDANTIC
-    global INPUT_DIRNAME
-    global OUTPUT_DIRNAME
-
-    # usage = "{} <HilbertConfiguration.yaml>".format(basename)
-    args = parser.parse_args(args)
-#    print('cmd_validate(parser, context, args): %s%s%s' % ('"', args, '"'))
-
-    ctx = vars(context)
-
-    if 'pedantic' in ctx:
-        PEDANTIC = True
-
-
-    fn = ctx['infile']
-    assert fn is not None
-
-    f = URI(None)
-    if f.validate(fn):
-        fn = f.get_data()
-        print("## Input file: '{}'".format(fn))
-    else:
-        print("ERROR: wrong file specification: '{}'" . format(fn))
-        exit(1)
-
-    INPUT_DIRNAME = os.path.abspath(os.path.dirname(fn))
-
-    if 'outdir' in ctx:
-        out = args.outdir
-    else:
-        out = INPUT_DIRNAME
-
-    assert out is not None
-
-    if f.validate(out):
-        out = f.get_data()
-        print("## Output dir: '{}'".format(out))
-    else:
-        print("ERROR: wrong directory specification: '{}'" . format(out))
-        exit(1)
-
-    OUTPUT_DIRNAME = os.path.abspath(out)
-
-
-    # Get the parsed result:
-    fd, path = tempfile.mkstemp()
-    old_stdout = sys.stdout
-    try:
-        with os.fdopen(fd, 'w') as tmp:
-#            sys.stdout = tmp
-            yml = _load(fn)
-#            sys.stdout = old_stdout
-    finally:
-        sys.stdout = old_stdout
-        os.remove(path)
-
-
-
-    print("## RT_Dump of YAML: ")
-    _yaml_dump(yml)
-
-    _pickle_dump('{}.pickle'.format(fn), yml)
-
-    os.chdir(INPUT_DIRNAME)
-    print("## Data Validation/Parsing: ")
-    cfg = _parse(yml)
-    os.chdir(OUTPUT_DIRNAME)
-
-    print("## File Format is of Version: '{}'".format(Global.get_version()))
-
-    if cfg is None:
-        print("ERROR: no parsed result!")
-        exit(1)
-    else:
-        _pprint(cfg)
-        _pickle_dump('{}.data.pickle'.format(fn), cfg)
-
-
-@subcmd('verify', help='Check correctness of a given general Hilbert configuration (YAML) file as far as possible...')
-def cmd_verify(parser, context, args):
-    global PEDANTIC
-    global INPUT_DIRNAME
-    global OUTPUT_DIRNAME
-
-    args = vars(parser.parse_args(args))
-#    vars(args)
-
-    ctx = vars(context)
-
-    if 'pedantic' in ctx:
-        PEDANTIC = True
-
-
-    fn = ctx['infile']
-    assert fn is not None
-
-    f = URI(None)
-    if f.validate(fn):
-        fn = f.get_data()
-        print("## Input file: '{}'".format(fn))
-    else:
-        print("ERROR: wrong file specification: '{}'" . format(fn))
-        exit(1)
-
-    INPUT_DIRNAME = os.path.abspath(os.path.dirname(fn))
-
-    if 'outdir' in ctx:
-        out = args.outdir
-    else:
-        out = INPUT_DIRNAME
-
-    assert out is not None
-
-    if f.validate(out):
-        out = f.get_data()
-        print("## Output dir: '{}'".format(out))
-    else:
-        print("ERROR: wrong directory specification: '{}'" . format(out))
-        exit(1)
-
-    OUTPUT_DIRNAME = os.path.abspath(out)
-
-    print("## Loading '{}'..." . format(fn))
-    try:
-        yml = _load(fn)
-        print("## Input file is a valid YAML!")
-    except:
-        print("ERROR: wrong input file: '{}'!" . format(fn))
-        raise
-
-    os.chdir(INPUT_DIRNAME)
-    print("## Data Validation/Parsing: ")
-    cfg = _parse(yml)
-
-    if cfg is None:
-        print("ERROR: semantically wrong input!")
-        exit(1)
-    else:
-        print("## Input file is a good Hilbert configuration!")
-
-#    return cfg
-
-
-@subcmd('dump', help='Verify the given general Hilbert configuration (YAML) file as far as possible and dump it to output dir')
-def cmd_dump(parser, context, args):
-    global PEDANTIC
-    global INPUT_DIRNAME
-    global OUTPUT_DIRNAME
-
-    parser.add_argument('-o', '--outfile', required=False, default=argparse.SUPPRESS,
-            help="specify output file (default: same as the input config file with '.pickle' suffix)")
-
-    args = vars(parser.parse_args(args))
-
-    ctx = vars(context)
-
-    if 'pedantic' in ctx:
-        PEDANTIC = True
-
-    fn = ctx['infile']
-    assert fn is not None
-
-    f = URI(None)
-    if f.validate(fn):
-        fn = f.get_data()
-        print("## Input file: '{}'".format(fn))
-    else:
-        print("ERROR: wrong file specification: '{}'" . format(fn))
-        exit(1)
-
-    INPUT_DIRNAME = os.path.abspath(os.path.dirname(fn))
-    outfile = None
-
-    if 'outfile' in args:
-        outfile = args['outfile']
-        assert outfile is not None
-
-        f = URI(None)
-        if not f.validate(outfile):
-            if not PEDANTIC:
-                print("## WARNING: Output file: '{}' already exists!".format(fn))
-            else:
-                print("## ERROR: Output file: '{}' already exists!".format(fn))
-                exit(1)
-    else:
-        outfile = '{}.pickle' . format(os.path.basename(fn))
-
-
-    if 'outdir' in ctx:
-        out = args.outdir
-    else:
-        out = INPUT_DIRNAME
-
-    assert out is not None
-
-    if f.validate(out):
-        out = f.get_data()
-        print("## Output dir: '{}'".format(out))
-    else:
-        print("ERROR: wrong directory specification: '{}'" . format(out))
-        exit(1)
-
-    OUTPUT_DIRNAME = os.path.abspath(out)
-
-    print("## Loading '{}'..." . format(fn))
-    try:
-        yml = _load(fn)
-        print("## Input file is a valid YAML!")
-    except:
-        print("ERROR: wrong input file: '{}'!" . format(fn))
-        raise
-
-    os.chdir(INPUT_DIRNAME)
-    print("## Data Validation/Parsing: ")
-    cfg = _parse(yml)
-
-    if cfg is None:
-        print("ERROR: semantically wrong input!")
-        exit(1)
-    else:
-        print("## Input file is a good Hilbert configuration!")
-
-        outfile = os.path.join(OUTPUT_DIRNAME, outfile)
-        print("## Writing the configuration into '{}'..." . format(outfile))
-        _pickle_dump(outfile, cfg)
-        print("## Pickled configuration is now in '{}'!" . format(outfile))
-
-
-#    return cfg
-
-
-
-def main():
-    handler = ArgumentHandler(use_subcommand_help=True, enable_autocompletion=True, description="Validate/Parse Hilbert Configuration")
-
-    # add_argument, set_logging_level, set_subcommands,
-    handler.add_argument('-q', '--quiet', nargs='?', help='decrease verbosity', default=argparse.SUPPRESS)
-    handler.add_argument('-v', '--verbose', nargs='?', help='increase verbosity', default=argparse.SUPPRESS)
-#    handler.set_logging_argument('-l', '--log_level', default_level=logging.INFO)
-    handler.add_argument('-p', '--pedantic', required=False, nargs='?',
-                         help="turn on pedantic mode", default=argparse.SUPPRESS)
-
-    handler.add_argument('-f', '--infile', required=False, default='Hilbert.yml',
-                         help="specify intput file (default: 'Hilbert.yml')")
-    handler.add_argument('-O', '--outdir', required=False, default=argparse.SUPPRESS,
-            help="specify output directory (default: alongside with the input config file)")
-
-    _argv = sys.argv
-    _argv = _argv[1:]
-
-    if len(_argv) == 0:
-        _argv = ['-h']
-
-    handler.run(_argv)
-
-if __name__ == "__main__":
-    main()

@@ -4,7 +4,8 @@
 
 from __future__ import absolute_import, print_function, unicode_literals  # NOQA
 
-from ..hilbert_cli_config import load_yaml, _load, _parse, INPUT_DIRNAME #, _pprint
+from ..hilbert_cli_config import load_yaml_file, parse, INPUT_DIRNAME
+from ..helpers import pickle_load, pprint
 
 import pytest                        # NOQA
 import os                            # NOQA
@@ -14,9 +15,6 @@ FIXTURE_DIR = os.path.abspath(os.path.join(
     os.path.dirname(os.path.realpath(__file__)),
         'data',
             ))
-
-
-import dill as pickle # 3-clause BSD 
 
 class TestValidate:
     def test_1(self, capsys):
@@ -31,7 +29,7 @@ class TestValidate:
         assert os.path.exists(g)
         assert os.path.exists(f)
 
-        yml = _load(g)
+        yml = load_yaml_file(g)
         assert yml is not None
 
         INPUT_DIRNAME = FIXTURE_DIR
@@ -39,15 +37,15 @@ class TestValidate:
         cwd = os.getcwd()
         try:
             os.chdir(INPUT_DIRNAME)
-            cfg = _parse(yml)
+            cfg = parse(yml)
         finally:
             os.chdir(cwd)
 
         assert cfg is not None       
-#        _pprint(cfg)
         
-        with open(f, 'rb') as p:
-            # Pickle the 'data' dictionary using the highest protocol available.
-            d = pickle.load(p)
-#            _pprint(d)
-            assert d == cfg
+        d = pickle_load(f)
+        
+#        pprint(cfg)
+#        pprint(d)
+
+        assert d == cfg
