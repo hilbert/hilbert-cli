@@ -243,6 +243,103 @@ def cmd_dump(parser, context, args):
 
 
 
+
+@subcmd('cfg_show', help='Load Configuration file and display some of its contents')
+def cmd_show(parser, context, args):
+    global PEDANTIC
+    global INPUT_DIRNAME
+#    global OUTPUT_DIRNAME
+
+    parser.add_argument('-o', '--object', required=False, default='all',
+            help="specify what to show (default: all)")
+
+    ctx = vars(context)
+
+    if 'pedantic' in ctx:
+        PEDANTIC = ctx['pedantic']
+
+    args = vars(parser.parse_args(args))
+        
+    fn = None
+    df = None
+    
+    f = URI(None)
+
+    if 'inputfile' in ctx:
+        fn = ctx['inputfile']
+        
+    if 'inputdump' in ctx:
+        df = ctx['inputdump']
+
+    if (fn is None) and (df is None):
+        fn = 'Hilbert.yml'
+        print("Warning: missing input file specification: using default '{}'!" . format(fn))
+#        exit(1)
+        
+    if (fn is not None) and (df is not None):
+        print("ERROR: input file specification clashes with the input dump specification: specify a single input source!")
+        exit(1)        
+
+    if fn is not None:        
+        if not f.validate(fn):
+            print("ERROR: wrong file specification: '{}'" . format(fn))
+            exit(1)            
+        print("## Input file: '{}'".format(fn))
+        
+    if df is not None:        
+        if not f.validate(df):
+            print("ERROR: wrong dump file specification: '{}'" . format(df))
+            exit(1)
+        print("## Input dump file: '{}'".format(df))
+        
+        
+    if fn is not None:
+        INPUT_DIRNAME = os.path.abspath(os.path.dirname(fn))
+    else:
+        assert df is not None
+        INPUT_DIRNAME = os.path.abspath(os.path.dirname(df))
+
+    cfg = None
+    if fn is not None:
+        print("## Loading '{}'..." . format(fn))
+        try:
+            yml = _load(fn)
+            print("## Input file is a valid YAML!")
+
+            os.chdir(INPUT_DIRNAME)
+            print("## Data Validation/Parsing: ")
+            cfg = parse(yml)
+            
+        except:
+            print("ERROR: wrong input file: '{}'!" . format(fn))
+            raise
+    else:
+        print("## Loading dump '{}'..." . format(df))
+        try:
+            cfg = pickle_load(df)
+            print("## Input dump file is valid!")
+        except:
+            print("ERROR: wrong input dump file: '{}'!" . format(df))
+            raise
+        
+
+    if cfg is None:
+        print("ERROR: could not get the configuration!")
+        exit(1)
+
+    obj = 'all'
+    if 'object' in args:
+        obj = args['object']
+        
+    print("## Configuration is OK! Showing: '{}'" . format(obj))
+
+    if obj == 'all':
+        pprint(cfg)
+    else:
+        print("## ERROR: Sorry cannot show '{}' yet!" . format(obj))        
+        exit(1)
+
+
 def main():
     handler = ArgumentHandler(use_subcommand_help=True, enable_autocompletion=True, description="Validate/Parse Hilbert Configuration")
 
