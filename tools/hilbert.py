@@ -6,8 +6,22 @@
 
 from __future__ import absolute_import, print_function, unicode_literals
 
+assert __name__ == "__main__"
+
+import sys
+from os import path
+
+DIR=path.dirname( path.dirname( path.abspath(__file__) ) )
+
+# sys.path.append( DIR )
+sys.path.append( path.join(DIR, 'config' ) )
+
+
 from hilbert_cli_config import *
 from helpers import *
+
+#from config.hilbert_cli_config import *
+#from config.helpers import *
 
 from arghandler import *               # NOQA 
 import argparse                        # NOQA
@@ -49,7 +63,13 @@ def cmd_verify(parser, context, args):
     args = vars(parser.parse_args(args))
 #    vars(args)
         
-    fn = ctx['inputfile']
+    fn = 'Hilbert.yml'
+
+    if 'inputfile' not in ctx:        
+        print("Warning: missing input file specification: using default '{}'!" . format(fn))
+    else:
+        fn = ctx['inputfile']
+        
     assert fn is not None
 
     f = URI(None)
@@ -87,13 +107,13 @@ def cmd_verify(parser, context, args):
 def cmd_dump(parser, context, args):
     global PEDANTIC
     global INPUT_DIRNAME
-    global OUTPUT_DIRNAME
+#    global OUTPUT_DIRNAME
 
-    parser.add_argument('-O', '--outputdir', required=False, default=argparse.SUPPRESS,
-            help="specify output directory (default: alongside with the output dump file)")
+#    parser.add_argument('-O', '--outputdir', required=False, default=argparse.SUPPRESS,
+#            help="specify output directory (default: alongside with the output dump file)")
             
     parser.add_argument('-od', '--outputdump', required=True, default=argparse.SUPPRESS,
-            help="specify output file (default: same as the input file with '.pickle' suffix)")
+            help="specify output dump file")
 
     ctx = vars(context)
 
@@ -114,7 +134,17 @@ def cmd_dump(parser, context, args):
     if 'inputdump' in ctx:
         df = ctx['inputdump']
 #        assert df is not None
+
+    if (fn is None) and (df is None):
+        fn = 'Hilbert.yml'
+        print("Warning: missing input file specification: using default '{}'!" . format(fn))
+#        print("ERROR: input file/dump specification is missing!")
+#        exit(1)
         
+    if (fn is not None) and (df is not None):
+        print("ERROR: input file specification clashes with the input dump specification: specify a single input source!")
+        exit(1)        
+
     if fn is not None:        
         if not f.validate(fn):
             print("ERROR: wrong file specification: '{}'" . format(fn))
@@ -127,15 +157,6 @@ def cmd_dump(parser, context, args):
             exit(1)
         print("## Input dump file: '{}'".format(df))
         
-
-    if (fn is None) and (df is None):
-        print("ERROR: input file/dump specification is missing!")
-        exit(1)
-        
-    if (fn is not None) and (df is not None):
-        print("ERROR: input file specification clashes with the input dump specification: specify a single input source!")
-        exit(1)
-        
         
     if fn is not None:
         INPUT_DIRNAME = os.path.abspath(os.path.dirname(fn))
@@ -144,23 +165,22 @@ def cmd_dump(parser, context, args):
         INPUT_DIRNAME = os.path.abspath(os.path.dirname(df))
 
 
-    out = None
-    
-    if 'outputdir' in args:
-        out = args['outputdir']
-        
-        assert out is not None
-
-        if not f.validate(out):
-            print("ERROR: wrong output directory specification: '{}'" . format(out))
-            exit(1)
-            
-#        out = f.get_data()
-        print("## Output dir: '{}'".format(out))
-
-        OUTPUT_DIRNAME = os.path.abspath(out)
-    else:
-        OUTPUT_DIRNAME = INPUT_DIRNAME        
+#    out = None
+#    if 'outputdir' in args:
+#        out = args['outputdir']
+#        
+#        assert out is not None
+#
+#        if not f.validate(out):
+#            print("ERROR: wrong output directory specification: '{}'" . format(out))
+#            exit(1)
+#            
+###        out = f.get_data()
+#        print("## Output dir: '{}'".format(out))
+#
+#        OUTPUT_DIRNAME = os.path.abspath(out)
+#    else:
+#        OUTPUT_DIRNAME = INPUT_DIRNAME        
         
     od = None
 
@@ -169,11 +189,11 @@ def cmd_dump(parser, context, args):
         assert od is not None
     elif fn is not None:
         od = os.path.splitext(os.path.basename(fn))[0] + '.pickle'
-        OUTPUT_DIRNAME = INPUT_DIRNAME
+#        OUTPUT_DIRNAME = INPUT_DIRNAME
     else:
         assert df is not None
         od = os.path.splitext(os.path.basename(df))[0] + '.pickle'
-        OUTPUT_DIRNAME = INPUT_DIRNAME        
+#        OUTPUT_DIRNAME = INPUT_DIRNAME        
 
         
     f = URI(None)
@@ -236,7 +256,7 @@ def main():
     handler.add_argument('-p', '--pedantic', required=False, action='store_true',
                          help="turn on pedantic mode")
 
-    handler.add_argument('-if', '--inputfile', required=False, default='Hilbert.yml',
+    handler.add_argument('-if', '--inputfile', required=False, 
                          help="specify input file (default: 'Hilbert.yml')")
 
     handler.add_argument('-id', '--inputdump', required=False,
@@ -250,7 +270,4 @@ def main():
 
     handler.run(_argv)
 
-if __name__ == "__main__":
-    main()
-
-    
+main()
