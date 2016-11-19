@@ -10,15 +10,13 @@ assert __name__ == "__main__"
 
 import sys
 from os import path
-
 DIR=path.dirname( path.dirname( path.abspath(__file__) ) )
-
-# sys.path.append( DIR )
 sys.path.append( path.join(DIR, 'config' ) )
+# sys.path.append( DIR )
 
 
-from hilbert_cli_config import *
 from helpers import *
+from hilbert_cli_config import *
 
 #from config.hilbert_cli_config import *
 #from config.helpers import *
@@ -92,7 +90,7 @@ def cmd_verify(parser, context, args):
 
     os.chdir(INPUT_DIRNAME)
     print("## Deep Configuration Validation/Parsing: ")
-    cfg = parse(yml)
+    cfg = parse_hilbert(yml)
 
     if cfg is None:
         print("ERROR: semantically wrong input!")
@@ -213,7 +211,7 @@ def cmd_dump(parser, context, args):
 
             os.chdir(INPUT_DIRNAME)
             print("## Data Validation/Parsing: ")
-            cfg = parse(yml)
+            cfg = parse_hilbert(yml)
             
         except:
             print("ERROR: wrong input file: '{}'!" . format(fn))
@@ -251,7 +249,7 @@ def cmd_show(parser, context, args):
 #    global OUTPUT_DIRNAME
 
     parser.add_argument('-o', '--object', required=False, default='all',
-            help="specify what to show (default: all)")
+            help="specify the object in the config (default: all)")
 
     ctx = vars(context)
 
@@ -307,8 +305,9 @@ def cmd_show(parser, context, args):
             print("## Input file is a valid YAML!")
 
             os.chdir(INPUT_DIRNAME)
-            print("## Data Validation/Parsing: ")
-            cfg = parse(yml)
+            print("## Data Validation/Parsing: ")            
+
+            cfg = parse_hilbert(yml)
             
         except:
             print("ERROR: wrong input file: '{}'!" . format(fn))
@@ -327,16 +326,18 @@ def cmd_show(parser, context, args):
         print("ERROR: could not get the configuration!")
         exit(1)
 
+    assert isinstance(cfg, Hilbert)
+    print("## Configuration is OK!")
+        
     obj = 'all'
     if 'object' in args:
         obj = args['object']
-        
-    print("## Configuration is OK! Showing: '{}'" . format(obj))
 
-    if obj == 'all':
-        pprint(cfg)
-    else:
-        print("## ERROR: Sorry cannot show '{}' yet!" . format(obj))        
+    try:
+        print("## Showing: '{}' for the configuration" . format(obj))
+        cfg.show(obj)
+    except:
+        print("## ERROR: Sorry cannot show '{}' yet!" . format(obj))
         exit(1)
 
 

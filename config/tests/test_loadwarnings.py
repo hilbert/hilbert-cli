@@ -5,6 +5,7 @@
 from __future__ import absolute_import, print_function, unicode_literals  # NOQA
 
 from ..hilbert_cli_config import load_yaml
+# from ..helpers import load_yaml
 
 import pytest                        # NOQA
 

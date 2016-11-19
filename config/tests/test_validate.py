@@ -4,8 +4,20 @@
 
 from __future__ import absolute_import, print_function, unicode_literals  # NOQA
 
-from ..hilbert_cli_config import load_yaml_file, parse, INPUT_DIRNAME
-from ..helpers import pickle_load, pprint
+import sys
+from os import path
+
+DIR=path.dirname( path.dirname( path.abspath(__file__) ) )
+sys.path.append( DIR )
+
+
+
+#from hilbert_cli_config import pprint, INPUT_DIRNAME
+#from hilbert_cli_config import load_yaml, load_yaml_file, parse_hilbert, Hilbert
+#from helpers import pickle_load
+
+from hilbert_cli_config import *
+from helpers import *
 
 import pytest                        # NOQA
 import os                            # NOQA
@@ -37,15 +49,18 @@ class TestValidate:
         cwd = os.getcwd()
         try:
             os.chdir(INPUT_DIRNAME)
-            cfg = parse(yml)
+            cfg = parse_hilbert(yml)
         finally:
             os.chdir(cwd)
-
-        assert cfg is not None       
+        
+        assert cfg is not None
         
         d = pickle_load(f)
         
+        assert d is not None
+
+        assert type(d) == type(cfg)
+        
 #        pprint(cfg)
 #        pprint(d)
-
         assert d == cfg

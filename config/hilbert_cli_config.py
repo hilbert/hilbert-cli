@@ -7,13 +7,27 @@ from __future__ import absolute_import, print_function, unicode_literals
 import logging
 # log = logging.getLogger(__name__)
 
+# from .helpers import load_yaml, pprint
+
+###############################################################
+import pprint as PP
+
+def pprint(cfg):
+    print("## Validated/Parsed pretty Result: ")
+    pp = PP.PrettyPrinter(indent=2)
+    pp.pprint(cfg)
+#    PP.pformat
+
+
+###############################################################
+# NOTE: Global variuables
 PEDANTIC = False  # NOTE: to treat invalid values/keys as errors?
 INPUT_DIRNAME = './'
-OUTPUT_DIRNAME = INPUT_DIRNAME
+# OUTPUT_DIRNAME = INPUT_DIRNAME
+
 
 ###############################################################
 up_arrow = '↑'
-
 
 def _get_line_col(lc):
 
@@ -146,16 +160,7 @@ class VerboseRoundTripLoader(Reader, RoundTripScanner, RoundTripParser, Composer
         VerboseRoundTripConstructor.__init__(self, preserve_quotes=preserve_quotes)
         VersionedResolver.__init__(self, version)
 
-
-###############################################################
-def load_yaml(f, Loader=VerboseRoundTripLoader, version=(1, 2), preserve_quotes=True):
-    try:
-        return yaml.load(f, Loader=Loader, version=version, preserve_quotes=preserve_quotes)
-    except (IOError, yaml.YAMLError) as e:
-        error_name = getattr(e, '__module__', '') + '.' + e.__class__.__name__
-        raise ConfigurationError(u"{}: {}".format(error_name, e))
-
-
+        
 ###############################################################
 from ruamel.yaml.compat import PY2, PY3, text_type, string_types
 from abc import *
@@ -247,6 +252,17 @@ class Base(AbstractValidator):
         # NOTE: .parse should!
         raise ConfigurationError(u"{}: {}".format("ERROR:", "Invalid data: '{}'!" .format(d)))
 
+    def __repr__(self):
+        """Print using pretty formatter"""
+
+        d = self.get_data() # vars(self) # ???
+        return PP.pformat(d, indent=4, width=1)
+
+    def __eq__(self, other):
+        return self.get_data() == other.get_data()
+    
+    def __ne__(self, other):
+        return not (self == other)  # More general than self.value != other.value
 
 ###############################################################
 class BaseRecord(Base):
@@ -1422,7 +1438,7 @@ class GlobalPresets(BaseIDMap):  # Dummy for now!
 
 
 ###############################################################
-class Global(BaseRecord):
+class Hilbert(BaseRecord):
     """General Hilbert Configuration format"""
 
     def __init__(self, parent):
@@ -1501,18 +1517,41 @@ class Global(BaseRecord):
         # ! TODO: check Uniqueness of keys among (Profiles/Stations/Groups) !!!!
         # ! TODO: check for GroupID <-> StationID <-> ProfileID
         return _ret
+    
+    
+    def show(self, what):
+        _d = self.get_data()
+        
+        if what == 'all':
+            print(self)
+        elif what in _d:
+            print(_d[what])
+        else:
+            raise ConfigurationError(u"{}: {}".format("ERROR:", "Sorry cannot show '{0}' of {1}!" . format(what, type(self))))
 
 
 ###############################################################
+def load_yaml(f, Loader=VerboseRoundTripLoader, version=(1, 2), preserve_quotes=True):
+    try:
+        return yaml.load(f, Loader=Loader, version=version, preserve_quotes=preserve_quotes)
+    except (IOError, yaml.YAMLError) as e:
+        error_name = getattr(e, '__module__', '') + '.' + e.__class__.__name__
+        raise ConfigurationError(u"{}: {}".format(error_name, e))
+        
+
 def load_yaml_file(filename):
     with open(filename, 'r') as fh:
         return load_yaml(fh)
 
-# class Hilbert(object):
+###############################################################
+def parse_hilbert(d, parent=None):
+    cfg = Hilbert(None)
+    if not cfg.validate(d):
+#        pprint(d)
+        raise ConfigurationError(u"{}: {}".format("ERROR:", "Cannot parse given configuration!"))
+    
+    return cfg
 
-def yaml_dump(d, stream=None):
-    print(yaml.round_trip_dump(d, stream=stream))
+#    return Hilbert.parse(d, parent=parent)
 
-def parse(d, parent=None):
-    return Global.parse(d, parent=parent)
 

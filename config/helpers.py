@@ -4,12 +4,9 @@
 
 from __future__ import absolute_import, print_function, unicode_literals
 
-def pprint(cfg):
-    import pprint
-    print("## Validated/Parsed pretty Result: ")
-    pp = pprint.PrettyPrinter(indent=2)
-    pp.pprint(cfg)
-    
+# from .hilbert_cli_config import load_yaml # Hilbert # VerboseRoundTripLoader, 
+
+###############################################################
 # import pickle
 # import cPickle as pickle
 
@@ -26,4 +23,8 @@ def pickle_load(fn):
         d = pickle.load(p)
     return d
 
-        
+###############################################################
+
+def yaml_dump(d, stream=None):
+    import ruamel.yaml as yaml
+    print(yaml.round_trip_dump(d, stream=stream))
