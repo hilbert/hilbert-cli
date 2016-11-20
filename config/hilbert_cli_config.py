@@ -205,7 +205,10 @@ class Base(AbstractValidator):
     _data = None
     _default_data = None
 
-    def __init__(self, parent): # TODO: add tag? here or in some child?
+    def get_parent(self):
+        return self._parent
+
+    def __init__(self, parent):  # TODO: add tag? here or in some child?
         AbstractValidator.__init__(self)
         assert self._parent is None
         self._parent = parent
@@ -232,22 +235,29 @@ class Base(AbstractValidator):
         self._data = d
 
     def get_data(self):
-        if self._data is None:
-            return self._default_data
+        _d = self._data
+        if _d is None:
+            _d = self._default_data
 
-        return self._data
+#        if _d is None:
+#            return _d
+
+#        while isinstance(_d, AbstractValidator):
+#            _d = _d.get_data()
+#            if _d is None:
+#                return _d
+
+        return _d
 
     @classmethod
     def parse(cls, d, parent=None):
         self = cls(parent)
 
-#        print(cls)
-#        print(parent)
-#        print(self)
-#        print(d)
+        if d is None:
+            d = self._default_data
 
         if self.validate(d):  # TODO: FIXME: NOTE: validate should not **explicitly** throw exceptions!!!
-            return self.get_data()
+            return self  # .get_data()
 
         # NOTE: .parse should!
         raise ConfigurationError(u"{}: {}".format("ERROR:", "Invalid data: '{}'!" .format(d)))
@@ -255,14 +265,28 @@ class Base(AbstractValidator):
     def __repr__(self):
         """Print using pretty formatter"""
 
-        d = self.get_data() # vars(self) # ???
+        d = self.get_data()  # vars(self) # ???
         return PP.pformat(d, indent=4, width=1)
 
+#    def __str__(self):
+#        """Convert to string"""
+#
+#        d = self.get_data()  # vars(self) # ???
+#        return str(d)
+
     def __eq__(self, other):
+        assert isinstance(self, AbstractValidator)
+
+        if not isinstance(other, AbstractValidator):
+            return self.get_data() == other
+
+        assert isinstance(other, AbstractValidator)
+
         return self.get_data() == other.get_data()
-    
+
     def __ne__(self, other):
         return not (self == other)  # More general than self.value != other.value
+
 
 ###############################################################
 class BaseRecord(Base):
@@ -274,8 +298,8 @@ class BaseRecord(Base):
         Base.__init__(self, parent)
         self._default_type = None  # "default_base"
         self._types = {}
-        self._create_optional = False
-
+        self._create_optional = False  # Instantiate missing optional keys
+        self._type = None
 
     def detect_type(self, d):
         """determine the type of variadic data for the format version"""
@@ -285,18 +309,19 @@ class BaseRecord(Base):
 
         return self._default_type
 
-    def detect_extra_rule(self, key, value):  # Any extra unlisted keys in the mapping?
+    def detect_extra_rule(self, key, value):
+        """Handling for extra un-recorded keys in the mapping"""
         return None
 
     def validate(self, d):
         # ! TODO: assert that d is a mapping with lc!
 
-        _type = self.detect_type(d)
+        self._type = self.detect_type(d)
 
-        assert not (_type is None)
-        assert _type in self._types
+        assert self._type is not None
+        assert self._type in self._types
 
-        _rule = self._types[_type]
+        _rule = self._types[self._type]
 
         _ret = True
 
@@ -308,53 +333,88 @@ class BaseRecord(Base):
         for k in _rule.keys():
             r = _rule[k]
             if r[0] and (k not in d):
-                _key_note(k, _lc, "ERROR: Missing mandatory key `{}` (type: '%s')" % (_type))  # Raise Exception?
+                _key_note(k, _lc, "ERROR: Missing mandatory key `{}` (type: '%s')" % (self._type))  # Raise Exception?
                 _ret = False
             # NOTE: the following will add all the missing default values
-            elif (not r[0]) and self._create_optional:  # Optional Values should have some default values!
-                _d[k] = r[1](self).get_data()  # NOTE: default value - no validation
+            elif self._create_optional and (not r[0]):  # Optional Values should have some default values!
+                # TODO: FIXME: catch exception in the following:
+                _k = None
+                _v = None
+                try:
+                    _k = BaseString.parse(k, parent=self)
+                except ConfigurationError as err:
+                    _key_note(k, _lc, "Error: invalid _optional_ key field '{}' (type: '%s')" % self._type)
+                    pprint(err)
+                    _ret = False
+
+                try:
+                    _v = (r[1]).parse(None, parent=self)  # Default Value!
+                except ConfigurationError as err:
+                    _key_note(k, _lc, "Error: invalid default value (for optional key: '{}') (type: '%s')" % self._type)
+                    pprint(err)
+                    _ret = False
+
+                if _ret:
+                    assert _k is not None
+                    _d[_k] = _v
 
         for offset, k in enumerate(d):
             v = d.get(k)
+            k = text_type(k)
             l = s + offset  # ??
             lc = (l, c)
 
-            if k in _rule:
-                r = _rule[k][1](self)
+            _k = None
+            _v = None
 
-                if not r.validate(v):  # TODO: save to self!
-                    _value_error(k, v, lc, "Error: invalid field '{}' value (type: '%s')" % _type)
+            if k in _rule:
+                try:
+                    _k = BaseString.parse(k, parent=self)
+                except ConfigurationError as err:
+                    _key_error(k, v, lc, "Error: invalid key field '{}' (type: '%s')" % self._type)
+                    pprint(err)
                     _ret = False
 
-                _d[k] = r.get_data()
+                try:
+                    _v = (_rule[k][1]).parse(v, parent=self)
+                except ConfigurationError as err:
+                    _value_error(k, v, lc, "Error: invalid field value (key: '{}') (type: '%s')" % self._type)
+                    pprint(err)
+                    _ret = False
+
             else:
                 _extra_rule = self.detect_extra_rule(k, v)  # (KeyValidator, ValueValidator)
 
                 if _extra_rule is None:
-                    _key_error(k, v, lc, "WARNING: Unhandled extra Key: '{}' (type: '%s')" % _type)
+                    _key_error(k, v, lc, "WARNING: Unhandled extra Key: '{}' (type: '%s')" % self._type)
                     _ret = False
                 else:
-                    _k = _extra_rule[0](self)
-
-                    if not _k.validate(k):
-                        _key_error(k, v, lc, "Error: invalid key '{}' (type: '%s')" % _type)
+                    try:
+                        _k = (_extra_rule[0]).parse(k, parent=self)
+                    except ConfigurationError as err:
+                        _key_error(k, v, lc, "Error: invalid key '{}' (type: '%s')" % self._type)
+                        pprint(err)
                         _ret = False
-                    else:
-                        _v = _extra_rule[1](self)
-                        if not _v.validate(v):  # TODO: FIXME: wrong col (it was for key - not value)!
-                            _value_error(k, v, lc, "Error: invalid field value '{}' value (type: '%s')" % _type)
-                            _ret = False
-                        else:
-                            _d[_k.get_data()] = _v.get_data()
+
+                    try:
+                        _v = (_extra_rule[1]).parse(v, parent=self)
+                    except ConfigurationError as err:
+                        # TODO: FIXME: wrong col (it was for key - not value)!
+                        _value_error(k, v, lc, "Error: invalid field value '{}' value (type: '%s')" % self._type)
+                        pprint(err)
+                        _ret = False
+
+            if _ret:
+                assert _k is not None
+                _d[_k] = _v
 
         if _ret:
             self.set_data(_d)
 
         return _ret
 
-    ###############################################################
 
-
+###############################################################
 class BaseScalar(Base):
     """Single scalar value out of YAML scalars: strings, numbert etc."""
 
@@ -364,12 +424,30 @@ class BaseScalar(Base):
     def validate(self, d):
         """check that data is a scalar: not a sequence or mapping or set"""
 
-        if isinstance(d, (list, dict, tuple, set)): # ! Check if data is not a container?
-            print("ERROR: value: '{}' is not a scalar value!!" . format(d))
-            return False
+        if d is not None:
+            if isinstance(d, (list, dict, tuple, set)):  # ! Check if data is not a container?
+                print("ERROR: value: '{}' is not a scalar value!!" . format(d))
+                return False
 
+            if isinstance(d, string_types):
+                d = text_type(d)
+
+        # NOTE: None is also a scalar value...!
         self.set_data(d)
         return True
+
+    @classmethod
+    def parse(cls, d, parent=None):
+        self = cls(parent)
+
+        if d is None:
+            d = self._default_data
+
+        if self.validate(d):  # TODO: FIXME: NOTE: validate should not **explicitly** throw exceptions!!!
+            return self.get_data()
+
+        # NOTE: .parse should!
+        raise ConfigurationError(u"{}: {}".format("ERROR:", "Invalid data: '{}'!" .format(d)))
 
 
 ###############################################################
@@ -377,9 +455,12 @@ class BaseString(BaseScalar):
     """YAML String"""
     def __init__(self, parent):
         BaseScalar.__init__(self, parent)
+        self._default_data = ''
 
     def validate(self, d):
         """check whether data is a valid string. Note: should not care about format version"""
+
+        assert d is not None
 
         s = BaseScalar.parse(d, parent=self)
 
@@ -397,20 +478,21 @@ import semantic_version  # supports partial versions
 
 
 class SemanticVersion(BaseString):
-    def __init__(self, parent):
+    def __init__(self, parent, partial=True, coerce=True):
         BaseString.__init__(self, parent)
+
+        self._partial = partial
+        self._coerce = coerce
 
     def validate(self, d):
         """check the string data to be a valid semantic verions"""
 
         _t = BaseString.parse(d, parent=self)
 
-        _v = self.get_version(None)
+        # self.get_version(None) # ???
+        _v = None
         try:
-#            if _v is None:  # NOTE: the only initial validation: may be a partial version
-#                _v = semantic_version.Version(_t, partial=True)  # TODO: check this!
-#            else:
-            _v = semantic_version.Version.parse(_t, partial=True, coerce=True)
+            _v = semantic_version.Version.parse(_t, partial=self._partial, coerce=self._coerce)
         except:
             print("ERROR: wrong version data: '{0}' (see: '{1}')" . format(d, sys.exc_info()))
             return False
@@ -418,11 +500,24 @@ class SemanticVersion(BaseString):
         self.set_data(_v)
         return True
 
+    @classmethod
+    def parse(cls, d, parent=None, partial=True, coerce=True):
+        self = cls(parent, partial=partial, coerce=coerce)
+
+        if d is None:
+            d = self._default_data
+
+        if self.validate(d):  # TODO: FIXME: NOTE: validate should not **explicitly** throw exceptions!!!
+            return self.get_data()
+
+        # NOTE: .parse should!
+        raise ConfigurationError(u"{}: {}".format("ERROR:", "Invalid data: '{}'!" .format(d)))
 
 ###############################################################
 class BaseUIString(BaseString):  # visible to user => non empty!
     def __init__(self, parent):
         BaseString.__init__(self, parent)
+        self._default_data = None
 
     def validate(self, d):
         """check whether data is a valid string"""
@@ -457,22 +552,22 @@ class BaseEnum(BaseString):  # TODO: Generalize to not only strings...?
 
 
 ###############################################################
-class ServiceType(BaseEnum):  ## Q: Is 'Service::type' mandatory? default: 'compose'
+class ServiceType(BaseEnum):  # Q: Is 'Service::type' mandatory? default: 'compose'
     def __init__(self, parent):
         BaseEnum.__init__(self, parent)
 
-        compose = 'compose'
-        self._enum_list = [compose] # NOTE: 'docker' and others may be possible later on
+        compose = text_type('compose')
+        self._enum_list = [compose]  # NOTE: 'docker' and others may be possible later on
         self._default_data = compose
 
 
 ###############################################################
-class StationOMDTag(BaseEnum):  ## Q: Is 'Station::omd_tag' mandatory? default: 'standalone'
+class StationOMDTag(BaseEnum):  # Q: Is 'Station::omd_tag' mandatory? default: 'standalone'
     def __init__(self, parent):
         BaseEnum.__init__(self, parent)
 
-        _v = 'standalone'
-        self._enum_list = ['agent', 'windows', _v]  # possible values of omd_tag # will depend on format version!
+        _v = text_type('standalone')
+        self._enum_list = [text_type('agent'), text_type('windows'), _v]  # NOTE: possible values of omd_tag
         self._default_data = _v
 
 
@@ -481,9 +576,9 @@ class StationPowerOnMethodType(BaseEnum):  # Enum: [WOL], AMTvPRO, DockerMachine
     def __init__(self, parent):
         BaseEnum.__init__(self, parent)
 
-        wol = 'WOL'
+        wol = text_type('WOL')
         # NOTE: the list of possible values of PowerOnMethod::type (will depend on format version)
-        self._enum_list = [wol, 'DockerMachine']  # NOTE: 'AMTvPRO' and others may be possible later on
+        self._enum_list = [wol, text_type('DockerMachine')]  # NOTE: 'AMTvPRO' and others may be possible later on
         self._default_data = wol
 
 
@@ -512,8 +607,8 @@ class URI(BaseString):
 
         _ret = True
 
-        if urlparse(v).scheme != "":
-            self._type = "url"
+        if urlparse(v).scheme != '':
+            self._type = text_type('url')
             try:
                 urlopen(v).close()
             except:
@@ -525,10 +620,10 @@ class URI(BaseString):
 #            v = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), v))
 
         elif os.path.isfile(v):  # Check whether file exists
-            self._type = "file"
+            self._type = text_type('file')
 
         elif os.path.isdir(v):  # Check whether directory exists
-            self._type = "dir"
+            self._type = text_type('dir')
 
         if not _ret:
             print("WARNING: missing/unsupported resource location: {}".format(v))
@@ -538,6 +633,21 @@ class URI(BaseString):
             self.set_data(v)
 
         return _ret
+
+    ## TODO: @classmethod check_uri()
+
+    @classmethod
+    def parse(cls, d, parent=None):
+        self = cls(parent)
+
+        if d is None:
+            d = self._default_data
+
+        if self.validate(d):  # TODO: FIXME: NOTE: validate should not **explicitly** throw exceptions!!!
+            return self.get_data()  # TODO: due to DockerComposeFile later on :-(
+
+        # NOTE: .parse should!
+        raise ConfigurationError(u"{}: {}".format("ERROR:", "Invalid data: '{}'!" .format(d)))
 
 ###############################################################
 import re, tokenize
@@ -576,7 +686,7 @@ class ClientVariable(BaseID):  #
     def validate(self, d):
         """check whether data is a valid ID string"""
 
-        v = BaseID.parse(d, parent=self)
+        v = BaseID.parse(d, parent=self)  # .get_data()
 
         _ret = True
 
@@ -585,7 +695,7 @@ class ClientVariable(BaseID):  #
             _ret = False
 
         # NOTE: starting with hilbert_ or HILBERT_ with letters, digits and '_'??
-        if not re.match("^hilbert(_[a-z0-9]+)+$", v.lower()):
+        if not re.match('^hilbert(_[a-z0-9]+)+$', v.lower()):
             print("ERROR: variable must start with HILBERT/hilbert and contain words separated by underscores!"
                   " Input: '{}" .format(d))
             _ret = False
@@ -642,13 +752,19 @@ class AutoDetectionScript(BaseString):
 
     def validate(self, d):
         """check whether data is a valid script"""
+
+        if (d is None) or (d == '') or (d == text_type('')):
+            self.set_data(text_type(''))
+            return True
+
         script = BaseString.parse(d, parent=self)
+
+        assert bool(script)
 
         # NOTE: trying to check the BASH script: shellcheck & bash -n 'string':
         fd, path = tempfile.mkstemp()
         try:
             with os.fdopen(fd, 'w') as tmp:
-#                print(script)
                 tmp.write(script)
 
             _cmd = ["bash", "-n", path]
@@ -696,15 +812,14 @@ class DockerComposeServiceName(BaseString):
 class DockerComposeRef(URI):
     def __init__(self, parent):
         URI.__init__(self, parent)
-        self._default_data = "docker-compose.yml"
+        self._default_data = text_type('docker-compose.yml')
 
     def validate(self, d):
         """check whether data is a valid docker-compose file name"""
-        ref = URI.parse(d, parent=self)
-        self.set_data(ref)
-        return True
 
-    # TODO: call docker-compose on the referenced file! in DockerService!
+        # TODO: call docker-compose on the referenced file! in DockerService!
+
+        return URI.validate(self, d)
 
 
 ###############################################################
@@ -714,16 +829,13 @@ class Icon(URI):
 
     def validate(self, d):
         """check whether data is a valid icon file name"""
-        ref = URI.parse(d, parent=self)
 
-        # TODO: check the file contents (or extention)
-
-        self.set_data(ref)
-        return True
+        # TODO: FIXME: check the file contents (or extention)
+        return URI.validate(self, d)
 
 
 ###############################################################
-import subprocess # , shlex
+import subprocess  # , shlex
 
 class HostAddress(BaseString):
     """SSH alias"""
@@ -736,22 +848,40 @@ class HostAddress(BaseString):
 
         _h = BaseString.parse(d, parent=self)
 
-        _cmd = ["ssh", "-o", "ConnectTimeout=2", _h, "exit 0"]
+        if not self.check_ssh_alias(_h):
+            if PEDANTIC:
+                return False
+
+        self.set_data(_h)
+        return True
+
+    @classmethod
+    def check_ssh_alias(cls, _h):
+        """Check for ssh alias"""
+
         try:
-            # NOTE: Check for ssh alias!
+            _cmd = ["ssh", "-o", "ConnectTimeout=2", _h, "exit 0"]
             subprocess.check_call(_cmd, stdout=open("/dev/null", 'w'), stderr=open("/dev/null", 'w'))
-            _ret = True
+            return True
         except subprocess.CalledProcessError as err:
             print("WARNING: non-functional ssh alias: '{0}' => exit code: {1}!" . format(text_type(_h), err.returncode))
-            _ret = not PEDANTIC # TODO: add a special switch?
         except: # Any other exception is wrong...
             print("WARNING: non-functional ssh alias: '{0}'. Moreover: Unexpected error: {1}" . format(text_type(_h), sys.exc_info()))
-            _ret = not PEDANTIC  # TODO: add a special switch?
 
-        if _ret:
-            self.set_data(_h)
+        return False
 
-        return _ret
+    @classmethod
+    def parse(cls, d, parent=None):
+        self = cls(parent)
+
+        if d is None:
+            d = self._default_data
+
+        if self.validate(d):  # TODO: FIXME: NOTE: validate should not **explicitly** throw exceptions!!!
+            return self  # .get_data()
+
+        # NOTE: .parse should!
+        raise ConfigurationError(u"{}: {}".format("ERROR:", "Invalid data: '{}'!" .format(d)))
 
 ###############################################################
 class HostMACAddress(BaseString):
@@ -771,7 +901,6 @@ class HostMACAddress(BaseString):
 
         # TODO: verify the existence of that MAC address?
         self.set_data(v)
-
         return True
 
 ###############################################################
@@ -810,11 +939,25 @@ class VariadicRecordWrapper(Base):
     def __init__(self, parent):
         Base.__init__(self, parent)
 
-        self._type_tag = "type"
+        self._type_tag = text_type('type')
         self._type_cls = None
 
         self._default_type = None
         self._types = {}
+
+    # TODO: FIXME: make sure to use this .parse instead of .validate due to substitution in Wrapper objects!!!
+
+    @classmethod
+    def parse(cls, d, parent=None):
+        """Will return a Validator of a different class"""
+
+        self = cls(parent)  # temporary wrapper object
+
+        if d is None:
+            d = self._default_data
+
+        if self.validate(d):
+            return self.get_data()
 
     def validate(self, d):
         """determine the type of variadic data for the format version"""
@@ -834,7 +977,7 @@ class VariadicRecordWrapper(Base):
             _key_error(self._type_tag, d, _lc, "ERROR: Missing mandatory key `{}`")
             return False
 
-        t = self._type_cls.parse(d[self._type_tag], parent=self)
+        t = self._type_cls.parse(d[self._type_tag], parent=self.get_parent()) ### ????
 
         if t not in _rule:
             _lc = d.lc  # start of the current mapping
@@ -848,7 +991,7 @@ class VariadicRecordWrapper(Base):
             _value_error('*', d, _lc, "ERROR: invalid mapping value '{}' for type '%s'" % t)
             return False
 
-        self.set_data(tt.get_data())
+        self.set_data(tt)  # TODO: completely replace this with tt??? access Methods?
         return True
 
 
@@ -897,8 +1040,6 @@ class ApplicationWrapper(ServiceWrapper):
         self._types[self._default_type] = _dc
 
 
-
-
 ###############################################################
 class DockerMachine(BaseRecord):
     """DockerMachine :: StationPowerOnMethod"""
@@ -906,15 +1047,15 @@ class DockerMachine(BaseRecord):
     def __init__(self, parent):
         BaseRecord.__init__(self, parent)
 
-        self._type_tag = "type"
+        self._type_tag = text_type('type')
 
-        self._default_type = "DockerMachine"
+        self._default_type = 'DockerMachine'
 
         DM_rule = {
             self._type_tag: (True, StationPowerOnMethodType),  # Mandatory!
-            "auto_turnon": (False, AutoTurnon),
-            "vm_name": (True, BaseString),
-            "vm_host_address": (True, HostAddress)
+            text_type('auto_turnon'): (False, AutoTurnon),
+            text_type('vm_name'): (True, BaseString),
+            text_type('vm_host_address'): (True, HostAddress)
         }
 
         self._types = {self._default_type: DM_rule}  # ! NOTE: AMT - maybe later...
@@ -925,13 +1066,13 @@ class WOL(BaseRecord):
     def __init__(self, parent):
         BaseRecord.__init__(self, parent)
 
-        self._type_tag = "type"
-        self._default_type = "WOL"
+        self._type_tag = text_type('type')
+        self._default_type = 'WOL'
 
         WOL_rule = {
             self._type_tag: (True, StationPowerOnMethodType),  # Mandatory!
-            "auto_turnon": (False, AutoTurnon),
-            "mac": (True, HostMACAddress)
+            text_type('auto_turnon'): (False, AutoTurnon),
+            text_type('mac'): (True, HostMACAddress)
         }
 
         self._types = {self._default_type: WOL_rule}
@@ -944,10 +1085,10 @@ class DockerComposeService(BaseRecord):
     def __init__(self, parent):
         BaseRecord.__init__(self, parent)
 
-        self._type_tag = "type"
-        self._hook_tag = "auto_detections"
-        self._name_tag = "ref"
-        self._file_tag = "file"
+        self._type_tag = text_type('type')
+        self._hook_tag = text_type('auto_detections')
+        self._name_tag = text_type('ref')
+        self._file_tag = text_type('file')
 
         _compose_rule = {
             self._type_tag: (True, ServiceType),  # Mandatory
@@ -958,6 +1099,7 @@ class DockerComposeService(BaseRecord):
 
         self._default_type = "default_dc_service"
         self._types = {self._default_type: _compose_rule}
+
         self._create_optional = True
 
     def validate(self, d):
@@ -967,11 +1109,19 @@ class DockerComposeService(BaseRecord):
 
         _d = self.get_data()
 
+        # TODO: remove Validators (BaseString) from strings used as dict keys!
         _f = _d[self._file_tag]
 
-        assert os.path.exists(_f)
+        while isinstance(_f, AbstractValidator):
+            _f = _f.get_data()
+
+        assert os.path.exists(_f)  # TODO: FIXME: use URI::check() instead??
 
         _n = _d[self._name_tag]
+
+        while isinstance(_n, AbstractValidator):
+            _n = _n.get_data()
+
         # TODO: Check the corresponding file for such a service -> Service in DockerService!
 
         DC = "docker-compose"
@@ -988,7 +1138,7 @@ class DockerComposeService(BaseRecord):
                    _ret = not PEDANTIC  # TODO: add a special switch?
 
             with open(path, 'r') as tmp:
-                dc = load_yaml(tmp)
+                dc = load_yaml(tmp)  # NOTE: loading external Docker-Compose's YML file using our validating loader!
                 ss = None
                 for k in dc['services']:
                     if k == _n:
@@ -1015,10 +1165,10 @@ class DockerComposeApplication(DockerComposeService):
         _compose_rule = (self._types[self._default_type]).copy()
 
         _compose_rule.update({
-            "name": (True, BaseUIString),  # NOTE: name for UI!
-            "description": (True, BaseUIString),
-            "icon": (False, Icon),
-            "compatibleStations": (True, Group)
+            text_type('name'): (True, BaseUIString),  # NOTE: name for UI!
+            text_type('description'): (True, BaseUIString),
+            text_type('icon'): (False, Icon),
+            text_type('compatibleStations'): (True, Group)
         })
 
         self._types[self._default_type] = _compose_rule
@@ -1034,11 +1184,11 @@ class Profile(BaseRecord):
         self._default_type = "default_profile"
 
         default_rule = {
-            "name": (True, BaseUIString),
-            "description": (True, BaseUIString),
-            "icon": (False, Icon),
-            "services": (True, ServiceList),
-            "supported_types": (False, ServiceTypeList)
+            text_type('name'): (True, BaseUIString),
+            text_type('description'): (True, BaseUIString),
+            text_type('icon'): (False, Icon),
+            text_type('services'): (True, ServiceList),
+            text_type('supported_types'): (False, ServiceTypeList)
         }
 
         self._types = {self._default_type: default_rule}
@@ -1054,11 +1204,11 @@ class StationSSHOptions(BaseRecord):  # optional: "Station::ssh_options" # recor
         self._default_type = "default_station_ssh_options"
 
         default_rule = {
-            "user": (False, BaseString),
-            "key": (False, BaseString),
-            "port": (False, BaseString),
+            text_type('user'): (False, BaseString),
+            text_type('key'): (False, BaseString),
+                text_type('port'): (False, BaseString),
         # TODO: BaseInt??  http://stackoverflow.com/questions/4187185/how-can-i-check-if-my-python-object-is-a-number
-            "key_ref": (False, URI),
+            text_type('key_ref'): (False, URI),
         }
 
         self._types = {self._default_type: default_rule}
@@ -1073,8 +1223,11 @@ class StationSSHOptions(BaseRecord):  # optional: "Station::ssh_options" # recor
 
 
 ###############################################################
-class Station(BaseRecord):
+class Station(BaseRecord): # Wrapper
     """Station"""
+
+    _extends_tag = text_type('extends')
+    _client_settings_tag = text_type('client_settings')
 
     def __init__(self, parent):
         BaseRecord.__init__(self, parent)
@@ -1082,20 +1235,76 @@ class Station(BaseRecord):
         self._default_type = "default_station"
 
         default_rule = {
-            "name": (True, BaseUIString),
-            "description": (True, BaseUIString),
-            "icon": (False, Icon),
-            "extends": (False, StationID),
-            "profile": (True, ProfileID),
-            "address": (True, HostAddress),
-            "poweron_settings": (False, StationPowerOnMethodWrapper),  # !! variadic, PowerOnType...
-            "ssh_options": (False, StationSSHOptions),  # !!! record: user, port, key, key_ref
-            "omd_tag": (True, StationOMDTag),  # ! like ServiceType: e.g. agent. Q: Is this mandatory?
-            "hidden": (False, StationVisibility),  # Q: Is this mandatory?
-            "client_settings": (False, StationClientSettings)  # IDMap : (BaseID, BaseString)
-        }
+            self._extends_tag: (False, StationID),
+            text_type('name'): (True, BaseUIString),
+            text_type('description'): (True, BaseUIString),
+            text_type('icon'): (False, Icon),
+            text_type('profile'): (True, ProfileID),
+            text_type('address'): (True, HostAddress),
+            text_type('poweron_settings'): (False, StationPowerOnMethodWrapper),  # !! variadic, PowerOnType...
+            text_type('ssh_options'): (False, StationSSHOptions),  # !!! record: user, port, key, key_ref
+            text_type('omd_tag'): (True, StationOMDTag),  # ! like ServiceType: e.g. agent. Q: Is this mandatory?
+            text_type('hidden'): (False, StationVisibility),  # Q: Is this mandatory?
+            self._client_settings_tag : (False, StationClientSettings)  # IDMap : (BaseID, BaseString)
+        }  # text_type('type'): (False, StationType), # TODO: ASAP!!!
 
         self._types = {self._default_type: default_rule}
+
+    def get_base(self):
+        _d = self.get_data()
+        assert _d is not None
+        _b = _d.get(self._extends_tag, None)  # StationID (validated...)
+
+        if _b is not None:
+            if isinstance(_b, AbstractValidator):
+                _b = _b.get_data()
+
+        return _b
+
+    def extend(delta, base): # delta == self!
+        assert delta.get_base() is not None
+        assert base.get_base() is None
+
+        #        assert delta.get_base() == base  # ?
+        return delta
+
+        #
+        # TODO: the following needs an update due to changes in API - not a clean merge - apply delta!
+        #
+
+        d = delta.get_data()
+
+        new = {}
+
+        for k in base:
+            if k == delta._extends_tag:
+                continue
+
+            if k in delta:
+                v = delta.get(k, None)
+
+                if v is None:
+                    new[k] = base[k]
+                    continue
+
+                if k == delta._client_settings_tag:
+                    t = base.get(k, {}).copy()
+
+                    assert isinstance(t, dict)
+                    assert isinstance(v, dict)
+
+                    t.update(v)
+                    new[k] = t
+                else:
+                    new[k] = v  # overwrite the rest
+            else:
+                new[k] = base[k]
+
+        for k in delta:
+            if not ((k == delta._extends_tag) or (k in new)):
+                new[k] = delta[k]
+
+        return new
 
 
 ###############################################################
@@ -1115,38 +1324,50 @@ class BaseIDMap(Base):
 
         return self._default_type
 
-    def validate(self, data):
-        _type = self.detect_type(data)
+    def validate(self, d):
+        self._type = self.detect_type(d)
 
-        assert not (_type is None)
-        assert _type in self._types
+        assert self._type is not None
+        assert self._type in self._types
 
-        (_id, _rule) = self._types[_type]
+        (_id_rule, _rule) = self._types[self._type]
 
-        _ret = True
-
-        _lc = data.lc  # starting position?
+        _lc = d.lc  # starting position?
         (s, c) = (_lc.line, _lc.col)
 
         _d = {}
-        for offset, k in enumerate(data):
-            v = data.get(k)  # TODO: data[offset]???
+
+        _ret = True
+        for offset, k in enumerate(d):
+            v = d[k]  # TODO: d[offset]???
             l = s + offset
             _lc = (l, c)
 
-            id = _id(self)
+#            pprint(k)
+#            print(type(k))
 
-            if not id.validate(k):
-                _key_error(k, v, _lc, "Invalid Key ID: '{}' (type: '%s')" % (_type))  # Raise Exception?
+            _id = None
+            _vv = None
+
+            try:
+                _id = _id_rule.parse(k, parent=self)
+            except ConfigurationError as err:
+                _key_error(k, v, _lc, "Invalid ID: '{}' (type: '%s')" % (self._type))  # Raise Exception?
+                pprint(err)
                 _ret = False
-            else:
-                vv = _rule(self)
 
-                if not vv.validate(v):
-                    _value_error(k, v, _lc, "invalid value '{}' value (type: '%s')" % (_type))  # Raise Exception?
-                    _ret = False
-                elif _ret:
-                    _d[id.get_data()] = vv.get_data()
+            try:
+                _vv = _rule.parse(v, parent=self)
+            except ConfigurationError as err:
+                _value_error(k, v, _lc, "invalid Value (for ID: '{}') (type: '%s')" % (self._type))  # Raise Exception?
+                pprint(err)
+                _ret = False
+
+            if _ret:
+                assert _id is not None
+                assert _vv is not None
+                # _id = _id.get_data() # ??
+                _d[_id] = _vv  # .get_data()
 
         if _ret:
             self.set_data(_d)
@@ -1168,13 +1389,14 @@ class GlobalServices(BaseIDMap):
 
 
 ###############################################################
-class StationClientSettings(
-    BaseIDMap):  # "client_settings": (False, StationClientSettings) # IDMap : (BaseID, BaseString)
+# "client_settings": (False, StationClientSettings) # IDMap : (BaseID, BaseString)
+class StationClientSettings(BaseIDMap):
     def __init__(self, parent):
         BaseIDMap.__init__(self, parent)
         self._default_type = "default_station_client_settings"
         self._types = {
-            self._default_type: (ClientVariable, BaseScalar)}  # ! TODO: only strings for now! More scalar types?!
+            self._default_type: (ClientVariable, BaseScalar)
+        }  # ! TODO: only strings for now! More scalar types?! BaseScalar?
 
 
 ###############################################################
@@ -1196,54 +1418,21 @@ class GlobalProfiles(BaseIDMap):
         #     ### TODO: Any post processing?
         #     return _ret
 
-def extend_dict(base, delta, _ext):
-    new = {}
-
-    for k in base:
-        if k == _ext:
-            continue
-
-        if k in delta:
-            v = delta.get(k, None)
-
-            if v is None:
-                new[k] = base[k]
-                continue
-
-            if k == 'client_settings':
-                t = base.get(k, {}).copy()
-
-                assert isinstance(t, dict)
-                assert isinstance(v, dict)
-
-                t.update(v)
-                new[k] = t
-            else:
-                new[k] = v  # overwrite the rest
-        else:
-            new[k] = base[k]
-
-
-    for k in delta:
-        if not ((k == _ext) or (k in new)):
-            new[k] = delta[k]
-
-    return new
 
 ###############################################################
 class GlobalStations(BaseIDMap):
+    """Global mapping of station IDs to Station's"""
+
     def __init__(self, parent):
         BaseIDMap.__init__(self, parent)
         self._default_type = "default_global_stations"
-        self._types = {self._default_type: (StationID, Station)}
+        self._types = {self._default_type: (StationID, Station)}  # NOTE: {StationID -> Station}
 
     def validate(self, d):
         """Extension mechanism on top of the usual ID Mapping parsing"""
 
         if not BaseIDMap.validate(self, d):
             return False
-
-        _ext = 'extends'
 
         sts = self.get_data()
         self.set_data(None)
@@ -1252,11 +1441,15 @@ class GlobalStations(BaseIDMap):
 
         _processed = {}
         _todo = {}
+
         for k in sts:
-            v = sts[k]
-            if v.get(_ext, None) is None:
+            v = sts[k]  # TODO: popitem as below?
+            _b = v.get_base()
+
+            if _b is None:  # TODO: FIXME: add to Station API!
                 _processed[k] = v
             else:
+                assert _b in sts  # NOTE: any station extends some _known_ station!
                 _todo[k] = v
 
         _chg = True
@@ -1265,17 +1458,34 @@ class GlobalStations(BaseIDMap):
             _rest = {}
             while bool(_todo):
                 k, v = _todo.popitem()
-                assert _ext in v
-                base = v[_ext]
-                if base in _processed:
-                    _processed[k] = extend_dict(_processed[base], v, _ext)
+
+#                print(k, ' :subj: ', type(k))
+#                pprint(v)
+
+                _b = v.get_base()
+                assert k != _b  # no infinite self-recursive extensions!
+
+                # print(_b, ' :base: ', type(_b))
+                assert _b in _processed
+
+                if _b in _processed:
+                    _processed[k] = v.extend(_processed[_b])
+#                    pprint(_processed[k])
+                    # assert _processed[k] extends nothing...???
                     _chg = True
                 else:
                     _rest[k] = v
+
             _todo = _rest
+#            pprint(_todo)
+
+#        pprint(_processed)
+#        pprint(_todo)
 
         if bool(_todo):
-            print('ERROR: Cyclic dependencies between stations: {}!?' .format(_todo))
+            print('ERROR: Cyclic dependencies between stations: ')
+            pprint(_todo)
+
             _ret = False
 
         if _ret:
@@ -1301,7 +1511,8 @@ class BaseList(Base):
 
         if (not isinstance(d, (list, dict, tuple, set))) and isinstance(d, string_types):
             try:
-                _d = _type.parse(BaseString.parse(d, parent=self), parent=self)
+                _d = _type.parse(BaseString.parse(d, parent=self).get_data(), parent=self)
+
                 self.get_data(_d)
                 return True
             except:
@@ -1318,7 +1529,7 @@ class BaseList(Base):
                 _value_error("[%d]" % idx, d, _lc, "Wrong item in the given sequence!")
                 _ret = False
             else:
-                _d.insert(idx, _v.get_data())  # append?
+                _d.insert(idx, _v)  # append?
 
         if _ret:
             self.set_data(_d)
@@ -1369,29 +1580,35 @@ class Group(BaseRecord):  # ? TODO: GroupSet & its .parent?
 
         self._default_type = "default_group"
 
-        self._include_tag = "include"
-        self._exclude_tag = "exclude"
-        self._intersectWith_tag = "intersectWith"
+        self._include_tag = text_type('include')
+        self._exclude_tag = text_type('exclude')
+        self._intersectWith_tag = text_type('intersectWith')
 
         default_rule = {
             self._include_tag: (False, GroupIDList),
             self._exclude_tag: (False, GroupIDList),
-            self._intersectWith_tag: (False, GroupIDList),
-            "name": (False, BaseUIString),
-            "description": (False, BaseUIString),
-            "icon": (False, Icon)
+            self._intersectWith_tag: (False, GroupIDList)
         }
+        # text_type('name'): (False, BaseUIString),
+        # text_type('description'): (False, BaseUIString),
+        # text_type('icon'): (False, Icon)
 
         self._types = {self._default_type: default_rule}
 
     def detect_extra_rule(self, key, value):  # Any extra unlisted keys in the mapping?
+#        pprint(key)
+#        pprint(value)
+
         if value is None:  # Set item!
-            return (GroupID, BaseScalar)
+            return GroupID, BaseScalar
+
         return None
 
-    def validate(self, data):
-        _ret = BaseRecord.validate(self, data)
-        # Add extra keys into include?
+    def validate(self, d):
+        _ret = BaseRecord.validate(self, d)
+
+        # TODO: FIXME: Add extra keys into include!
+
         return _ret
 
     ###############################################################
@@ -1436,7 +1653,6 @@ class GlobalPresets(BaseIDMap):  # Dummy for now!
         #        raise NotImplementedError("Presets are not supported yet!")
         return True
 
-
 ###############################################################
 class Hilbert(BaseRecord):
     """General Hilbert Configuration format"""
@@ -1446,12 +1662,12 @@ class Hilbert(BaseRecord):
 
         self._default_type = "default_global"
 
-        self._version_tag = "Version"
-        self._applications_tag = "Applications"
-        self._services_tag = "Services"
-        self._profiles_tag = "Profiles"
-        self._stations_tag = "Stations"
-        self._groups_tag = "Groups"
+        self._version_tag = text_type('Version')
+        self._applications_tag = text_type('Applications')
+        self._services_tag = text_type('Services')
+        self._profiles_tag = text_type('Profiles')
+        self._stations_tag = text_type('Stations')
+        self._groups_tag = text_type('Groups')
 
         ### explicit (optional) Type?
         default_rule = {
@@ -1461,7 +1677,7 @@ class Hilbert(BaseRecord):
             self._profiles_tag: (True, GlobalProfiles),
             self._stations_tag: (True, GlobalStations),
             self._groups_tag: (False, GlobalGroups),  # Optional
-            "Presets": (False, GlobalPresets),  # Optional. May be removed! default?
+            text_type('Presets'): (False, GlobalPresets),  # Optional. May be removed! default?
         }
 
         self._types = {self._default_type: default_rule}
@@ -1471,6 +1687,9 @@ class Hilbert(BaseRecord):
     @classmethod
     def parse(cls, d, parent=None):
         self = cls(parent)
+
+        if d is None:
+            d = self._default_data
 
         if self._version_tag not in d:
             _key_note(self._version_tag, d.lc, "ERROR: Missing mandatory '{}' key field!")
@@ -1518,16 +1737,24 @@ class Hilbert(BaseRecord):
         # ! TODO: check for GroupID <-> StationID <-> ProfileID
         return _ret
     
-    
     def show(self, what):
         _d = self.get_data()
-        
+
+        s = BaseString(self)
+
+        _isstr = s.validate(what)
+
         if what == 'all':
             print(self)
-        elif what in _d:
-            print(_d[what])
+        if what == 'keys':
+            pprint([k for k in _d.keys()])
+        elif isinstance(what, AbstractValidator) and (what in _d):
+            pprint(_d[what])
+        elif _isstr and (s in _d):
+            pprint(_d[s])
         else:
-            raise ConfigurationError(u"{}: {}".format("ERROR:", "Sorry cannot show '{0}' of {1}!" . format(what, type(self))))
+            raise ConfigurationError(u"{}: {}".format("ERROR:",
+                  "Sorry cannot show '{0}' of {1}!" . format(what, type(self))))
 
 
 ###############################################################
@@ -1543,15 +1770,14 @@ def load_yaml_file(filename):
     with open(filename, 'r') as fh:
         return load_yaml(fh)
 
+
 ###############################################################
 def parse_hilbert(d, parent=None):
-    cfg = Hilbert(None)
+    assert d is not None
+
+    cfg = Hilbert(parent)
     if not cfg.validate(d):
-#        pprint(d)
         raise ConfigurationError(u"{}: {}".format("ERROR:", "Cannot parse given configuration!"))
     
     return cfg
-
 #    return Hilbert.parse(d, parent=parent)
-
-

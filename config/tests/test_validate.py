@@ -11,11 +11,6 @@ DIR=path.dirname( path.dirname( path.abspath(__file__) ) )
 sys.path.append( DIR )
 
 
-
-#from hilbert_cli_config import pprint, INPUT_DIRNAME
-#from hilbert_cli_config import load_yaml, load_yaml_file, parse_hilbert, Hilbert
-#from helpers import pickle_load
-
 from hilbert_cli_config import *
 from helpers import *
 
@@ -61,6 +56,7 @@ class TestValidate:
 
         assert type(d) == type(cfg)
         
-#        pprint(cfg)
-#        pprint(d)
+        pprint(cfg)
+        pprint(d)
+
         assert d == cfg

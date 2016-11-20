@@ -10,10 +10,8 @@ assert __name__ == "__main__"
 
 import sys
 from os import path
-DIR=path.dirname( path.dirname( path.abspath(__file__) ) )
-sys.path.append( path.join(DIR, 'config' ) )
-# sys.path.append( DIR )
-
+DIR=path.dirname(path.dirname(path.abspath(__file__)))
+sys.path.append(path.join(DIR, 'config'))
 
 from helpers import *
 from hilbert_cli_config import *
@@ -27,6 +25,7 @@ import argparse                        # NOQA
 import logging
 # log = logging.getLogger(__name__)
 
+
 def _version():
     import platform
     import dill
@@ -35,6 +34,7 @@ def _version():
     print("## ruamel.yaml Version: '{}'".format(yaml.__version__))
     print("## dill Version: '{}'".format(dill.__version__))
     # arghandler version? dill version? etc?
+
 
 def _load(f):
     print("## YAML Validation: ")
@@ -96,12 +96,12 @@ def cmd_verify(parser, context, args):
         print("ERROR: semantically wrong input!")
         exit(1)
         
-    print("## Input file is a good Hilbert configuration!")
+    print("## Input file '{}' contains good valid Hilbert configuration!" . format(fn))
+    print("## Done")
+    exit(0)
 
-#    return cfg
 
-
-@subcmd('cfg_dump', help='Load input .YAML or .Pickle file and dump it')
+@subcmd('cfg_dump', help='Load input .YAML or .Pickle file and display/dump it')
 def cmd_dump(parser, context, args):
     global PEDANTIC
     global INPUT_DIRNAME
@@ -110,7 +110,7 @@ def cmd_dump(parser, context, args):
 #    parser.add_argument('-O', '--outputdir', required=False, default=argparse.SUPPRESS,
 #            help="specify output directory (default: alongside with the output dump file)")
             
-    parser.add_argument('-od', '--outputdump', required=True, default=argparse.SUPPRESS,
+    parser.add_argument('-od', '--outputdump', default=argparse.SUPPRESS,
             help="specify output dump file")
 
     ctx = vars(context)
@@ -182,25 +182,25 @@ def cmd_dump(parser, context, args):
         
     od = None
 
+    f = URI(None)
+
     if 'outputdump' in args:
         od = args['outputdump']
         assert od is not None
-    elif fn is not None:
-        od = os.path.splitext(os.path.basename(fn))[0] + '.pickle'
-#        OUTPUT_DIRNAME = INPUT_DIRNAME
-    else:
-        assert df is not None
-        od = os.path.splitext(os.path.basename(df))[0] + '.pickle'
-#        OUTPUT_DIRNAME = INPUT_DIRNAME        
-
+#    elif fn is not None:
+#        od = os.path.splitext(os.path.basename(fn))[0] + '.pickle'
+##        OUTPUT_DIRNAME = INPUT_DIRNAME
+#    else:
+#        assert df is not None
+#        od = os.path.splitext(os.path.basename(df))[0] + '.pickle'
+##        OUTPUT_DIRNAME = INPUT_DIRNAME
         
-    f = URI(None)
-    if not f.validate(od):
-        if not PEDANTIC:
-            print("## WARNING: Output dump file: '{}' already exists!".format(od))
-        else:
-            print("## ERROR: Output dump file: '{}' already exists!".format(od))
-            exit(1)
+        if not f.validate(od):
+            if not PEDANTIC:
+                print("## WARNING: Output dump file: '{}' already exists!".format(od))
+            else:
+                print("## ERROR: Output dump file: '{}' already exists!".format(od))
+                exit(1)
 
     cfg = None
     if fn is not None:
@@ -230,11 +230,16 @@ def cmd_dump(parser, context, args):
         print("ERROR: semantically wrong input!")
         exit(1)
 
-    print("## Input is OK!")
+    print("## Input is OK: ")
+    print(cfg)
 
-    print("## Writing the configuration into '{}'..." . format(od))
-    pickle_dump(od, cfg)
-    print("## Pickled configuration is now in '{}'!" . format(od))
+
+    if od is not None:
+        print("## Writing the configuration into '{}'..." . format(od))
+        pickle_dump(od, cfg)
+#        print("## Pickled configuration is now in '{}'!" . format(od))
+    print("## Done")
+    exit(0)
 
 
 #    return cfg
@@ -320,7 +325,6 @@ def cmd_show(parser, context, args):
         except:
             print("ERROR: wrong input dump file: '{}'!" . format(df))
             raise
-        
 
     if cfg is None:
         print("ERROR: could not get the configuration!")
@@ -335,10 +339,13 @@ def cmd_show(parser, context, args):
 
     try:
         print("## Showing: '{}' for the configuration" . format(obj))
-        cfg.show(obj)
+        cfg.show(obj) # TODO pprint(QUERY!!!)
     except:
         print("## ERROR: Sorry cannot show '{}' yet!" . format(obj))
         exit(1)
+
+    print("## Done")
+    exit(0)
 
 
 def main():
