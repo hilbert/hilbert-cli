@@ -5,17 +5,18 @@
 from __future__ import absolute_import, print_function, unicode_literals
 
 import logging
-# log = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 # from .helpers import load_yaml, pprint
 
 ###############################################################
 import pprint as PP
+_pp = PP.PrettyPrinter(indent=4)
 
 def pprint(cfg):
-    print("## Validated/Parsed pretty Result: ")
-    pp = PP.PrettyPrinter(indent=2)
-    pp.pprint(cfg)
+#    print("## Validated/Parsed pretty Result: ")
+    global _pp
+    _pp.pprint(cfg)  # TODO: use loggger?
 #    PP.pformat
 
 
@@ -38,8 +39,7 @@ def _get_line_col(lc):
         try:
             l = lc.line
         except:
-            print("Unexpected error: ", sys.exc_info()[0])
-            print("Cannot get line out of: ", lc)
+            log.exception("Cannot get line out of '{}': Missing .line attribute!".format(lc))
             raise
 
         try:
@@ -48,8 +48,7 @@ def _get_line_col(lc):
             try:
                 c = lc.column
             except:
-                print("Unexpected error: ", sys.exc_info()[0])
-                print("Cannot get col/column out of: ", lc)
+                log.exception("Cannot get column out of '{}': Missing .col/.column attributes!".format(lc))
                 raise
 
     return l, c
@@ -77,7 +76,7 @@ def _key_note(key, lc, key_message, e='K'):
     (line, col) = _get_line_col(lc)
 
     if key is None:
-        key = '*'
+        key = '?'
 
     print('{}[line: {}, column: {}]: {}'.format(e, line + 1, col + 1, key_message.format(key)))
     print('---')
@@ -87,7 +86,7 @@ def _value_error(key, value, lc, error, e='E'):
     (line, col) = _get_line_col(lc)
 
     if key is None:
-        key = '*'
+        key = '?'
 
     val_col = col + len(key) + 2
     print('{}[line: {}, column: {}]: {}'.format(e, line + 1, val_col + 1, error.format(key)))
@@ -242,7 +241,7 @@ class Base(AbstractValidator):
 #        if _d is None:
 #            return _d
 
-#        while isinstance(_d, AbstractValidator):
+#        while isinstance(_d, Base):
 #            _d = _d.get_data()
 #            if _d is None:
 #                return _d
@@ -275,17 +274,89 @@ class Base(AbstractValidator):
 #        return str(d)
 
     def __eq__(self, other):
-        assert isinstance(self, AbstractValidator)
+        assert isinstance(self, Base)
 
-        if not isinstance(other, AbstractValidator):
+        if not isinstance(other, Base):
             return self.get_data() == other
 
-        assert isinstance(other, AbstractValidator)
+        assert isinstance(other, Base)
 
         return self.get_data() == other.get_data()
 
     def __ne__(self, other):
         return not (self == other)  # More general than self.value != other.value
+
+    def data_dump(self):
+        _d = self.get_data()
+
+        if _d is None:
+            return _d
+
+        assert not isinstance(_d, (tuple, set))
+
+        if isinstance(_d, dict):
+            _dd = {}
+            for k in _d:
+                v = _d[k]
+                if isinstance(v, Base):
+                    v = v.data_dump()
+                _dd[k] = v
+            return _dd
+
+        if isinstance(_d, list):
+            _dd = []
+            for idx, i in enumerate(_d):
+                v = i
+                if isinstance(v, Base):
+                    v = v.data_dump()
+                _dd.insert(idx,  v)
+            return _dd
+
+#        if isinstance(_d, string_types):
+        return _d
+
+
+
+
+
+
+
+
+    def query(self, what):
+        log.debug("Querying '%s'", what)
+
+        if (what is None) or (what == ''):
+            what = 'all'
+
+        if what == 'all':
+            return self
+
+        _d = self.get_data()
+
+        if what == 'keys':
+            return _d.keys()
+
+        s = BaseString.parse(what, parent=self)
+
+        if s in _d:
+            return _d[s]
+
+        sep = "/"
+        ss = s.split(sep)  # NOTE: encode using pathes!
+
+        h = ss[0]  # top header
+        t = sep.join(ss[1:])  # tail
+
+        if h in _d:
+            d = _d[ss[0]]
+            if isinstance(d, Base):
+                return d.query(t)
+
+            log.warning("Could not query an object. Ignorring the tail: %s", t)
+            return d
+
+        raise ConfigurationError(u"{}: {}".format("ERROR:",
+                                                  "Sorry cannot show '{0}' of {1}!".format(what, type(self))))
 
 
 ###############################################################
@@ -478,11 +549,10 @@ import semantic_version  # supports partial versions
 
 
 class SemanticVersion(BaseString):
-    def __init__(self, parent, partial=True, coerce=True):
+    def __init__(self, parent, partial=False):
         BaseString.__init__(self, parent)
 
         self._partial = partial
-        self._coerce = coerce
 
     def validate(self, d):
         """check the string data to be a valid semantic verions"""
@@ -492,7 +562,7 @@ class SemanticVersion(BaseString):
         # self.get_version(None) # ???
         _v = None
         try:
-            _v = semantic_version.Version.parse(_t, partial=self._partial, coerce=self._coerce)
+            _v = semantic_version.Version(_t, partial=self._partial)
         except:
             print("ERROR: wrong version data: '{0}' (see: '{1}')" . format(d, sys.exc_info()))
             return False
@@ -501,17 +571,20 @@ class SemanticVersion(BaseString):
         return True
 
     @classmethod
-    def parse(cls, d, parent=None, partial=True, coerce=True):
-        self = cls(parent, partial=partial, coerce=coerce)
+    def parse(cls, d, parent=None, partial=False):
+        self = cls(parent, partial=partial)
 
-        if d is None:
-            d = self._default_data
+        assert d is not None
+#            d = self._default_data
 
         if self.validate(d):  # TODO: FIXME: NOTE: validate should not **explicitly** throw exceptions!!!
-            return self.get_data()
+            return self  # keep the validator to handle some general actions via its API: e.g. data_dump
 
         # NOTE: .parse should!
         raise ConfigurationError(u"{}: {}".format("ERROR:", "Invalid data: '{}'!" .format(d)))
+
+    def data_dump(self):
+        return str(self.get_data())
 
 ###############################################################
 class BaseUIString(BaseString):  # visible to user => non empty!
@@ -1112,14 +1185,14 @@ class DockerComposeService(BaseRecord):
         # TODO: remove Validators (BaseString) from strings used as dict keys!
         _f = _d[self._file_tag]
 
-        while isinstance(_f, AbstractValidator):
+        while isinstance(_f, Base):
             _f = _f.get_data()
 
         assert os.path.exists(_f)  # TODO: FIXME: use URI::check() instead??
 
         _n = _d[self._name_tag]
 
-        while isinstance(_n, AbstractValidator):
+        while isinstance(_n, Base):
             _n = _n.get_data()
 
         # TODO: Check the corresponding file for such a service -> Service in DockerService!
@@ -1256,7 +1329,7 @@ class Station(BaseRecord): # Wrapper
         _b = _d.get(self._extends_tag, None)  # StationID (validated...)
 
         if _b is not None:
-            if isinstance(_b, AbstractValidator):
+            if isinstance(_b, Base):
                 _b = _b.get_data()
 
         return _b
@@ -1342,9 +1415,6 @@ class BaseIDMap(Base):
             v = d[k]  # TODO: d[offset]???
             l = s + offset
             _lc = (l, c)
-
-#            pprint(k)
-#            print(type(k))
 
             _id = None
             _vv = None
@@ -1459,9 +1529,6 @@ class GlobalStations(BaseIDMap):
             while bool(_todo):
                 k, v = _todo.popitem()
 
-#                print(k, ' :subj: ', type(k))
-#                pprint(v)
-
                 _b = v.get_base()
                 assert k != _b  # no infinite self-recursive extensions!
 
@@ -1470,22 +1537,15 @@ class GlobalStations(BaseIDMap):
 
                 if _b in _processed:
                     _processed[k] = v.extend(_processed[_b])
-#                    pprint(_processed[k])
                     # assert _processed[k] extends nothing...???
                     _chg = True
                 else:
                     _rest[k] = v
 
             _todo = _rest
-#            pprint(_todo)
-
-#        pprint(_processed)
-#        pprint(_todo)
 
         if bool(_todo):
-            print('ERROR: Cyclic dependencies between stations: ')
-            pprint(_todo)
-
+            log.error('Cyclic dependencies between stations: {}' .format(_todo))
             _ret = False
 
         if _ret:
@@ -1501,35 +1561,40 @@ class BaseList(Base):
     def __init__(self, parent):
         Base.__init__(self, parent)
 
+        self._default_type = None
+        self._types = {}
+
     def validate(self, d):
         assert self._default_type is not None
         assert len(self._types) > 0
 
+        _lc = d.lc
+
         # NOTE: determine the class of items based on the version and sample data
-        _type = self._types[self._default_type]
-        assert _type is not None
+        self._type = self._types[self._default_type]
+        assert self._type is not None
 
         if (not isinstance(d, (list, dict, tuple, set))) and isinstance(d, string_types):
             try:
-                _d = _type.parse(BaseString.parse(d, parent=self).get_data(), parent=self)
-
+                _d = [self._type.parse(BaseString.parse(d, parent=self))]
                 self.get_data(_d)
                 return True
             except:
                 pass  # Not a single string entry...
 
         # list!?
-        _d = []
         _ret = True
 
+        _d = []
         for idx, i in enumerate(d):  # What about a string?
-            _v = _type(self)
-            if not _v.validate(i):
-                _lc = d.lc
-                _value_error("[%d]" % idx, d, _lc, "Wrong item in the given sequence!")
-                _ret = False
-            else:
+            _v = None
+            try:
+                _v = self._type.parse(i, parent=self)
                 _d.insert(idx, _v)  # append?
+            except ConfigurationError as err:
+                _value_error("[%d]" % idx, d, _lc, "Wrong item in the given sequence!")
+                pprint(err)
+                _ret = False
 
         if _ret:
             self.set_data(_d)
@@ -1558,9 +1623,8 @@ class ServiceList(BaseList):
         self._default_type = "default_ServiceID_list"
         self._types = {self._default_type: ServiceID}
 
-    ###############################################################
 
-
+###############################################################
 class ServiceTypeList(BaseList):
     """List of ServiceType's or a single ServiceType!"""
 
@@ -1596,8 +1660,6 @@ class Group(BaseRecord):  # ? TODO: GroupSet & its .parent?
         self._types = {self._default_type: default_rule}
 
     def detect_extra_rule(self, key, value):  # Any extra unlisted keys in the mapping?
-#        pprint(key)
-#        pprint(value)
 
         if value is None:  # Set item!
             return GroupID, BaseScalar
@@ -1696,7 +1758,7 @@ class Hilbert(BaseRecord):
             raise ConfigurationError(u"{}: {}".format("ERROR:", "Missing version tag '{0}' in the input: '{1}'!".format(self._version_tag, d)))
 
         try:
-            _v = SemanticVersion.parse(d[self._version_tag], parent=self)
+            _v = SemanticVersion.parse(d[self._version_tag], parent=self, partial=True)
         except:
             _value_error(self._version_tag, d, d.lc, "Wrong value of global '{}' specification!")
             raise
@@ -1736,26 +1798,6 @@ class Hilbert(BaseRecord):
         # ! TODO: check Uniqueness of keys among (Profiles/Stations/Groups) !!!!
         # ! TODO: check for GroupID <-> StationID <-> ProfileID
         return _ret
-    
-    def show(self, what):
-        _d = self.get_data()
-
-        s = BaseString(self)
-
-        _isstr = s.validate(what)
-
-        if what == 'all':
-            print(self)
-        if what == 'keys':
-            pprint([k for k in _d.keys()])
-        elif isinstance(what, AbstractValidator) and (what in _d):
-            pprint(_d[what])
-        elif _isstr and (s in _d):
-            pprint(_d[s])
-        else:
-            raise ConfigurationError(u"{}: {}".format("ERROR:",
-                  "Sorry cannot show '{0}' of {1}!" . format(what, type(self))))
-
 
 ###############################################################
 def load_yaml(f, Loader=VerboseRoundTripLoader, version=(1, 2), preserve_quotes=True):
@@ -1781,3 +1823,8 @@ def parse_hilbert(d, parent=None):
     
     return cfg
 #    return Hilbert.parse(d, parent=parent)
+
+
+###############################################################
+def yaml_dump(d, stream=None):
+    return yaml.round_trip_dump(d, stream=stream)

@@ -14,34 +14,28 @@ import pytest                        # NOQA
 def load(s):
     return load_yaml(s)
 
-from semantic_version import Version # supports partial versions
+from semantic_version import Version  # supports partial versions
 
 class TestVersions:
     def test_1(self):
         v = '0.0'
-        assert Version.parse(v, partial=True, coerce=True) == \
-               SemanticVersion.parse(load("'{}'" . format(v)), partial=True, coerce=True)
+        assert Version(v, partial=True) == \
+               SemanticVersion.parse(load("'{}'" . format(v)), partial=True).get_data()
 
         v = '0.1'
-        assert Version.parse(v, partial=True, coerce=True) == \
-               SemanticVersion.parse(load("'{}'" . format(v)), partial=True, coerce=True)
+        assert Version(v, partial=True) == \
+               SemanticVersion.parse(load("'{}'" . format(v)), partial=True).get_data()
 
         v = '1.2'
-        assert Version.parse(v, partial=True, coerce=True) == \
-               SemanticVersion.parse(load("'{}'" . format(v)), partial=True, coerce=True)
+        assert Version(v, partial=True) == \
+               SemanticVersion.parse(load("'{}'" . format(v)), partial=True).get_data()
 
-        
     def test_2(self):
         v = '0.0.1'
-        assert Version.parse(v, partial=True, coerce=True) == \
-               SemanticVersion.parse(load("'{}'" . format(v)), partial=True, coerce=True)
+        assert Version(v) == SemanticVersion.parse(load("'{}'" . format(v))).get_data()
 
         v = '0.1.2'
-        assert Version.parse(v, partial=True, coerce=True) == \
-               SemanticVersion.parse(load("'{}'" . format(v)), partial=True, coerce=True)
+        assert Version(v) == SemanticVersion.parse(load("'{}'" . format(v))).get_data()
 
         v = '1.2.3'
-        assert Version.parse(v, partial=True, coerce=True) == \
-               SemanticVersion.parse(load("'{}'" . format(v)), partial=True, coerce=True)
-        
-        
+        assert Version(v) == SemanticVersion.parse(load("'{}'" . format(v))).get_data()

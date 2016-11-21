@@ -22,9 +22,3 @@ def pickle_load(fn):
     with open(fn, 'rb') as p:
         d = pickle.load(p)
     return d
-
-###############################################################
-
-def yaml_dump(d, stream=None):
-    import ruamel.yaml as yaml
-    print(yaml.round_trip_dump(d, stream=stream))

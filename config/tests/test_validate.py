@@ -56,7 +56,11 @@ class TestValidate:
 
         assert type(d) == type(cfg)
         
-        pprint(cfg)
-        pprint(d)
+        print(cfg)
+        print(yaml_dump(cfg.data_dump()))
+
+
+        print(d)
+        print(yaml_dump(d.data_dump()))
 
         assert d == cfg

@@ -23,279 +23,124 @@ from arghandler import *               # NOQA
 import argparse                        # NOQA
 
 import logging
-# log = logging.getLogger(__name__)
+log = logging.getLogger(__name__)  #
 
+# level=logging.INFO!!! , datefmt='%Y.%m.%d %I:%M:%S %p'
+logging.basicConfig(format='%(levelname)s [%(filename)s:%(lineno)d]: %(message)s', level=logging.DEBUG)
+# %(name)s            Name of the logger (logging channel)
+# %(levelno)s         Numeric logging level for the message (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+# %(levelname)s       Text logging level for the message ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+# %(pathname)s        Full pathname of the source file where the logging call was issued (if available)
+# %(filename)s        Filename portion of pathname
+# %(module)s          Module (name portion of filename)
+# %(lineno)d          Source line number where the logging call was issued (if available)
+# %(funcName)s        Function name
+# %(created)f         Time when the LogRecord was created (time.time() return value)
+# %(asctime)s         Textual time when the LogRecord was created
+# %(msecs)d           Millisecond portion of the creation time
+# %(relativeCreated)d Time in milliseconds when the LogRecord was created, relative to the time the logging module was loaded
+#                     (typically at application startup time)
+# %(thread)d          Thread ID (if available)
+# %(threadName)s      Thread name (if available)
+# %(process)d         Process ID (if available)
+# %(message)s         The result of record.getMessage(), computed just as the record is emitted
+import traceback
+def main_exception_handler(type, value, tb):
+    log.exception("Uncaught exception! Type: {0}, Value: {1}, TB: {2}".format(type, value, traceback.format_tb(tb)))
+
+# sys.excepthook = main_exception_handler # Install exception handler
 
 def _version():
     import platform
     import dill
     import ruamel.yaml as yaml
-    print("## Python Version: '{}'".format(platform.python_version()))
-    print("## ruamel.yaml Version: '{}'".format(yaml.__version__))
-    print("## dill Version: '{}'".format(dill.__version__))
+    import semantic_version
+    log.info("Python           version: {}".format(platform.python_version()))
+    log.info("ruamel.yaml      version: {}".format(yaml.__version__))
+    log.info("dill             version: {}".format(dill.__version__))
+    log.info("semantic_version version: {}".format(semantic_version.__version__))
+#    log.info("Hilbert.Config   version: {}".format(config.__version__))  # TODO!
+
     # arghandler version? dill version? etc?
 
 
 def _load(f):
-    print("## YAML Validation: ")
     return load_yaml_file(f)  # TODO: check that this is a dictionary!
 
 
-@subcmd('version', help='Print version info')
+@subcmd('version', help='Display version info')
 def cmd_version(parser, context, args):
+    log.debug("Running '{}'".format('cfg_version'))
     _version()
+    log.debug("Done")
+    exit(0)
 
 
 @subcmd('cfg_verify', help='Check correctness of a given general Hilbert configuration (YAML) file as far as possible...')
 def cmd_verify(parser, context, args):
     global PEDANTIC
     global INPUT_DIRNAME
-    global OUTPUT_DIRNAME
+
+    log.debug("Running '{}'".format('cfg_verify'))
 
     ctx = vars(context)
+    pedantic_handler(parser, ctx, args)
 
-    if 'pedantic' in ctx:
-        PEDANTIC = ctx['pedantic']
+    if 'inputdump' in ctx:
+        df = ctx['inputdump']
+        if df is not None:
+            log.error("Sorry: cannot verify a dump file.")
+            exit(1)
 
+    args = parser.parse_args(args)
+    cfg = input_handler(parser, ctx, args)
 
-    args = vars(parser.parse_args(args))
-#    vars(args)
-        
-    fn = 'Hilbert.yml'
-
-    if 'inputfile' not in ctx:        
-        print("Warning: missing input file specification: using default '{}'!" . format(fn))
-    else:
-        fn = ctx['inputfile']
-        
-    assert fn is not None
-
-    f = URI(None)
-    if f.validate(fn):
-        fn = f.get_data()
-        print("## Input file: '{}'".format(fn))
-    else:
-        print("ERROR: wrong file specification: '{}'" . format(fn))
-        exit(1)
-
-    INPUT_DIRNAME = os.path.abspath(os.path.dirname(fn))
-
-    print("## Loading '{}'..." . format(fn))
-    try:
-        yml = _load(fn)
-        print("## Input file is a valid YAML!")
-    except:
-        print("ERROR: wrong input file: '{}'!" . format(fn))
-        raise
-
-    os.chdir(INPUT_DIRNAME)
-    print("## Deep Configuration Validation/Parsing: ")
-    cfg = parse_hilbert(yml)
-
-    if cfg is None:
-        print("ERROR: semantically wrong input!")
-        exit(1)
-        
-    print("## Input file '{}' contains good valid Hilbert configuration!" . format(fn))
-    print("## Done")
+    log.debug("Done")
     exit(0)
 
-
-@subcmd('cfg_dump', help='Load input .YAML or .Pickle file and display/dump it')
-def cmd_dump(parser, context, args):
+def pedantic_handler(parser, ctx, args):
     global PEDANTIC
-    global INPUT_DIRNAME
-#    global OUTPUT_DIRNAME
-
-#    parser.add_argument('-O', '--outputdir', required=False, default=argparse.SUPPRESS,
-#            help="specify output directory (default: alongside with the output dump file)")
-            
-    parser.add_argument('-od', '--outputdump', default=argparse.SUPPRESS,
-            help="specify output dump file")
-
-    ctx = vars(context)
 
     if 'pedantic' in ctx:
         PEDANTIC = ctx['pedantic']
 
-    args = vars(parser.parse_args(args))
-        
+    if PEDANTIC:
+        log.debug("PEDANTIC mode is ON!")
+
+def input_handler(parser, ctx, args):
+    global INPUT_DIRNAME
+
     fn = None
     df = None
-    
-    f = URI(None)
 
     if 'inputfile' in ctx:
         fn = ctx['inputfile']
-#        assert fn is not None
-        
+        log.debug("Input YAML file specified: {}".format(fn))
+
     if 'inputdump' in ctx:
         df = ctx['inputdump']
-#        assert df is not None
+        log.debug("Input dump file specified: {}".format(df))
 
     if (fn is None) and (df is None):
         fn = 'Hilbert.yml'
-        print("Warning: missing input file specification: using default '{}'!" . format(fn))
-#        print("ERROR: input file/dump specification is missing!")
-#        exit(1)
-        
+        log.warning("Missing input file specification: using default '{}'!".format(fn))
+
     if (fn is not None) and (df is not None):
-        print("ERROR: input file specification clashes with the input dump specification: specify a single input source!")
-        exit(1)        
-
-    if fn is not None:        
-        if not f.validate(fn):
-            print("ERROR: wrong file specification: '{}'" . format(fn))
-            exit(1)            
-        print("## Input file: '{}'".format(fn))
-        
-    if df is not None:        
-        if not f.validate(df):
-            print("ERROR: wrong dump file specification: '{}'" . format(df))
-            exit(1)
-        print("## Input dump file: '{}'".format(df))
-        
-        
-    if fn is not None:
-        INPUT_DIRNAME = os.path.abspath(os.path.dirname(fn))
-    else:
-        assert df is not None
-        INPUT_DIRNAME = os.path.abspath(os.path.dirname(df))
-
-
-#    out = None
-#    if 'outputdir' in args:
-#        out = args['outputdir']
-#        
-#        assert out is not None
-#
-#        if not f.validate(out):
-#            print("ERROR: wrong output directory specification: '{}'" . format(out))
-#            exit(1)
-#            
-###        out = f.get_data()
-#        print("## Output dir: '{}'".format(out))
-#
-#        OUTPUT_DIRNAME = os.path.abspath(out)
-#    else:
-#        OUTPUT_DIRNAME = INPUT_DIRNAME        
-        
-    od = None
-
-    f = URI(None)
-
-    if 'outputdump' in args:
-        od = args['outputdump']
-        assert od is not None
-#    elif fn is not None:
-#        od = os.path.splitext(os.path.basename(fn))[0] + '.pickle'
-##        OUTPUT_DIRNAME = INPUT_DIRNAME
-#    else:
-#        assert df is not None
-#        od = os.path.splitext(os.path.basename(df))[0] + '.pickle'
-##        OUTPUT_DIRNAME = INPUT_DIRNAME
-        
-        if not f.validate(od):
-            if not PEDANTIC:
-                print("## WARNING: Output dump file: '{}' already exists!".format(od))
-            else:
-                print("## ERROR: Output dump file: '{}' already exists!".format(od))
-                exit(1)
-
-    cfg = None
-    if fn is not None:
-        print("## Loading '{}'..." . format(fn))
-        try:
-            yml = _load(fn)
-            print("## Input file is a valid YAML!")
-
-            os.chdir(INPUT_DIRNAME)
-            print("## Data Validation/Parsing: ")
-            cfg = parse_hilbert(yml)
-            
-        except:
-            print("ERROR: wrong input file: '{}'!" . format(fn))
-            raise
-    else:
-        print("## Loading dump '{}'..." . format(df))
-        try:
-            cfg = pickle_load(df)
-            print("## Input dump file is valid!")
-        except:
-            print("ERROR: wrong input dump file: '{}'!" . format(df))
-            raise
-        
-
-    if cfg is None:
-        print("ERROR: semantically wrong input!")
+        log.error("Input file specification clashes with the input dump specification: specify a single input source!")
         exit(1)
 
-    print("## Input is OK: ")
-    print(cfg)
-
-
-    if od is not None:
-        print("## Writing the configuration into '{}'..." . format(od))
-        pickle_dump(od, cfg)
-#        print("## Pickled configuration is now in '{}'!" . format(od))
-    print("## Done")
-    exit(0)
-
-
-#    return cfg
-
-
-
-
-@subcmd('cfg_show', help='Load Configuration file and display some of its contents')
-def cmd_show(parser, context, args):
-    global PEDANTIC
-    global INPUT_DIRNAME
-#    global OUTPUT_DIRNAME
-
-    parser.add_argument('-o', '--object', required=False, default='all',
-            help="specify the object in the config (default: all)")
-
-    ctx = vars(context)
-
-    if 'pedantic' in ctx:
-        PEDANTIC = ctx['pedantic']
-
-    args = vars(parser.parse_args(args))
-        
-    fn = None
-    df = None
-    
-    f = URI(None)
-
-    if 'inputfile' in ctx:
-        fn = ctx['inputfile']
-        
-    if 'inputdump' in ctx:
-        df = ctx['inputdump']
-
-    if (fn is None) and (df is None):
-        fn = 'Hilbert.yml'
-        print("Warning: missing input file specification: using default '{}'!" . format(fn))
-#        exit(1)
-        
-    if (fn is not None) and (df is not None):
-        print("ERROR: input file specification clashes with the input dump specification: specify a single input source!")
-        exit(1)        
-
-    if fn is not None:        
-        if not f.validate(fn):
-            print("ERROR: wrong file specification: '{}'" . format(fn))
-            exit(1)            
-        print("## Input file: '{}'".format(fn))
-        
-    if df is not None:        
-        if not f.validate(df):
-            print("ERROR: wrong dump file specification: '{}'" . format(df))
+    if fn is not None:
+        if not URI(None).validate(fn):
+            log.error("Wrong file specification: '{}'".format(fn))
             exit(1)
-        print("## Input dump file: '{}'".format(df))
-        
-        
+        log.info("Input file: '{}'".format(fn))
+
+    if df is not None:
+        if not URI(None).validate(fn):
+            log.error("Wrong dump file specification: '{}'".format(df))
+            exit(1)
+        log.info("Input dump file: '{}'".format(df))
+
     if fn is not None:
         INPUT_DIRNAME = os.path.abspath(os.path.dirname(fn))
     else:
@@ -303,57 +148,233 @@ def cmd_show(parser, context, args):
         INPUT_DIRNAME = os.path.abspath(os.path.dirname(df))
 
     cfg = None
+
     if fn is not None:
-        print("## Loading '{}'..." . format(fn))
+        log.info("Loading '{}'...".format(fn))
         try:
             yml = _load(fn)
-            print("## Input file is a valid YAML!")
+            log.info("Input file is a valid YAML!")
 
             os.chdir(INPUT_DIRNAME)
-            print("## Data Validation/Parsing: ")            
+            log.info("Data Validation/Parsing: ")
 
             cfg = parse_hilbert(yml)
-            
+
         except:
-            print("ERROR: wrong input file: '{}'!" . format(fn))
-            raise
+            log.exception("ERROR: wrong input file: '{}'!".format(fn))
+            exit(1)
     else:
-        print("## Loading dump '{}'..." . format(df))
+        log.info("Loading dump '{}'...".format(df))
         try:
             cfg = pickle_load(df)
-            print("## Input dump file is valid!")
+            log.info("Input dump file is valid!")
         except:
-            print("ERROR: wrong input dump file: '{}'!" . format(df))
-            raise
+            log.exception("Wrong input dump file: '{}'!".format(df))
+            exit(1)
 
     if cfg is None:
-        print("ERROR: could not get the configuration!")
+        log.error("Could not get the configuration!")
         exit(1)
 
     assert isinstance(cfg, Hilbert)
-    print("## Configuration is OK!")
-        
+    log.info("Configuration is OK!")
+
+    return cfg
+
+
+def output_handler(parser, ctx, args):
+    args = vars(args)
+
+    od = None
+    if 'outputdump' in args:
+        od = args['outputdump']
+        log.debug("Specified output dump file: {}".format(od))
+        assert od is not None
+
+        if URI(None).validate(od):
+            if not PEDANTIC:
+                log.warning("Output dump file: '{}' already exists! Will be overwritten!".format(od))
+            else:
+                log.warning("Output dump file: '{}' already exists! Cannot overwrite it in PEDANTIC mode!".format(od))
+                od = None
+    return od
+
+def cmd_list(parser, context, args, obj):
+    ctx = vars(context)
+    pedantic_handler(parser, ctx, args)
+    cfg = input_handler(parser, ctx, args)
+    return cfg.query(obj)
+
+
+@subcmd('cfg_query', help='Load Configuration and query some part of it')
+def cmd_query(parser, context, args):
+    log.debug("Running '{}'" . format('cfg_query'))
+
+    parser.add_argument('-o', '--object', required=False, default='all',
+            help="specify the object in the config (default: 'all')")
+    parser.add_argument('-od', '--outputdump', default=argparse.SUPPRESS,
+            help="specify output dump file")
+
+    args = parser.parse_args(args)
+
+    _args = vars(args)
+
     obj = 'all'
-    if 'object' in args:
-        obj = args['object']
+    if 'object' in _args:
+        obj = _args['object']
 
     try:
-        print("## Showing: '{}' for the configuration" . format(obj))
-        cfg.show(obj) # TODO pprint(QUERY!!!)
+        log.info("Querring object: '{}'... " . format(obj))
+        obj = cmd_list(parser, context, args, obj)
     except:
-        print("## ERROR: Sorry cannot show '{}' yet!" . format(obj))
+        log.exception("Sorry cannot query '{}' yet!" . format(obj))
         exit(1)
 
-    print("## Done")
+    assert obj is not None
+
+    if isinstance(obj, Base):
+        print(yaml_dump(obj.data_dump()))
+    else:
+        print(yaml_dump(obj))
+
+    od  = output_handler(parser, vars(context), args)
+
+    if od is not None:
+        log.info("Writing the configuration into '{}'...".format(od))
+        pickle_dump(od, obj)
+
+    log.debug("Done")
+    exit(0)
+
+@subcmd('list_applications', help='Load Configuration and list its applications')
+def cmd_list_applications(parser, context, args):
+    log.debug("Running '{}'" . format('list_applications'))
+    log.debug("Listing all Application ID...")
+
+    args = parser.parse_args(args)
+
+    obj = None
+    try:
+        obj = cmd_list(parser, context, args, 'Applications/keys')
+    except:
+        log.exception("Sorry could not get the list of '{}' from the input file!".format('applications'))
+        exit(1)
+
+    assert obj is not None
+
+    if isinstance(obj, Base):
+        print(yaml_dump(obj.data_dump()))
+    else:
+        print(yaml_dump(obj))
+
+    log.debug("Done")
+    exit(0)
+
+@subcmd('list_stations', help='Load Configuration and list its stations')
+def cmd_list_stations(parser, context, args):
+    log.debug("Running '{}'" . format('list_stations'))
+    log.debug("Listing all Station ID...")
+
+    args = parser.parse_args(args)
+
+    obj = None
+    try:
+        obj = cmd_list(parser, context, args, 'Stations/keys')
+    except:
+        log.exception("Sorry could not get the list of '{}' from the input file!".format('stations'))
+        exit(1)
+
+    assert obj is not None
+
+    if isinstance(obj, Base):
+        print(yaml_dump(obj.data_dump()))
+    else:
+        print(yaml_dump(obj))
+
+    log.debug("Done")
     exit(0)
 
 
+@subcmd('list_profiles', help='Load Configuration and list its profiles')
+def cmd_list_profiles(parser, context, args):
+    log.debug("Running '{}'" . format('list_profiles'))
+    log.debug("Listing all Profile ID...")
+
+    args = parser.parse_args(args)
+
+    obj = None
+    try:
+        obj = cmd_list(parser, context, args, 'Profiles/keys')
+    except:
+        log.exception("Sorry could not get the list of '{}' from the input file!".format('profiles'))
+        exit(1)
+
+    assert obj is not None
+
+    if isinstance(obj, Base):
+        print(yaml_dump(obj.data_dump()))
+    else:
+        print(yaml_dump(obj))
+
+    log.debug("Done")
+    exit(0)
+
+
+@subcmd('list_groups', help='Load Configuration and list its named groups')
+def cmd_list_groups(parser, context, args):
+    log.debug("Running '{}'" . format('list_groups'))
+    log.debug("Listing all Group ID...")
+
+    args = parser.parse_args(args)
+
+    obj = None
+    try:
+        obj = cmd_list(parser, context, args, 'Groups/keys')
+    except:
+        log.exception("Sorry could not get the list of '{}' from the input file!".format('groups'))
+        exit(1)
+
+    assert obj is not None
+
+    if isinstance(obj, Base):
+        print(yaml_dump(obj.data_dump()))
+    else:
+        print(yaml_dump(obj))
+
+    log.debug("Done")
+    exit(0)
+
+
+@subcmd('list_services', help='Load Configuration and list its services')
+def cmd_list_services(parser, context, args):
+    log.debug("Running '{}'" . format('list_services'))
+    log.debug("Listing all Service ID...")
+
+    args = parser.parse_args(args)
+
+    obj = None
+    try:
+        obj = cmd_list(parser, context, args, 'Services/keys')
+    except:
+        log.exception("Sorry could not get the list of '{}' from the input file!".format('services'))
+        exit(1)
+
+    assert obj is not None
+
+    if isinstance(obj, Base):
+        print(yaml_dump(obj.data_dump()))
+    else:
+        print(yaml_dump(obj))
+
+    log.debug("Done")
+    exit(0)
+
 def main():
-    handler = ArgumentHandler(use_subcommand_help=True, enable_autocompletion=True, description="Validate/Parse Hilbert Configuration")
+    handler = ArgumentHandler(use_subcommand_help=True, enable_autocompletion=True, description="Hilbert - server tool")
 
     # add_argument, set_logging_level, set_subcommands,
-    handler.add_argument('-q', '--quiet', help='decrease verbosity', action='store_true')
-    handler.add_argument('-v', '--verbose', help='increase verbosity', action='store_true')
+#    handler.add_argument('-q', '--quiet', help='decrease verbosity', action='store_true')
+#    handler.add_argument('-v', '--verbose', help='increase verbosity', action='store_true')
 
 #    handler.set_logging_argument('-l', '--log_level', default_level=logging.INFO)
 
@@ -361,18 +382,20 @@ def main():
     handler.add_argument('-p', '--pedantic', required=False, action='store_true',
                          help="turn on pedantic mode")
 
+    # 2 input sources: .YAML or .PICKLE
     handler.add_argument('-if', '--inputfile', required=False, 
-                         help="specify input file (default: 'Hilbert.yml')")
-
+                         help="specify input .YAML file (default: 'Hilbert.yml')")
     handler.add_argument('-id', '--inputdump', required=False,
                          help="specify input dump file")
                          
-    _argv = sys.argv
-    _argv = _argv[1:]
+    _argv = sys.argv[1:]
 
+    # NOTE: show help by if not arguments given
     if len(_argv) == 0:
+        log.debug("No command arguments given => Showing usage help!")
         _argv = ['-h']
 
     handler.run(_argv)
+
 
 main()
