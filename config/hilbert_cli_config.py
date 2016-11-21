@@ -292,7 +292,7 @@ class Base(AbstractValidator):
         if _d is None:
             return _d
 
-        assert not isinstance(_d, (tuple, set))
+        assert not isinstance(_d, (tuple, set))  # TODO: is this true in general?!?
 
         if isinstance(_d, dict):
             _dd = {}
@@ -316,14 +316,13 @@ class Base(AbstractValidator):
         return _d
 
 
-
-
-
-
-
-
     def query(self, what):
+        """Generic query for data subset about this object"""
+
+        # NOTE: no data dumping here! Result may be a validator!
+
         log.debug("Querying '%s'", what)
+
 
         if (what is None) or (what == ''):
             what = 'all'
@@ -334,6 +333,7 @@ class Base(AbstractValidator):
         _d = self.get_data()
 
         if what == 'keys':
+            assert isinstance(_d, dict)
             return _d.keys()
 
         s = BaseString.parse(what, parent=self)
@@ -350,9 +350,9 @@ class Base(AbstractValidator):
         if h in _d:
             d = _d[ss[0]]
             if isinstance(d, Base):
-                return d.query(t)
+                return d.query(t)  # TODO: FIXME: avoid recursion...
 
-            log.warning("Could not query an object. Ignorring the tail: %s", t)
+            log.warning("Could not query an object. Ignoring the tail: %s", t)
             return d
 
         raise ConfigurationError(u"{}: {}".format("ERROR:",
@@ -1133,6 +1133,14 @@ class DockerMachine(BaseRecord):
 
         self._types = {self._default_type: DM_rule}  # ! NOTE: AMT - maybe later...
 
+
+    def run_action(self, action, action_args):
+        assert action == 'poweron'
+
+        # process call: ssh to vm_host + docker-machione start vm_id
+        raise NotImplementedError("Running 'docker-machine start' action is not supported yet... Sorry!")
+
+
 class WOL(BaseRecord):
     """WOL :: StationPowerOnMethod"""
 
@@ -1149,6 +1157,12 @@ class WOL(BaseRecord):
         }
 
         self._types = {self._default_type: WOL_rule}
+
+    def run_action(self, action, action_args):
+        assert action == 'poweron'
+
+        # process call: wakeonlan + mac + IP address (get from parent's ssh alias!?)
+        raise NotImplementedError("Running 'WOL' action is not supported yet... Sorry!")
 
 
 ###############################################################
@@ -1305,8 +1319,9 @@ class Station(BaseRecord): # Wrapper
     def __init__(self, parent):
         BaseRecord.__init__(self, parent)
 
-        self._default_type = "default_station"
+        self._poweron_tag = text_type('poweron_settings')
 
+        self._default_type = "default_station"
         default_rule = {
             self._extends_tag: (False, StationID),
             text_type('name'): (True, BaseUIString),
@@ -1314,7 +1329,7 @@ class Station(BaseRecord): # Wrapper
             text_type('icon'): (False, Icon),
             text_type('profile'): (True, ProfileID),
             text_type('address'): (True, HostAddress),
-            text_type('poweron_settings'): (False, StationPowerOnMethodWrapper),  # !! variadic, PowerOnType...
+            self._poweron_tag: (False, StationPowerOnMethodWrapper),  # !! variadic, PowerOnType...
             text_type('ssh_options'): (False, StationSSHOptions),  # !!! record: user, port, key, key_ref
             text_type('omd_tag'): (True, StationOMDTag),  # ! like ServiceType: e.g. agent. Q: Is this mandatory?
             text_type('hidden'): (False, StationVisibility),  # Q: Is this mandatory?
@@ -1322,6 +1337,71 @@ class Station(BaseRecord): # Wrapper
         }  # text_type('type'): (False, StationType), # TODO: ASAP!!!
 
         self._types = {self._default_type: default_rule}
+
+    def shutdown(self, action_args):
+        ### ssh address subprocess
+        raise NotImplementedError("Cannot shutdown this station!")
+
+    def deploy(self, action_args):
+        ### see existing deploy.sh!?
+        raise NotImplementedError("Cannot deploy local configuration to this station!")
+
+    def start_service(self, action_args):
+        raise NotImplementedError("Cannot start a service/application on this station!")
+
+    def finish_service(self, action_args):
+        raise NotImplementedError("Cannot finish a service/application on this station!")
+
+    def app_switch(self, action_args):
+        raise NotImplementedError("Cannot switch an application on this station!")
+
+    def poweron(self, action_args):
+        _d = self.get_data()
+        assert _d is not None
+
+        if not self._poweron_tag in _d:
+            log.error("Cannot Power-On this station since the corresponding method is missing!")
+            raise NotImplementedError("Cannot Power-On this station!")
+
+        poweron = _d[self._poweron_tag]
+        if poweron is None:
+            log.error("Cannot Power-On this station since the corresponding method was not specified properly!")
+            raise NotImplementedError("Cannot Power-On this station!")
+
+        poweron.run_action('poweron', action_args)  # ????
+
+    def run_action(self, action, action_args):
+        """
+        Run the given action on/with this station
+
+        :param action_args: arguments to the action
+        :param action:
+                poweron <StationID> [<args>]
+                shutdown <StationID> [<args>]
+                deploy <StationID> [<args>]
+                start <StationID> [<ServiceID/ApplicationID>]
+                finish <StationID> [<ServiceID/ApplicationID>]
+                app_switch <StationID> <new ApplicationID>
+
+        :return: nothing.
+        """
+
+        if action == 'poweron':
+            self.poweron(action_args)
+        elif action == 'shutdown':
+            self.shutdown(action_args)
+        elif action == 'deploy':
+            self.deploy(action_args)
+        elif action == 'start':
+            self.start_service(action_args)
+        elif action == 'finish':
+            self.finish_service(action_args)
+        elif action == 'app_switch':
+            self.app_switch(action_args)
+
+        # Run 'ssh address hilbert-station action action_args'?!
+        raise NotImplementedError("Running action '{0} {1}' is not supported yet... Sorry!" . format(action, action_args))
+
 
     def get_base(self):
         _d = self.get_data()

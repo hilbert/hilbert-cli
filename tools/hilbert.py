@@ -369,6 +369,194 @@ def cmd_list_services(parser, context, args):
     log.debug("Done")
     exit(0)
 
+
+def cmd_action(parser, context, args, stationId, action, action_args):
+    stations = None
+    try:
+        stations = cmd_list(parser, context, args, 'Stations/all')
+    except:
+        log.exception("Sorry could not get the list of '{}' from the input file!".format('stations'))
+        exit(1)
+
+    assert stations is not None
+    assert stationId in stations.get_data()
+
+    station = stations.get_data()[stationId]
+
+    assert station is not None
+
+    if isinstance(station, Base):
+        print(yaml_dump(station.data_dump()))
+    else:
+        print(yaml_dump(station))
+
+    log.debug("Trying to run '{0} {1}' on remote station '{2}'" . format(action, action_args, stationId))
+
+    try:
+        station.run_action(action, action_args)
+    except:
+        log.exception("Could not run '{0} {1}' on remote station '{2}'" . format(action, action_args, stationId))
+        exit(1)
+
+
+@subcmd('poweron', help='Load Configuration and poweron one of the stations')
+def cmd_poweron(parser, context, args):
+    log.debug("Running '{}'" . format('cmd_poweron'))
+
+    parser.add_argument('-s', '--station', required=True, help="specify the station")
+    parser.add_argument('-g', '--action_args', required=False, help="specify the action arguments")
+
+    args = parser.parse_args(args)
+    _args = vars(args)
+    assert 'station' in _args
+    stationId = _args['station']
+
+    action_args = None
+    if 'action_args' in _args:
+        action_args = _args['action_args']
+
+    cmd_action(parser, context, args, stationId, 'poweron', action_args)
+
+    log.debug("Done")
+    exit(0)
+
+
+@subcmd('shutdown', help='Load Configuration and shutdown one of the stations')
+def cmd_shutdown(parser, context, args):
+    log.debug("Running '{}'" . format('cmd_shutdown'))
+
+    parser.add_argument('-s', '--station', required=True, help="specify the station")
+    parser.add_argument('-g', '--action_args', required=False, help="specify the action arguments")
+
+    args = parser.parse_args(args)
+    _args = vars(args)
+    assert 'station' in _args
+    stationId = _args['station']
+
+    action_args = None
+    if 'action_args' in _args:
+        action_args = _args['action_args']
+
+    cmd_action(parser, context, args, stationId, 'shutdown', action_args)
+
+    log.debug("Done")
+    exit(0)
+
+@subcmd('deploy', help='Load Configuration and deploy its part to one of the stations')
+def cmd_deploy(parser, context, args):
+    log.debug("Running '{}'" . format('cmd_deploy'))
+
+    parser.add_argument('-s', '--station', required=True, help="specify the station")
+    parser.add_argument('-g', '--action_args', required=False, help="specify the action arguments")
+
+    args = parser.parse_args(args)
+    _args = vars(args)
+    assert 'station' in _args
+    stationId = _args['station']
+
+    action_args = None
+    if 'action_args' in _args:
+        action_args = _args['action_args']
+
+    cmd_action(parser, context, args, stationId, 'deploy', action_args)
+
+    log.debug("Done")
+    exit(0)
+
+@subcmd('start', help='Load Configuration and start a service/application on one of the stations')
+def cmd_start(parser, context, args):
+    log.debug("Running '{}'" . format('cmd_deploy'))
+
+    parser.add_argument('-s', '--station', required=True, help="specify the station")
+    parser.add_argument('-g', '--action_args', required=False, help="specify the action arguments (ApplicationID/ServiceID)")
+
+    args = parser.parse_args(args)
+    _args = vars(args)
+    assert 'station' in _args
+    stationId = _args['station']
+
+    action_args = None
+    if 'action_args' in _args:
+        action_args = _args['action_args']
+
+    cmd_action(parser, context, args, stationId, 'start', action_args)
+
+    log.debug("Done")
+    exit(0)
+
+
+@subcmd('finish', help='Load Configuration and finish a service/application on one of the stations')
+def cmd_finish(parser, context, args):
+    log.debug("Running '{}'" . format('cmd_finish'))
+
+    parser.add_argument('-s', '--station', required=True, help="specify the station")
+    parser.add_argument('-g', '--action_args', required=False, help="specify the action arguments (ApplicationID/ServiceID)")
+
+    args = parser.parse_args(args)
+    _args = vars(args)
+    assert 'station' in _args
+    stationId = _args['station']
+
+    action_args = None
+    if 'action_args' in _args:
+        action_args = _args['action_args']
+
+    cmd_action(parser, context, args, stationId, 'finish', action_args)
+
+    log.debug("Done")
+    exit(0)
+
+
+@subcmd('app_switch', help='Load Configuration and app_switch top application to the given one on one of the stations')
+def cmd_app_switch(parser, context, args):
+    log.debug("Running '{}'" . format('cmd_app_switch'))
+
+    parser.add_argument('-s', '--station', required=True, help="specify the station")
+    parser.add_argument('-g', '--action_args', required=False, help="specify the action arguments (new ApplicationID)")
+
+    args = parser.parse_args(args)
+    _args = vars(args)
+    assert 'station' in _args
+    stationId = _args['station']
+
+    action_args = None
+    if 'action_args' in _args:
+        action_args = _args['action_args']
+
+    cmd_action(parser, context, args, stationId, 'app_switch', action_args)
+
+    log.debug("Done")
+    exit(0)
+
+
+
+@subcmd('station_action', help='Load Configuration and perform some action with one of stations')
+def cmd_station_action(parser, context, args):
+    log.debug("Running '{}'" . format('station_action'))
+
+    parser.add_argument('-s', '--station', required=True, help="specify the station")
+    parser.add_argument('-a', '--action', required=True, help="specify the action")
+    parser.add_argument('-g', '--action_args', required=False, help="specify the action arguments")
+
+    args = parser.parse_args(args)
+    _args = vars(args)
+
+    assert 'station' in _args
+    assert 'action' in _args
+
+    stationId = _args['station']
+    action = _args['action']
+
+    action_args = None
+    if 'action_args' in _args:
+        action_args = _args['action_args']
+
+    cmd_action(parser, context, args, stationId, action, action_args)
+
+    log.debug("Done")
+    exit(0)
+
+
 def main():
     handler = ArgumentHandler(use_subcommand_help=True, enable_autocompletion=True, description="Hilbert - server tool")
 
