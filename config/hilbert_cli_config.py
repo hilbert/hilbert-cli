@@ -983,7 +983,6 @@ class BaseBool(BaseScalar):
 
     def validate(self, d):
         """check whether data is a valid string"""
-        ### TODO: Detect other YAML scalar types?
 
         if not isinstance(d, bool):
             print("ERROR: not a boolean value: '{}'" . format(d))
@@ -1320,6 +1319,9 @@ class Station(BaseRecord): # Wrapper
         BaseRecord.__init__(self, parent)
 
         self._poweron_tag = text_type('poweron_settings')
+        self._ssh_options_tag = text_type('ssh_options')
+        self._address_tag = text_type('address')
+        self._ishidden_tag = text_type('hidden')
 
         self._default_type = "default_station"
         default_rule = {
@@ -1328,15 +1330,41 @@ class Station(BaseRecord): # Wrapper
             text_type('description'): (True, BaseUIString),
             text_type('icon'): (False, Icon),
             text_type('profile'): (True, ProfileID),
-            text_type('address'): (True, HostAddress),
+            self._address_tag: (True, HostAddress),
             self._poweron_tag: (False, StationPowerOnMethodWrapper),  # !! variadic, PowerOnType...
-            text_type('ssh_options'): (False, StationSSHOptions),  # !!! record: user, port, key, key_ref
+            self._ssh_options_tag: (False, StationSSHOptions),  # !!! record: user, port, key, key_ref
             text_type('omd_tag'): (True, StationOMDTag),  # ! like ServiceType: e.g. agent. Q: Is this mandatory?
-            text_type('hidden'): (False, StationVisibility),  # Q: Is this mandatory?
-            self._client_settings_tag : (False, StationClientSettings)  # IDMap : (BaseID, BaseString)
+            self._ishidden_tag: (False, StationVisibility),  # Q: Is this mandatory?
+            self._client_settings_tag: (False, StationClientSettings)  # IDMap : (BaseID, BaseString)
         }  # text_type('type'): (False, StationType), # TODO: ASAP!!!
 
         self._types = {self._default_type: default_rule}
+
+    def is_hidden(self):
+        _d = self.get_data()
+        assert _d is not None
+
+        _h = None
+
+        if self._ishidden_tag in _d:
+            _h = _d[self._ishidden_tag]
+        else:
+            _h = StationVisibility.parse(None, parent=self)
+
+        return _h
+
+    def get_address(self):
+        _d = self.get_data()
+        assert _d is not None
+
+        _h = None
+
+        if self._address_tag in _d:
+            _h = _d[self._address_tag]
+        else:
+            _h = StationVisibility.parse(None, parent=self)
+
+        return _h
 
     def shutdown(self, action_args):
         ### ssh address subprocess
@@ -1408,56 +1436,56 @@ class Station(BaseRecord): # Wrapper
         assert _d is not None
         _b = _d.get(self._extends_tag, None)  # StationID (validated...)
 
-        if _b is not None:
-            if isinstance(_b, Base):
-                _b = _b.get_data()
+#        if _b is not None:
+#            if isinstance(_b, Base):
+#                _b = _b.get_data()
 
         return _b
 
-    def extend(delta, base): # delta == self!
+    def extend(delta, base):  # delta == self!
         assert delta.get_base() is not None
         assert base.get_base() is None
 
-        #        assert delta.get_base() == base  # ?
-        return delta
+        # NOTE: at early stage there may be no parent data...
+        if delta.get_parent().get_data() is not None:
+            assert delta.get_base() in delta.get_parent().get_data()
+            assert delta.get_parent().get_data().get(delta.get_base(), None) == base
 
-        #
-        # TODO: the following needs an update due to changes in API - not a clean merge - apply delta!
-        #
+        _d = delta.get_data()
+        _b = base.get_data()
 
-        d = delta.get_data()
+        assert delta._extends_tag in _d
+        assert delta._extends_tag not in _b
 
-        new = {}
+        del _d[delta._extends_tag]
+        assert delta.get_base() is None
 
-        for k in base:
-            if k == delta._extends_tag:
+        # NOTE: Extend/merge the client settings:
+        k = delta._client_settings_tag
+
+        bb = _b.get(k, None)
+        if bb is not None:
+            dd = _d.get(k, None)
+            if dd is None:
+                dd = StationClientSettings.parse(None, parent=delta.get_parent())
+
+            assert isinstance(dd, StationClientSettings)
+            assert isinstance(bb, StationClientSettings)
+            dd.extend(bb)
+
+            _d[k] = dd
+
+        # NOTE: the following is an application of delta to base data
+        for k in _b:  # NOTE: take from base only the missing parts
+            assert k != delta._extends_tag
+
+            if k == delta._client_settings_tag:
                 continue
 
-            if k in delta:
-                v = delta.get(k, None)
+            v = _d.get(k, None)
 
-                if v is None:
-                    new[k] = base[k]
-                    continue
-
-                if k == delta._client_settings_tag:
-                    t = base.get(k, {}).copy()
-
-                    assert isinstance(t, dict)
-                    assert isinstance(v, dict)
-
-                    t.update(v)
-                    new[k] = t
-                else:
-                    new[k] = v  # overwrite the rest
-            else:
-                new[k] = base[k]
-
-        for k in delta:
-            if not ((k == delta._extends_tag) or (k in new)):
-                new[k] = delta[k]
-
-        return new
+            if v is None:  # key from base is missing or None in delte?
+                _d[k] = _b[k]  # TODO: is copy() required for complicated structures?
 
 
 ###############################################################
@@ -1548,6 +1576,21 @@ class StationClientSettings(BaseIDMap):
             self._default_type: (ClientVariable, BaseScalar)
         }  # ! TODO: only strings for now! More scalar types?! BaseScalar?
 
+    def extend(delta, base):
+        assert isinstance(base, StationClientSettings)
+
+        _b = base.get_data()
+        if _b is not None:
+            assert isinstance(_b, dict)
+            _b = _b.copy()
+
+            # NOTE: merge and override settings from the base using the current delta:
+            _d = delta.get_data()
+            if _d is not None:
+                _b.update(_d)
+
+            delta.set_data(_b)
+
 
 ###############################################################
 class GlobalApplications(BaseIDMap):
@@ -1584,8 +1627,7 @@ class GlobalStations(BaseIDMap):
         if not BaseIDMap.validate(self, d):
             return False
 
-        sts = self.get_data()
-        self.set_data(None)
+        sts = self.get_data()  # NOTE: may be handy for postprocessing!
 
         _ret = True
 
@@ -1616,8 +1658,9 @@ class GlobalStations(BaseIDMap):
                 assert _b in _processed
 
                 if _b in _processed:
-                    _processed[k] = v.extend(_processed[_b])
-                    # assert _processed[k] extends nothing...???
+                    v.extend(_processed[_b])
+                    _processed[k] = v
+                    assert v.get_base() is None
                     _chg = True
                 else:
                     _rest[k] = v
@@ -1628,8 +1671,8 @@ class GlobalStations(BaseIDMap):
             log.error('Cyclic dependencies between stations: {}' .format(_todo))
             _ret = False
 
-        if _ret:
-            self.set_data(_processed)
+#        if _ret:
+#            self.set_data(_processed)
 
         return _ret
 
