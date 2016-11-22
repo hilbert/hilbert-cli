@@ -19,7 +19,7 @@ from hilbert_cli_config import *
 #from config.hilbert_cli_config import *
 #from config.helpers import *
 
-from arghandler import *               # NOQA 
+from arghandler import *               # NOQA
 import argparse                        # NOQA
 
 import logging
@@ -44,6 +44,7 @@ logging.basicConfig(format='%(levelname)s [%(filename)s:%(lineno)d]: %(message)s
 # %(threadName)s      Thread name (if available)
 # %(process)d         Process ID (if available)
 # %(message)s         The result of record.getMessage(), computed just as the record is emitted
+
 import traceback
 def main_exception_handler(type, value, tb):
     log.exception("Uncaught exception! Type: {0}, Value: {1}, TB: {2}".format(type, value, traceback.format_tb(tb)))
@@ -68,31 +69,36 @@ def _load(f):
     return load_yaml_file(f)  # TODO: check that this is a dictionary!
 
 
-@subcmd('version', help='Display version info')
+# @subcmd('version', help='Display version info') # TODO: --version
 def cmd_version(parser, context, args):
-    log.debug("Running '{}'".format('cfg_version'))
+    log.debug("Running '{}'".format('--version'))
     _version()
     log.debug("Done")
     exit(0)
 
 
-@subcmd('cfg_verify', help='Check correctness of a given general Hilbert configuration (YAML) file as far as possible...')
+@subcmd('cfg_verify', help='Check correctness of a given general Hilbert configuration (YAML) file as far as possible')
 def cmd_verify(parser, context, args):
     global PEDANTIC
     global INPUT_DIRNAME
 
     log.debug("Running '{}'".format('cfg_verify'))
 
+    # 2 input sources: .YAML or .PICKLE
+    parser.add_argument('-if', '--configfile', required=False,
+                         help="specify input .YAML file (default: 'Hilbert.yml')")
+
     ctx = vars(context)
     pedantic_handler(parser, ctx, args)
 
-    if 'inputdump' in ctx:
-        df = ctx['inputdump']
-        if df is not None:
-            log.error("Sorry: cannot verify a dump file.")
-            exit(1)
-
     args = parser.parse_args(args)
+
+    # if 'configdump' in ctx:
+    #     df = ctx['configdump']
+    #     if df is not None:
+    #         log.error("Sorry: cannot verify a dump file.")
+    #         exit(1)
+
     cfg = input_handler(parser, ctx, args)
 
     log.debug("Done")
@@ -113,12 +119,14 @@ def input_handler(parser, ctx, args):
     fn = None
     df = None
 
-    if 'inputfile' in ctx:
-        fn = ctx['inputfile']
+    args = vars(args)
+
+    if 'configfile' in args:
+        fn = args['configfile']
         log.debug("Input YAML file specified: {}".format(fn))
 
-    if 'inputdump' in ctx:
-        df = ctx['inputdump']
+    if 'configdump' in args:
+        df = args['configdump']
         log.debug("Input dump file specified: {}".format(df))
 
     if (fn is None) and (df is None):
@@ -206,7 +214,7 @@ def cmd_list(parser, context, args, obj):
     return cfg.query(obj)
 
 
-@subcmd('cfg_query', help='Load Configuration and query some part of it')
+@subcmd('cfg_query', help='query some part of configuraton. possibly dump it to a file')
 def cmd_query(parser, context, args):
     log.debug("Running '{}'" . format('cfg_query'))
 
@@ -214,6 +222,11 @@ def cmd_query(parser, context, args):
             help="specify the object in the config (default: 'all')")
     parser.add_argument('-od', '--outputdump', default=argparse.SUPPRESS,
             help="specify output dump file")
+
+    parser.add_argument('-if', '--configfile', required=False,
+                         help="specify input .YAML file (default: 'Hilbert.yml')")
+    parser.add_argument('-id', '--configdump', required=False,
+                         help="specify input dump file")
 
     args = parser.parse_args(args)
 
@@ -246,12 +259,18 @@ def cmd_query(parser, context, args):
     log.debug("Done")
     exit(0)
 
-@subcmd('list_applications', help='Load Configuration and list its applications')
+@subcmd('list_applications', help='list application IDs')
 def cmd_list_applications(parser, context, args):
     log.debug("Running '{}'" . format('list_applications'))
+
+    parser.add_argument('-if', '--configfile', required=False,
+                         help="specify input .YAML file (default: 'Hilbert.yml')")
+    parser.add_argument('-id', '--configdump', required=False,
+                         help="specify input dump file")
+    args = parser.parse_args(args)
+
     log.debug("Listing all Application ID...")
 
-    args = parser.parse_args(args)
 
     obj = None
     try:
@@ -270,12 +289,17 @@ def cmd_list_applications(parser, context, args):
     log.debug("Done")
     exit(0)
 
-@subcmd('list_stations', help='Load Configuration and list its stations')
+@subcmd('list_stations', help='list station IDs')
 def cmd_list_stations(parser, context, args):
     log.debug("Running '{}'" . format('list_stations'))
-    log.debug("Listing all Station ID...")
 
+    parser.add_argument('-if', '--configfile', required=False,
+                         help="specify input .YAML file (default: 'Hilbert.yml')")
+    parser.add_argument('-id', '--configdump', required=False,
+                         help="specify input dump file")
     args = parser.parse_args(args)
+
+    log.debug("Listing all Station ID...")
 
     obj = None
     try:
@@ -295,12 +319,17 @@ def cmd_list_stations(parser, context, args):
     exit(0)
 
 
-@subcmd('list_profiles', help='Load Configuration and list its profiles')
+@subcmd('list_profiles', help='list profile IDs')
 def cmd_list_profiles(parser, context, args):
     log.debug("Running '{}'" . format('list_profiles'))
-    log.debug("Listing all Profile ID...")
 
+    parser.add_argument('-if', '--configfile', required=False,
+                         help="specify input .YAML file (default: 'Hilbert.yml')")
+    parser.add_argument('-id', '--configdump', required=False,
+                         help="specify input dump file")
     args = parser.parse_args(args)
+
+    log.debug("Listing all Profile ID...")
 
     obj = None
     try:
@@ -320,12 +349,17 @@ def cmd_list_profiles(parser, context, args):
     exit(0)
 
 
-@subcmd('list_groups', help='Load Configuration and list its named groups')
+@subcmd('list_groups', help='list (named) group IDs')
 def cmd_list_groups(parser, context, args):
     log.debug("Running '{}'" . format('list_groups'))
-    log.debug("Listing all Group ID...")
 
+    parser.add_argument('-if', '--configfile', required=False,
+                         help="specify input .YAML file (default: 'Hilbert.yml')")
+    parser.add_argument('-id', '--configdump', required=False,
+                         help="specify input dump file")
     args = parser.parse_args(args)
+
+    log.debug("Listing all Group ID...")
 
     obj = None
     try:
@@ -345,12 +379,17 @@ def cmd_list_groups(parser, context, args):
     exit(0)
 
 
-@subcmd('list_services', help='Load Configuration and list its services')
+@subcmd('list_services', help='list service IDs')
 def cmd_list_services(parser, context, args):
     log.debug("Running '{}'" . format('list_services'))
-    log.debug("Listing all Service ID...")
 
+    parser.add_argument('-if', '--configfile', required=False,
+                         help="specify input .YAML file (default: 'Hilbert.yml')")
+    parser.add_argument('-id', '--configdump', required=False,
+                         help="specify input dump file")
     args = parser.parse_args(args)
+
+    log.debug("Listing all Service ID...")
 
     obj = None
     try:
@@ -369,7 +408,7 @@ def cmd_list_services(parser, context, args):
     log.debug("Done")
     exit(0)
 
-
+# NOTE: just a helper ATM
 def cmd_action(parser, context, args, stationId, action, action_args):
     stations = None
     try:
@@ -385,23 +424,28 @@ def cmd_action(parser, context, args, stationId, action, action_args):
 
     assert station is not None
 
-    if isinstance(station, Base):
-        print(yaml_dump(station.data_dump()))
-    else:
-        print(yaml_dump(station))
+#    if isinstance(station, Base):
+#        print(yaml_dump(station.data_dump()))
+#    else:
+#        print(yaml_dump(station))
 
     log.debug("Trying to run '{0} {1}' on remote station '{2}'" . format(action, action_args, stationId))
 
     try:
-        station.run_action(action, action_args)
+        station.run_action(action, action_args)  # NOTE: temporary API for now
     except:
         log.exception("Could not run '{0} {1}' on remote station '{2}'" . format(action, action_args, stationId))
         exit(1)
 
 
-@subcmd('poweron', help='Load Configuration and poweron one of the stations')
+@subcmd('poweron', help='poweron a station')
 def cmd_poweron(parser, context, args):
     log.debug("Running '{}'" . format('cmd_poweron'))
+
+    parser.add_argument('-if', '--configfile', required=False,
+                         help="specify input .YAML file (default: 'Hilbert.yml')")
+    parser.add_argument('-id', '--configdump', required=False,
+                         help="specify input dump file")
 
     parser.add_argument('-s', '--station', required=True, help="specify the station")
     parser.add_argument('-g', '--action_args', required=False, help="specify the action arguments")
@@ -421,9 +465,14 @@ def cmd_poweron(parser, context, args):
     exit(0)
 
 
-@subcmd('shutdown', help='Load Configuration and shutdown one of the stations')
+@subcmd('shutdown', help='shutdown a station')
 def cmd_shutdown(parser, context, args):
     log.debug("Running '{}'" . format('cmd_shutdown'))
+
+    parser.add_argument('-if', '--configfile', required=False,
+                         help="specify input .YAML file (default: 'Hilbert.yml')")
+    parser.add_argument('-id', '--configdump', required=False,
+                         help="specify input dump file")
 
     parser.add_argument('-s', '--station', required=True, help="specify the station")
     parser.add_argument('-g', '--action_args', required=False, help="specify the action arguments")
@@ -442,9 +491,14 @@ def cmd_shutdown(parser, context, args):
     log.debug("Done")
     exit(0)
 
-@subcmd('deploy', help='Load Configuration and deploy its part to one of the stations')
+@subcmd('deploy', help='deploy local configuration to a station')
 def cmd_deploy(parser, context, args):
     log.debug("Running '{}'" . format('cmd_deploy'))
+
+    parser.add_argument('-if', '--configfile', required=False,
+                         help="specify input .YAML file (default: 'Hilbert.yml')")
+    parser.add_argument('-id', '--configdump', required=False,
+                         help="specify input dump file")
 
     parser.add_argument('-s', '--station', required=True, help="specify the station")
     parser.add_argument('-g', '--action_args', required=False, help="specify the action arguments")
@@ -463,9 +517,14 @@ def cmd_deploy(parser, context, args):
     log.debug("Done")
     exit(0)
 
-@subcmd('start', help='Load Configuration and start a service/application on one of the stations')
+@subcmd('start', help='start a service/application on a station')
 def cmd_start(parser, context, args):
     log.debug("Running '{}'" . format('cmd_deploy'))
+
+    parser.add_argument('-if', '--configfile', required=False,
+                         help="specify input .YAML file (default: 'Hilbert.yml')")
+    parser.add_argument('-id', '--configdump', required=False,
+                         help="specify input dump file")
 
     parser.add_argument('-s', '--station', required=True, help="specify the station")
     parser.add_argument('-g', '--action_args', required=False, help="specify the action arguments (ApplicationID/ServiceID)")
@@ -485,9 +544,15 @@ def cmd_start(parser, context, args):
     exit(0)
 
 
-@subcmd('finish', help='Load Configuration and finish a service/application on one of the stations')
+@subcmd('finish', help='finish a service/application on a station')
 def cmd_finish(parser, context, args):
     log.debug("Running '{}'" . format('cmd_finish'))
+
+    parser.add_argument('-if', '--configfile', required=False,
+                         help="specify input .YAML file (default: 'Hilbert.yml')")
+    parser.add_argument('-id', '--configdump', required=False,
+                         help="specify input dump file")
+
 
     parser.add_argument('-s', '--station', required=True, help="specify the station")
     parser.add_argument('-g', '--action_args', required=False, help="specify the action arguments (ApplicationID/ServiceID)")
@@ -507,9 +572,14 @@ def cmd_finish(parser, context, args):
     exit(0)
 
 
-@subcmd('app_switch', help='Load Configuration and app_switch top application to the given one on one of the stations')
+@subcmd('app_switch', help='app_switch switch top application on a station')
 def cmd_app_switch(parser, context, args):
     log.debug("Running '{}'" . format('cmd_app_switch'))
+
+    parser.add_argument('-if', '--configfile', required=False,
+                         help="specify input .YAML file (default: 'Hilbert.yml')")
+    parser.add_argument('-id', '--configdump', required=False,
+                         help="specify input dump file")
 
     parser.add_argument('-s', '--station', required=True, help="specify the station")
     parser.add_argument('-g', '--action_args', required=False, help="specify the action arguments (new ApplicationID)")
@@ -530,9 +600,14 @@ def cmd_app_switch(parser, context, args):
 
 
 
-@subcmd('station_action', help='Load Configuration and perform some action with one of stations')
+# @subcmd('station_action', help='perform some action with one of stations')
 def cmd_station_action(parser, context, args):
     log.debug("Running '{}'" . format('station_action'))
+
+    parser.add_argument('-if', '--configfile', required=False,
+                         help="specify input .YAML file (default: 'Hilbert.yml')")
+    parser.add_argument('-id', '--configdump', required=False,
+                         help="specify input dump file")
 
     parser.add_argument('-s', '--station', required=True, help="specify the station")
     parser.add_argument('-a', '--action', required=True, help="specify the action")
@@ -558,7 +633,10 @@ def cmd_station_action(parser, context, args):
 
 
 def main():
-    handler = ArgumentHandler(use_subcommand_help=True, enable_autocompletion=True, description="Hilbert - server tool")
+#    handler = argparse.ArgumentParser()
+#    handler.parse_args()
+
+    handler = ArgumentHandler(use_subcommand_help=True, enable_autocompletion=True, description="Hilbert - server tool: loads configuration and does something using it")
 
     # add_argument, set_logging_level, set_subcommands,
 #    handler.add_argument('-q', '--quiet', help='decrease verbosity', action='store_true')
@@ -570,12 +648,6 @@ def main():
     handler.add_argument('-p', '--pedantic', required=False, action='store_true',
                          help="turn on pedantic mode")
 
-    # 2 input sources: .YAML or .PICKLE
-    handler.add_argument('-if', '--inputfile', required=False, 
-                         help="specify input .YAML file (default: 'Hilbert.yml')")
-    handler.add_argument('-id', '--inputdump', required=False,
-                         help="specify input dump file")
-                         
     _argv = sys.argv[1:]
 
     # NOTE: show help by if not arguments given
@@ -583,6 +655,7 @@ def main():
         log.debug("No command arguments given => Showing usage help!")
         _argv = ['-h']
 
+#    args = handler.parse_args()
     handler.run(_argv)
 
 
