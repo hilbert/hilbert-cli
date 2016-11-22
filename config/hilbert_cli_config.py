@@ -377,6 +377,7 @@ class BaseRecord(Base):
 
         assert not (self._default_type is None)
         assert len(self._types) > 0
+        assert isinstance(d, dict)
 
         return self._default_type
 
@@ -396,10 +397,8 @@ class BaseRecord(Base):
 
         _ret = True
 
-        _lc = d.lc  # starting location of the mapping...?
-        (s, c) = (_lc.line, _lc.col)
-
         _d = {}
+        _lc = d.lc  # starting location of the mapping...?
 
         for k in _rule.keys():
             r = _rule[k]
@@ -429,6 +428,7 @@ class BaseRecord(Base):
                     assert _k is not None
                     _d[_k] = _v
 
+        (s, c) = _get_line_col(_lc)
         for offset, k in enumerate(d):
             v = d.get(k)
             k = text_type(k)
@@ -1035,6 +1035,7 @@ class VariadicRecordWrapper(Base):
         """determine the type of variadic data for the format version"""
 
         _ret = True
+        assert isinstance(d, dict)
 
         assert self._default_type is not None
         assert self._default_type in self._types
@@ -1259,6 +1260,7 @@ class DockerComposeApplication(DockerComposeService):
 
         self._types[self._default_type] = _compose_rule
 
+        # TODO: FIXME: add application to compatibleStations!
 
 ###############################################################
 class Profile(BaseRecord):
@@ -1278,6 +1280,8 @@ class Profile(BaseRecord):
         }
 
         self._types = {self._default_type: default_rule}
+
+        self._station_list = None  # TODO: FIXME!
 
 
 ###############################################################
@@ -1339,6 +1343,8 @@ class Station(BaseRecord): # Wrapper
         }  # text_type('type'): (False, StationType), # TODO: ASAP!!!
 
         self._types = {self._default_type: default_rule}
+
+        self._compatible_applications = None  # TODO: FIXME!
 
     def is_hidden(self):
         _d = self.get_data()
@@ -1506,6 +1512,8 @@ class BaseIDMap(Base):
         return self._default_type
 
     def validate(self, d):
+        assert isinstance(d, dict)
+
         self._type = self.detect_type(d)
 
         assert self._type is not None
@@ -1514,7 +1522,7 @@ class BaseIDMap(Base):
         (_id_rule, _rule) = self._types[self._type]
 
         _lc = d.lc  # starting position?
-        (s, c) = (_lc.line, _lc.col)
+        (s, c) = _get_line_col(_lc)
 
         _d = {}
 
@@ -1575,6 +1583,8 @@ class StationClientSettings(BaseIDMap):
         self._types = {
             self._default_type: (ClientVariable, BaseScalar)
         }  # ! TODO: only strings for now! More scalar types?! BaseScalar?
+
+    # TODO: FIXME: check for default hilbert applicationId!
 
     def extend(delta, base):
         assert isinstance(base, StationClientSettings)
@@ -1771,6 +1781,8 @@ class Group(BaseRecord):  # ? TODO: GroupSet & its .parent?
         self._exclude_tag = text_type('exclude')
         self._intersectWith_tag = text_type('intersectWith')
 
+        self._station_list = None  # TODO: FIXME!
+
         default_rule = {
             self._include_tag: (False, GroupIDList),
             self._exclude_tag: (False, GroupIDList),
@@ -1796,9 +1808,9 @@ class Group(BaseRecord):  # ? TODO: GroupSet & its .parent?
 
         return _ret
 
-    ###############################################################
 
 
+###############################################################
 class GlobalGroups(BaseIDMap):
     def __init__(self, parent):
         BaseIDMap.__init__(self, parent)
