@@ -161,7 +161,7 @@ class VerboseRoundTripLoader(Reader, RoundTripScanner, RoundTripParser, Composer
 
         
 ###############################################################
-from ruamel.yaml.compat import PY2, PY3, text_type, string_types
+from ruamel.yaml.compat import PY2, PY3, text_type, string_types, ordereddict
 from abc import *
 import sys
 
@@ -890,7 +890,7 @@ class DockerComposeRef(URI):
     def validate(self, d):
         """check whether data is a valid docker-compose file name"""
 
-        # TODO: call docker-compose on the referenced file! in DockerService!
+        # TODO: call docker-compose on the referenced file! Currently in DockerService!?
 
         return URI.validate(self, d)
 
@@ -909,6 +909,7 @@ class Icon(URI):
 
 ###############################################################
 import subprocess  # , shlex
+# import paramiko
 
 class HostAddress(BaseString):
     """SSH alias"""
@@ -932,14 +933,20 @@ class HostAddress(BaseString):
     def check_ssh_alias(cls, _h):
         """Check for ssh alias"""
 
+        log.debug("Checking ssh alias: '{0}'...".format(text_type(_h)))
         try:
-            _cmd = ["ssh", "-o", "ConnectTimeout=2", _h, "exit 0"]
-            subprocess.check_call(_cmd, stdout=open("/dev/null", 'w'), stderr=open("/dev/null", 'w'))
+#            client = paramiko.SSHClient()
+#            client.load_system_host_keys()
+
+            _cmd = ["ssh", "-o", "ConnectTimeout=1", _h, "exit 0"]
+            subprocess.check_call(_cmd, stdout=open("/dev/null", 'w')) # , stderr=open("/dev/null", 'w')
+            log.debug("Ssh alias '{0}' is functional!" . format(text_type(_h)))
+
             return True
         except subprocess.CalledProcessError as err:
-            print("WARNING: non-functional ssh alias: '{0}' => exit code: {1}!" . format(text_type(_h), err.returncode))
+            log.warning("Non-functional ssh alias: '{0}' => exit code: {1}!" . format(text_type(_h), err.returncode))
         except: # Any other exception is wrong...
-            print("WARNING: non-functional ssh alias: '{0}'. Moreover: Unexpected error: {1}" . format(text_type(_h), sys.exc_info()))
+            log.warning("Non-functional ssh alias: '{0}'. Moreover: Unexpected error: {1}" . format(text_type(_h), sys.exc_info()))
 
         return False
 
@@ -1202,12 +1209,17 @@ class DockerComposeService(BaseRecord):
         while isinstance(_f, Base):
             _f = _f.get_data()
 
-        assert os.path.exists(_f)  # TODO: FIXME: use URI::check() instead??
-
         _n = _d[self._name_tag]
-
         while isinstance(_n, Base):
             _n = _n.get_data()
+
+        if not os.path.exists(_f):  # TODO: FIXME: use URI::check() instead??
+            if PEDANTIC:
+                log.error("Missing file with docker-compose configuration: '%s'", _f)
+                return False
+            log.warning("Missing file with docker-compose configuration: '{0}'. Cannot check the service reference id: '{1}'" .format(_f, _n))
+            return True
+
 
         # TODO: Check the corresponding file for such a service -> Service in DockerService!
 

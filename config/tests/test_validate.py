@@ -7,12 +7,25 @@ from __future__ import absolute_import, print_function, unicode_literals  # NOQA
 import sys
 from os import path
 
+
 DIR=path.dirname( path.dirname( path.abspath(__file__) ) )
-sys.path.append( DIR )
 
+sys.path.append(DIR)
+sys.path.append(path.join(DIR, 'config'))
 
-from hilbert_cli_config import *
 from helpers import *
+from hilbert_cli_config import *
+from subcmdparser import *
+
+#from config.hilbert_cli_config import *
+#from config.helpers import *
+#from config.subcmdparser import *
+
+
+# sys.path.append( DIR )
+
+#from hilbert_cli_config import *
+#from helpers import *
 
 import pytest                        # NOQA
 import os                            # NOQA
