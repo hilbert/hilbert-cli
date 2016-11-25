@@ -645,15 +645,13 @@ def _version():
     import ruamel.yaml as yaml
     import semantic_version
 
-    __version__ = '0.2.2-dev'  # TODO: add git commit id?
-
     log.debug("Running '{}'".format('version'))
 
     log.debug("Python           version: {}".format(platform.python_version()))
     log.debug("ruamel.yaml      version: {}".format(yaml.__version__))
     log.debug("dill             version: {}".format(dill.__version__))
     log.debug("semantic_version version: {}".format(semantic_version.__version__))
-    log.info("Hilbert          version: {}".format(__version__))  # TODO: this version?!
+    log.info("Hilbert Config API {}".format(Hilbert(None).get_api_version()))
 
     log.debug("Done")
 

@@ -211,7 +211,11 @@ class Base(AbstractValidator):
         AbstractValidator.__init__(self)
         assert self._parent is None
         self._parent = parent
+        self.__API_VERSION_ID = "$Id$"
 
+    def get_api_version(self):
+        return self.__API_VERSION_ID
+    
     @classmethod
     def set_version(cls, v):
         """To be set once only for any Validator class!"""
@@ -237,14 +241,6 @@ class Base(AbstractValidator):
         _d = self._data
         if _d is None:
             _d = self._default_data
-
-#        if _d is None:
-#            return _d
-
-#        while isinstance(_d, Base):
-#            _d = _d.get_data()
-#            if _d is None:
-#                return _d
 
         return _d
 
@@ -276,11 +272,12 @@ class Base(AbstractValidator):
     def __eq__(self, other):
         assert isinstance(self, Base)
 
-        if not isinstance(other, Base):
-            return self.get_data() == other
+#        if not isinstance(other, Base):
+#            return self.get_data() == other
 
         assert isinstance(other, Base)
 
+        assert self.get_api_version() == other.get_api_version() # Same /config/hilbert_cli_config.py should be used!
         return self.get_data() == other.get_data()
 
     def __ne__(self, other):
