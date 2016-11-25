@@ -277,7 +277,7 @@ class Base(AbstractValidator):
 
         assert isinstance(other, Base)
 
-        assert self.get_api_version() == other.get_api_version() # Same /config/hilbert_cli_config.py should be used!
+#        assert self.get_api_version() == other.get_api_version()
         return self.get_data() == other.get_data()
 
     def __ne__(self, other):
