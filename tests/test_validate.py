@@ -6,10 +6,7 @@ from __future__ import absolute_import, print_function, unicode_literals  # NOQA
 
 import sys
 from os import path
-
-
 DIR=path.dirname( path.dirname( path.abspath(__file__) ) )
-
 sys.path.append(DIR)
 sys.path.append(path.join(DIR, 'config'))
 

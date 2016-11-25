@@ -2,3 +2,7 @@ STATIONS*/
 templates/compose
 bashttpd.log
 lastapp.cfg
+*~
+*.pyc
+__pycache__
+.idea

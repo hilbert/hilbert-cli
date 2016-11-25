@@ -4,9 +4,16 @@
 
 from __future__ import absolute_import, print_function, unicode_literals  # NOQA
 
-from ..hilbert_cli_config import SemanticVersion
-from ..hilbert_cli_config import load_yaml
-# helpers
+import sys
+from os import path
+
+DIR=path.dirname( path.dirname( path.abspath(__file__) ) )
+sys.path.append(DIR)
+sys.path.append(path.join(DIR, 'config'))
+
+from helpers import *
+from hilbert_cli_config import *
+from subcmdparser import *
 
 import pytest                        # NOQA
 
