@@ -4,32 +4,90 @@
 
 from __future__ import absolute_import, print_function, unicode_literals
 
-import logging
-log = logging.getLogger(__name__)
+###############################################################
+import ruamel.yaml as yaml
+from ruamel.yaml.reader import Reader
+from ruamel.yaml.scanner import RoundTripScanner  # Scanner
+from ruamel.yaml.parser import RoundTripParser  # Parser,
+from ruamel.yaml.composer import Composer
+from ruamel.yaml.constructor import RoundTripConstructor  # Constructor, SafeConstructor,
+from ruamel.yaml.resolver import VersionedResolver  # Resolver,
+# from ruamel.yaml.nodes import MappingNode
+from ruamel.yaml.compat import PY2, PY3, text_type, string_types, ordereddict
 
-# from .helpers import load_yaml, pprint
+import semantic_version  # supports partial versions
+
+import logging
+import collections
+import sys
+import os
+import re, tokenize
+import tempfile
+
+import pprint as PP
+from abc import *
 
 ###############################################################
-import pprint as PP
+log = logging.getLogger(__name__)
 _pp = PP.PrettyPrinter(indent=4)
 
-def pprint(cfg):
-#    print("## Validated/Parsed pretty Result: ")
-    global _pp
-    _pp.pprint(cfg)  # TODO: use loggger?
-#    PP.pformat
-
-
 ###############################################################
-# NOTE: Global variuables
+# NOTE: Global variables
 PEDANTIC = False  # NOTE: to treat invalid values/keys as errors?
-INPUT_DIRNAME = './'
-# OUTPUT_DIRNAME = INPUT_DIRNAME
+INPUT_DIRNAME = './'  # NOTE: base location for external resources
 
 
 ###############################################################
-up_arrow = '↑'
+if PY3 and (sys.version_info[1] >= 4):
+    class AbstractValidator(ABC):
+        """AbstractValidator is the root Base class for any concrete implementation of entities
+        appearing in the general configuration file"""
 
+        @abstractmethod
+        def validate(self, d):
+            pass
+elif PY2 or PY3:
+    class AbstractValidator:
+        """AbstractValidator is the root Base class for any concrete implementation of entities
+        appearing in the general configuration file"""
+        __metaclass__ = ABCMeta
+
+        @abstractmethod
+        def validate(self, d):
+            pass
+# elif PY3:
+#    class AbstractValidator(metaclass=ABCMeta):
+#        """AbstractValidator is the root Base class for any concrete implementation of entities
+#        appearing in the general configuration file"""
+#        @abstractmethod
+#        def validate(self, d):
+#            pass
+else:
+    raise NotImplementedError("Unsupported Python version: '{}'".format(sys.version_info))
+
+###############################################################
+if PY3:
+    from urllib.parse import urlparse
+    from urllib.request import urlopen
+elif PY2:
+    from urlparse import urlparse
+    from urllib2 import urlopen
+
+###############################################################
+if PY3:
+    def is_valid_id(k):
+        return k.isidentifier()
+elif PY2:
+    def is_valid_id(k):
+        return re.match(tokenize.Name + '$', k)
+
+###############################################################
+def pprint(cfg):
+    global _pp
+    _pp.pprint(cfg)
+
+
+###############################################################
 def _get_line_col(lc):
 
     if isinstance(lc, (list, tuple)):
@@ -59,6 +117,11 @@ class ConfigurationError(Exception):
     def __init__(self, msg):
         self._msg = msg
 
+
+###############################################################
+_up_arrow = '↑'
+
+
 def _key_error(key, value, lc, error_message, e='K'):
     (line, col) = _get_line_col(lc)
 
@@ -66,9 +129,9 @@ def _key_error(key, value, lc, error_message, e='K'):
         key = '*'
 
     print('{}[line: {}, column: {}]: {}'.format(e, line + 1, col + 1, error_message.format(key)))
-    print('{}{}: {}'.format(' ' * col, key, value))  #!
+    print('{}{}: {}'.format(' ' * col, key, value))  # NOTE: !?
     # ! TODO: try to get access to original ruamel.yaml buffered lines...?
-    print('{}{}'.format(' ' * col, up_arrow))
+    print('{}{}'.format(' ' * col, _up_arrow))
     print('---')
 
 
@@ -90,27 +153,14 @@ def _value_error(key, value, lc, error, e='E'):
 
     val_col = col + len(key) + 2
     print('{}[line: {}, column: {}]: {}'.format(e, line + 1, val_col + 1, error.format(key)))
-    print('{}{}: {}'.format(' ' * col, key, value))  #!
+    print('{}{}: {}'.format(' ' * col, key, value))  # NOTE: !?
     # ! TODO: try to get access to original ruamel.yaml buffered lines...?
-    print('{}{}'.format(' ' * val_col, up_arrow))
+    print('{}{}'.format(' ' * val_col, _up_arrow))
     print('---')
 
 # Unused???
 # def value_warning(key, value, lc, error):
 #    _value_error(key, value, lc, error, e='W')
-
-
-###############################################################
-import collections
-import ruamel.yaml as yaml
-
-from ruamel.yaml.reader import Reader
-from ruamel.yaml.scanner import RoundTripScanner  # Scanner
-from ruamel.yaml.parser import RoundTripParser  # Parser,
-from ruamel.yaml.composer import Composer
-from ruamel.yaml.constructor import RoundTripConstructor  # Constructor, SafeConstructor,
-from ruamel.yaml.resolver import VersionedResolver  # Resolver,
-# from ruamel.yaml.nodes import MappingNode
 
 
 ###############################################################
@@ -159,63 +209,49 @@ class VerboseRoundTripLoader(Reader, RoundTripScanner, RoundTripParser, Composer
         VerboseRoundTripConstructor.__init__(self, preserve_quotes=preserve_quotes)
         VersionedResolver.__init__(self, version)
 
-        
-###############################################################
-from ruamel.yaml.compat import PY2, PY3, text_type, string_types, ordereddict
-from abc import *
-import sys
-
-if PY3 and (sys.version_info[1] >= 4):
-    class AbstractValidator(ABC):
-        """AbstractValidator is the root Base class for any concrete implementation of entities
-        appearing in the general configuration file"""
-
-        @abstractmethod
-        def validate(self, d): # TODO: FIXME: change API: return parsed value, throw exception if input is invalid!
-            pass
-elif PY2 or PY3:
-    class AbstractValidator:
-        """AbstractValidator is the root Base class for any concrete implementation of entities
-        appearing in the general configuration file"""
-        __metaclass__ = ABCMeta
-
-        @abstractmethod
-        def validate(self, d):
-            pass
-# elif PY3:
-#    class AbstractValidator(metaclass=ABCMeta):
-#        """AbstractValidator is the root Base class for any concrete implementation of entities
-#        appearing in the general configuration file"""
-#        @abstractmethod
-#        def validate(self, d):
-#            pass
-else:
-    raise NotImplementedError("Unsupported Python version: '{}'".format(sys.version_info))
-
 
 ###############################################################
-class Base(AbstractValidator):
+class BaseValidator(AbstractValidator):
     """Abstract Base Class for the Config entities"""
 
-    __version = [None]
+    __version = [None]    # NOTE: shared version among all Validator Classes!
+    _parent   = None      # NOTE: (for later) parent Validator
+    _data     = None      # NOTE: result of valid validation
+    _default_input_data = None  # NOTE: Default input to the parser instead of None
 
-    _parent = None
+    def __init__(self, *args, **kwargs):
+        parent = kwargs.pop('parent', None)
+        parsed_result_is_data = kwargs.pop('parsed_result_is_data', False)
 
-    _data = None
-    _default_data = None
+        # TODO: FIXME: assure *args, **kwargs are empty!
+        super(BaseValidator, self).__init__()
+
+        assert self._parent is None
+        self._parent = parent
+
+        # parsed_result_is_data default:
+        # - False => parsed result is self
+        # - True => get_data()
+        self._parsed_result_is_data = parsed_result_is_data
+
+        self.__API_VERSION_ID = "$Id$"
 
     def get_parent(self):
         return self._parent
 
-    def __init__(self, parent):  # TODO: add tag? here or in some child?
-        AbstractValidator.__init__(self)
-        assert self._parent is None
-        self._parent = parent
-        self.__API_VERSION_ID = "$Id$"
-
     def get_api_version(self):
         return self.__API_VERSION_ID
-    
+
+    def set_data(self, d):
+        # assert self._data is None
+        # assert d is not None
+        self._data = d
+
+    def get_data(self):
+        _d = self._data
+#        assert _d is not None
+        return _d
+
     @classmethod
     def set_version(cls, v):
         """To be set once only for any Validator class!"""
@@ -232,36 +268,35 @@ class Base(AbstractValidator):
 
         return default
 
-    def set_data(self, d):
-        # assert self._data is None
-        # assert d is not None
-        self._data = d
-
-    def get_data(self):
-        _d = self._data
-        if _d is None:
-            _d = self._default_data
-
-        return _d
+    @abstractmethod
+    def validate(self, d):  # abstract...
+        pass
 
     @classmethod
-    def parse(cls, d, parent=None):
-        self = cls(parent)
+    def parse(cls, d, *args, **kwargs):
+        """
+        return parsed value, throw exception if input is invalid!
 
-        if d is None:
-            d = self._default_data
+        :param d:
+        :param parent:
+        :return:
+        """
+        self = cls(*args, **kwargs)
 
-        if self.validate(d):  # TODO: FIXME: NOTE: validate should not **explicitly** throw exceptions!!!
-            return self  # .get_data()
+        if self.validate(d):  # NOTE: validate should not **explicitly** throw exceptions!!!
+            if self._parsed_result_is_data:
+                return self.get_data()
 
-        # NOTE: .parse should!
-        raise ConfigurationError(u"{}: {}".format("ERROR:", "Invalid data: '{}'!" .format(d)))
+            return self
+
+        # NOTE: .parse should throw exceptions in case of invalid input data!
+        raise ConfigurationError(u"{}: {}".format("ERROR:", "Invalid data: '{0}' in {1}!" .format(d, type(self))))
 
     def __repr__(self):
         """Print using pretty formatter"""
 
         d = self.get_data()  # vars(self) # ???
-        return PP.pformat(d, indent=4, width=1)
+        return PP.pformat(d, indent=4, width=100)
 
 #    def __str__(self):
 #        """Convert to string"""
@@ -270,12 +305,12 @@ class Base(AbstractValidator):
 #        return str(d)
 
     def __eq__(self, other):
-        assert isinstance(self, Base)
+        assert isinstance(self, BaseValidator)
 
-#        if not isinstance(other, Base):
-#            return self.get_data() == other
+        if not isinstance(other, BaseValidator):
+            return self.data_dump() == other
 
-        assert isinstance(other, Base)
+        assert isinstance(other, BaseValidator)
 
 #        assert self.get_api_version() == other.get_api_version()
         return self.get_data() == other.get_data()
@@ -295,7 +330,7 @@ class Base(AbstractValidator):
             _dd = {}
             for k in _d:
                 v = _d[k]
-                if isinstance(v, Base):
+                if isinstance(v, BaseValidator):
                     v = v.data_dump()
                 _dd[k] = v
             return _dd
@@ -304,7 +339,7 @@ class Base(AbstractValidator):
             _dd = []
             for idx, i in enumerate(_d):
                 v = i
-                if isinstance(v, Base):
+                if isinstance(v, BaseValidator):
                     v = v.data_dump()
                 _dd.insert(idx,  v)
             return _dd
@@ -312,14 +347,21 @@ class Base(AbstractValidator):
 #        if isinstance(_d, string_types):
         return _d
 
-
     def query(self, what):
-        """Generic query for data subset about this object"""
+        """
+        Generic query for data subset about this object
+
+        A/B/C/(all|keys|data)?
+
+        Get object under A/B/C and return
+        * it (if 'all') - default!
+        * its keys (if 'keys')
+        * its data dump (if 'data')
+        """
 
         # NOTE: no data dumping here! Result may be a validator!
 
         log.debug("Querying '%s'", what)
-
 
         if (what is None) or (what == ''):
             what = 'all'
@@ -327,13 +369,16 @@ class Base(AbstractValidator):
         if what == 'all':
             return self
 
+        if what == 'data':
+            return self.data_dump()
+
         _d = self.get_data()
 
         if what == 'keys':
             assert isinstance(_d, dict)
-            return _d.keys()
+            return [k for k in _d.keys()]
 
-        s = BaseString.parse(what, parent=self)
+        s = StringValidator.parse(what, parent=self)
 
         if s in _d:
             return _d[s]
@@ -346,7 +391,7 @@ class Base(AbstractValidator):
 
         if h in _d:
             d = _d[ss[0]]
-            if isinstance(d, Base):
+            if isinstance(d, BaseValidator):
                 return d.query(t)  # TODO: FIXME: avoid recursion...
 
             log.warning("Could not query an object. Ignoring the tail: %s", t)
@@ -357,13 +402,14 @@ class Base(AbstractValidator):
 
 
 ###############################################################
-class BaseRecord(Base):
-    """Aggregation of data as a record with some fixed data memebers"""
+class BaseRecordValidator(BaseValidator):
+    """Aggregation of data as a record with some fixed data members"""
 
     # TODO: turn _default_type into a class-member (by moving it here)...?
 
-    def __init__(self, parent):
-        Base.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(BaseRecordValidator, self).__init__(*args, **kwargs)
+
         self._default_type = None  # "default_base"
         self._types = {}
         self._create_optional = False  # Instantiate missing optional keys
@@ -383,6 +429,9 @@ class BaseRecord(Base):
         return None
 
     def validate(self, d):
+        if d is None:
+            d = self._default_input_data
+
         # ! TODO: assert that d is a mapping with lc!
 
         self._type = self.detect_type(d)
@@ -408,7 +457,7 @@ class BaseRecord(Base):
                 _k = None
                 _v = None
                 try:
-                    _k = BaseString.parse(k, parent=self)
+                    _k = StringValidator.parse(k, parent=self)
                 except ConfigurationError as err:
                     _key_note(k, _lc, "Error: invalid _optional_ key field '{}' (type: '%s')" % self._type)
                     pprint(err)
@@ -437,7 +486,7 @@ class BaseRecord(Base):
 
             if k in _rule:
                 try:
-                    _k = BaseString.parse(k, parent=self)
+                    _k = StringValidator.parse(k, parent=self)
                 except ConfigurationError as err:
                     _key_error(k, v, lc, "Error: invalid key field '{}' (type: '%s')" % self._type)
                     pprint(err)
@@ -483,14 +532,18 @@ class BaseRecord(Base):
 
 
 ###############################################################
-class BaseScalar(Base):
+class ScalarValidator(BaseValidator):
     """Single scalar value out of YAML scalars: strings, numbert etc."""
 
-    def __init__(self, parent):
-        Base.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        kwargs['parsed_result_is_data'] = kwargs.pop('parsed_result_is_data', True)
+        super(ScalarValidator, self).__init__(*args, **kwargs)
 
     def validate(self, d):
         """check that data is a scalar: not a sequence or mapping or set"""
+
+        if d is None:
+            d = self._default_input_data  # !
 
         if d is not None:
             if isinstance(d, (list, dict, tuple, set)):  # ! Check if data is not a container?
@@ -504,33 +557,23 @@ class BaseScalar(Base):
         self.set_data(d)
         return True
 
-    @classmethod
-    def parse(cls, d, parent=None):
-        self = cls(parent)
-
-        if d is None:
-            d = self._default_data
-
-        if self.validate(d):  # TODO: FIXME: NOTE: validate should not **explicitly** throw exceptions!!!
-            return self.get_data()
-
-        # NOTE: .parse should!
-        raise ConfigurationError(u"{}: {}".format("ERROR:", "Invalid data: '{}'!" .format(d)))
-
-
 ###############################################################
-class BaseString(BaseScalar):
+class StringValidator(ScalarValidator):
     """YAML String"""
-    def __init__(self, parent):
-        BaseScalar.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(StringValidator, self).__init__(*args, **kwargs)
+
         self._default_data = ''
 
     def validate(self, d):
         """check whether data is a valid string. Note: should not care about format version"""
 
+        if d is None:
+            d = self._default_data
+
         assert d is not None
 
-        s = BaseScalar.parse(d, parent=self)
+        s = ScalarValidator.parse(d, parent=self)
 
         if not isinstance(s, string_types):
             print("ERROR: value: '{}' is not a string!!" . format(d))
@@ -541,77 +584,81 @@ class BaseString(BaseScalar):
 
 
 ###############################################################
-# import semver
-import semantic_version  # supports partial versions
+class SemanticVersionValidator(BaseValidator):
+    def __init__(self, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+#        kwargs['parsed_result_is_data'] = kwargs.pop('parsed_result_is_data', False)
+        super(SemanticVersionValidator, self).__init__(*args, **kwargs)
 
-
-class SemanticVersion(BaseString):
-    def __init__(self, parent, partial=False):
-        BaseString.__init__(self, parent)
-
+#        self._parsed_result_is_data = False
         self._partial = partial
 
     def validate(self, d):
-        """check the string data to be a valid semantic verions"""
+        """check the string data to be a valid semantic version"""
 
-        _t = BaseString.parse(d, parent=self)
+        if d is None:
+            d = self._default_input_data
+
+        _t = StringValidator.parse(d, parent=self, parsed_result_is_data=True)
 
         # self.get_version(None) # ???
         _v = None
         try:
             _v = semantic_version.Version(_t, partial=self._partial)
         except:
-            print("ERROR: wrong version data: '{0}' (see: '{1}')" . format(d, sys.exc_info()))
+            log.exception("Wrong version data: '{0}' (see: '{1}')" . format(d, sys.exc_info()))
             return False
 
         self.set_data(_v)
         return True
 
-    @classmethod
-    def parse(cls, d, parent=None, partial=False):
-        self = cls(parent, partial=partial)
-
-        assert d is not None
-#            d = self._default_data
-
-        if self.validate(d):  # TODO: FIXME: NOTE: validate should not **explicitly** throw exceptions!!!
-            return self  # keep the validator to handle some general actions via its API: e.g. data_dump
-
-        # NOTE: .parse should!
-        raise ConfigurationError(u"{}: {}".format("ERROR:", "Invalid data: '{}'!" .format(d)))
-
     def data_dump(self):
         return str(self.get_data())
 
+
 ###############################################################
-class BaseUIString(BaseString):  # visible to user => non empty!
-    def __init__(self, parent):
-        BaseString.__init__(self, parent)
+class BaseUIString(StringValidator):
+    """String visible to users => non empty!"""
+
+    def __init__(self, *args, **kwargs):
+        super(BaseUIString, self).__init__(*args, **kwargs)
+
         self._default_data = None
 
     def validate(self, d):
-        """check whether data is a valid string"""
-        t = BaseString.parse(d, parent=self)
+        """check whether data is a valid (non-empty) string"""
 
-        if bool(t):  # Non-empty
-            self.set_data(t)
+        if d is None:
+            d = self._default_data
+
+        if not super(BaseUIString, self).validate(d):
+            self.set_data(None)
+            return False
+
+        if bool(self.get_data()):  # NOTE: Displayed string should not be empty!
             return True
 
+        self.set_data(None)
         return False
 
 
 ###############################################################
-class BaseEnum(BaseString):  # TODO: Generalize to not only strings...?
+class BaseEnum(BaseValidator):  # TODO: Generalize to not only strings...?
     """Enumeration/collection of several fixed strings"""
 
-    def __init__(self, parent):
-        BaseString.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        kwargs['parsed_result_is_data'] = kwargs.pop('parsed_result_is_data', True)
+        super(BaseEnum, self).__init__(*args, **kwargs)
+
         self._enum_list = []  # NOTE: will depend on the version...
 
     def validate(self, d):
         """check whether data is in the list of fixed strings (see ._enum_list)"""
 
-        t = BaseString.parse(d, parent=self)
+        if d is None:
+            d = self._default_input_data
+
+        t = StringValidator.parse(d, parent=self, parsed_result_is_data=True)
 
         if not (t in self._enum_list): # check withing a list of possible string values
             print("ERROR: string value: '{}' is not among known enum items!!".format(d))
@@ -623,8 +670,8 @@ class BaseEnum(BaseString):  # TODO: Generalize to not only strings...?
 
 ###############################################################
 class ServiceType(BaseEnum):  # Q: Is 'Service::type' mandatory? default: 'compose'
-    def __init__(self, parent):
-        BaseEnum.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(ServiceType, self).__init__(*args, **kwargs)
 
         compose = text_type('compose')
         self._enum_list = [compose]  # NOTE: 'docker' and others may be possible later on
@@ -633,8 +680,8 @@ class ServiceType(BaseEnum):  # Q: Is 'Service::type' mandatory? default: 'compo
 
 ###############################################################
 class StationOMDTag(BaseEnum):  # Q: Is 'Station::omd_tag' mandatory? default: 'standalone'
-    def __init__(self, parent):
-        BaseEnum.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(StationOMDTag, self).__init__(*args, **kwargs)
 
         _v = text_type('standalone')
         self._enum_list = [text_type('agent'), text_type('windows'), _v]  # NOTE: possible values of omd_tag
@@ -643,8 +690,9 @@ class StationOMDTag(BaseEnum):  # Q: Is 'Station::omd_tag' mandatory? default: '
 
 ###############################################################
 class StationPowerOnMethodType(BaseEnum):  # Enum: [WOL], AMTvPRO, DockerMachine
-    def __init__(self, parent):
-        BaseEnum.__init__(self, parent)
+
+    def __init__(self, *args, **kwargs):
+        super(StationPowerOnMethodType, self).__init__(*args, **kwargs)
 
         wol = text_type('WOL')
         # NOTE: the list of possible values of PowerOnMethod::type (will depend on format version)
@@ -653,30 +701,25 @@ class StationPowerOnMethodType(BaseEnum):  # Enum: [WOL], AMTvPRO, DockerMachine
 
 
 ###############################################################
-import os
-
-if PY3:
-    from urllib.parse import urlparse
-    from urllib.request import urlopen
-elif PY2:
-    from urlparse import urlparse
-    from urllib2 import urlopen
-
-
-class URI(BaseString):
+class URI(BaseValidator):
     """Location of external file, either URL or local absolute or local relative to the input config file"""
 
-    def __init__(self, parent):
-        BaseString.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        kwargs['parsed_result_is_data'] = kwargs.pop('parsed_result_is_data', True)
+        super(URI, self).__init__(*args, **kwargs)
+
         self._type = None
 
     def validate(self, d):
         """check whether data is a valid URI"""
+        if d is None:
+            d = self._default_input_data
 
-        v = BaseString.parse(d, parent=self)
+        v = StringValidator.parse(d, parent=self, parsed_result_is_data=True)
 
         _ret = True
 
+        # TODO: @classmethod def check_uri(v)
         if urlparse(v).scheme != '':
             self._type = text_type('url')
             try:
@@ -704,42 +747,20 @@ class URI(BaseString):
 
         return _ret
 
-    ## TODO: @classmethod check_uri()
-
-    @classmethod
-    def parse(cls, d, parent=None):
-        self = cls(parent)
-
-        if d is None:
-            d = self._default_data
-
-        if self.validate(d):  # TODO: FIXME: NOTE: validate should not **explicitly** throw exceptions!!!
-            return self.get_data()  # TODO: due to DockerComposeFile later on :-(
-
-        # NOTE: .parse should!
-        raise ConfigurationError(u"{}: {}".format("ERROR:", "Invalid data: '{}'!" .format(d)))
 
 ###############################################################
-import re, tokenize
-
-if PY3:
-    def is_valid_id(k):
-        return k.isidentifier()
-elif PY2:
-    def is_valid_id(k):
-        return re.match(tokenize.Name + '$', k)
-else:
-    raise NotImplementedError("Unsupported Python version: '{}'".format(sys.version_info))
-
-###############################################################
-class BaseID(BaseString):
-    def __init__(self, parent):
-        BaseString.__init__(self, parent)
+class BaseID(BaseValidator):
+    def __init__(self, *args, **kwargs):
+        kwargs['parsed_result_is_data'] = kwargs.pop('parsed_result_is_data', True)
+        super(BaseID, self).__init__(*args, **kwargs)
 
     def validate(self, d):
         """check whether data is a valid ID string"""
 
-        v = BaseString.parse(d, parent=self)
+        if d is None:
+            d = self._default_input_data
+
+        v = StringValidator.parse(d, parent=self, parsed_result_is_data=True)
 
         if not is_valid_id(v):
             print("ERROR: not a valid variable identifier! Input: '{}'" . format(d))
@@ -750,11 +771,14 @@ class BaseID(BaseString):
 
 ###############################################################
 class ClientVariable(BaseID):  #
-    def __init__(self, parent):
-        BaseID.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(ClientVariable, self).__init__(*args, **kwargs)
 
     def validate(self, d):
         """check whether data is a valid ID string"""
+
+        if d is None:
+            d = self._default_input_data
 
         v = BaseID.parse(d, parent=self)  # .get_data()
 
@@ -778,58 +802,67 @@ class ClientVariable(BaseID):  #
 
 ###############################################################
 class ServiceID(BaseID):
-    def __init__(self, parent):
-        BaseID.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(ServiceID, self).__init__(*args, **kwargs)
 
 
 ###############################################################
 class ApplicationID(BaseID):
-    def __init__(self, parent):
-        BaseID.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(ApplicationID, self).__init__(*args, **kwargs)
 
 
 ###############################################################
 class GroupID(BaseID):
-    def __init__(self, parent):
-        BaseID.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(GroupID, self).__init__(*args, **kwargs)
 
 
 ###############################################################
 class StationID(BaseID):
-    def __init__(self, parent):
-        BaseID.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(StationID, self).__init__(*args, **kwargs)
 
 
 ###############################################################
 class ProfileID(BaseID):
-    def __init__(self, parent):
-        BaseID.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(ProfileID, self).__init__(*args, **kwargs)
 
 
 ###############################################################
 class PresetID(BaseID):
-    def __init__(self, parent):
-        BaseID.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(PresetID, self).__init__(*args, **kwargs)
 
 
 ###############################################################
-import tempfile
-
-class AutoDetectionScript(BaseString):
-    def __init__(self, parent):
-        BaseString.__init__(self, parent)
+class AutoDetectionScript(StringValidator):
+    def __init__(self, *args, **kwargs):
+        super(AutoDetectionScript, self).__init__(*args, **kwargs)
         self._default_data = ''
 
     def validate(self, d):
         """check whether data is a valid script"""
 
+        if d is None:
+            d = self._default_data
+
         if (d is None) or (d == '') or (d == text_type('')):
             self.set_data(text_type(''))
             return True
 
-        script = BaseString.parse(d, parent=self)
+        script = ''
+        try:
+            script = StringValidator.parse(d, parent=self, parsed_result_is_data=True)
 
-        assert bool(script)
+            if not bool(script):  # NOTE: empty script is also fine!
+                self.set_data(script)
+                return True
+        except:
+            log.error("Wrong input to AutoDetectionScript::validate: {}". format(d))
+            return False
+
 
         # NOTE: trying to check the BASH script: shellcheck & bash -n 'string':
         fd, path = tempfile.mkstemp()
@@ -866,58 +899,74 @@ class AutoDetectionScript(BaseString):
 
 
 ###############################################################
-class DockerComposeServiceName(BaseString):
-    def __init__(self, parent):
-        BaseString.__init__(self, parent)
+class DockerComposeServiceName(StringValidator):  # TODO: any special checks here?
+
+    def __init__(self, *args, **kwargs):
+        super(DockerComposeServiceName, self).__init__(*args, **kwargs)
 
     def validate(self, d):
         """check whether data is a valid service name in file due to DockerComposeRef"""
+        if d is None:
+            d = self._default_data
 
-        n = BaseString.parse(d, parent=self)
-
-        self.set_data(n)
-        return True
+        try:
+            n = StringValidator.parse(d, parent=self, parsed_result_is_data=True)
+            self.set_data(n)
+            return True
+        except:
+            log.error("Wrong input to DockerComposeServiceName::validate: '{}'". format(d))
+            return False
 
 ###############################################################
 class DockerComposeRef(URI):
-    def __init__(self, parent):
-        URI.__init__(self, parent)
+
+    def __init__(self, *args, **kwargs):
+        super(DockerComposeRef, self).__init__(*args, **kwargs)
+
         self._default_data = text_type('docker-compose.yml')
 
     def validate(self, d):
         """check whether data is a valid docker-compose file name"""
+        if d is None:
+            d = self._default_data
 
         # TODO: call docker-compose on the referenced file! Currently in DockerService!?
 
-        return URI.validate(self, d)
+        return super(DockerComposeRef, self).validate(d)
 
 
 ###############################################################
 class Icon(URI):
-    def __init__(self, parent):
-        URI.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(Icon, self).__init__(*args, **kwargs)
 
     def validate(self, d):
         """check whether data is a valid icon file name"""
 
+        if d is None:
+            d = self._default_input_data
+
         # TODO: FIXME: check the file contents (or extention)
-        return URI.validate(self, d)
+        return super(Icon, self).validate(d)
 
 
 ###############################################################
 import subprocess  # , shlex
 # import paramiko
 
-class HostAddress(BaseString):
+class HostAddress(StringValidator):
     """SSH alias"""
 
-    def __init__(self, parent):
-        BaseString.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        kwargs['parsed_result_is_data'] = kwargs.pop('parsed_result_is_data', False)
+        super(HostAddress, self).__init__(*args, **kwargs)
 
     def validate(self, d):
         """check whether data is a valid ssh alias?"""
+        if d is None:
+            d = self._default_data
 
-        _h = BaseString.parse(d, parent=self)
+        _h = StringValidator.parse(d, parent=self)
 
         if not self.check_ssh_alias(_h):
             if PEDANTIC:
@@ -925,6 +974,11 @@ class HostAddress(BaseString):
 
         self.set_data(_h)
         return True
+
+    def recheck(self):
+        return self.check_ssh_alias(self.set_data())
+
+    ## SSH call?
 
     @classmethod
     def check_ssh_alias(cls, _h):
@@ -947,30 +1001,20 @@ class HostAddress(BaseString):
 
         return False
 
-    @classmethod
-    def parse(cls, d, parent=None):
-        self = cls(parent)
-
-        if d is None:
-            d = self._default_data
-
-        if self.validate(d):  # TODO: FIXME: NOTE: validate should not **explicitly** throw exceptions!!!
-            return self  # .get_data()
-
-        # NOTE: .parse should!
-        raise ConfigurationError(u"{}: {}".format("ERROR:", "Invalid data: '{}'!" .format(d)))
-
 ###############################################################
-class HostMACAddress(BaseString):
+class HostMACAddress(StringValidator):
     """MAC Address of the station"""
 
-    def __init__(self, parent):
-        BaseString.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(HostMACAddress, self).__init__(*args, **kwargs)
 
     def validate(self, d):
         """check whether data is a valid ssh alias?"""
 
-        v = BaseString.parse(d, parent=self)
+        if d is None:
+            d = self._default_data
+
+        v = StringValidator.parse(d, parent=self)
 
         if not re.match("[0-9a-f]{2}([-:])[0-9a-f]{2}(\\1[0-9a-f]{2}){4}$", v.lower()):
             _value_error(None, d, d.lc, "ERROR: Wrong MAC Address: [{}]")
@@ -981,12 +1025,15 @@ class HostMACAddress(BaseString):
         return True
 
 ###############################################################
-class BaseBool(BaseScalar):
-    def __init__(self, parent):
-        BaseScalar.__init__(self, parent)
+class BoolValidator(ScalarValidator):
+    def __init__(self, *args, **kwargs):
+        super(BoolValidator, self).__init__(*args, **kwargs)
 
     def validate(self, d):
         """check whether data is a valid string"""
+
+        if d is None:
+            d = self._default_input_data
 
         if not isinstance(d, bool):
             print("ERROR: not a boolean value: '{}'" . format(d))
@@ -996,24 +1043,25 @@ class BaseBool(BaseScalar):
         return True
 
 
-class StationVisibility(BaseBool):  ## "hidden": True / [False]
-    def __init__(self, parent):
-        BaseBool.__init__(self, parent)
+class StationVisibility(BoolValidator):  ## "hidden": True / [False]
+    def __init__(self, *args, **kwargs):
+        super(StationVisibility, self).__init__(*args, **kwargs)
         self._default_data = False
 
 
-class AutoTurnon(BaseBool):  # Bool, False
-    def __init__(self, parent):
-        BaseBool.__init__(self, parent)
+class AutoTurnon(BoolValidator):  # Bool, False
+    def __init__(self, *args, **kwargs):
+        super(AutoTurnon, self).__init__(*args, **kwargs)
         self._default_data = False  # no powering on by default!?
 
 
 ###############################################################
-class VariadicRecordWrapper(Base):
+class VariadicRecordWrapper(BaseValidator):
     """VariadicRecordWrapper record. Type is determined by the given 'type' field."""
 
-    def __init__(self, parent):
-        Base.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        kwargs['parsed_result_is_data'] = kwargs.pop('parsed_result_is_data', True)
+        super(VariadicRecordWrapper, self).__init__(*args, **kwargs)
 
         self._type_tag = text_type('type')
         self._type_cls = None
@@ -1021,22 +1069,12 @@ class VariadicRecordWrapper(Base):
         self._default_type = None
         self._types = {}
 
-    # TODO: FIXME: make sure to use this .parse instead of .validate due to substitution in Wrapper objects!!!
-
-    @classmethod
-    def parse(cls, d, parent=None):
-        """Will return a Validator of a different class"""
-
-        self = cls(parent)  # temporary wrapper object
-
-        if d is None:
-            d = self._default_data
-
-        if self.validate(d):
-            return self.get_data()
-
+    # TODO: make sure to use its .parse instead of .validate due to substitution in Wrapper objects!
     def validate(self, d):
         """determine the type of variadic data for the format version"""
+
+        if d is None:
+            d = self._default_input_data
 
         _ret = True
         assert isinstance(d, dict)
@@ -1054,7 +1092,12 @@ class VariadicRecordWrapper(Base):
             _key_error(self._type_tag, d, _lc, "ERROR: Missing mandatory key `{}`")
             return False
 
-        t = self._type_cls.parse(d[self._type_tag], parent=self.get_parent()) ### ????
+        t = None
+        try:
+            t = self._type_cls.parse(d[self._type_tag], parent=self.get_parent())  # parsed_result_is_data=True?
+        except:
+            log.exception("Wrong type data: {}".format(d[self._type_tag]))
+            return False
 
         if t not in _rule:
             _lc = d.lc  # start of the current mapping
@@ -1076,8 +1119,8 @@ class VariadicRecordWrapper(Base):
 class StationPowerOnMethodWrapper(VariadicRecordWrapper):
     """StationPowerOnMethod :: Wrapper"""
 
-    def __init__(self, parent):
-        VariadicRecordWrapper.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(StationPowerOnMethodWrapper, self).__init__(*args, **kwargs)
 
         T = StationPowerOnMethodType
         self._type_cls = T
@@ -1091,8 +1134,8 @@ class StationPowerOnMethodWrapper(VariadicRecordWrapper):
 class ServiceWrapper(VariadicRecordWrapper):
     """Service :: Wrapper"""
 
-    def __init__(self, parent):
-        VariadicRecordWrapper.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(ServiceWrapper, self).__init__(*args, **kwargs)
 
         T = ServiceType
         self._type_cls = T
@@ -1106,23 +1149,23 @@ class ServiceWrapper(VariadicRecordWrapper):
 class ApplicationWrapper(ServiceWrapper):
     """Application :: Wrapper"""
 
-    def __init__(self, parent):
-        ServiceWrapper.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(ApplicationWrapper, self).__init__(*args, **kwargs)
 
-        T = ServiceType # same for docker-compose Services and Applications!
-        self._type_cls = T
-        _dc = {T.parse("compose"): DockerComposeApplication}
+        t = ServiceType  # NOTE: same for docker-compose Services and Applications!
+        self._type_cls = t
+        _dc = {t.parse("compose"): DockerComposeApplication}
 
         self._default_type = "default_docker_compose_application_wrapper"
         self._types[self._default_type] = _dc
 
 
 ###############################################################
-class DockerMachine(BaseRecord):
+class DockerMachine(BaseRecordValidator):
     """DockerMachine :: StationPowerOnMethod"""
 
-    def __init__(self, parent):
-        BaseRecord.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(DockerMachine, self).__init__(*args, **kwargs)
 
         self._type_tag = text_type('type')
 
@@ -1131,7 +1174,7 @@ class DockerMachine(BaseRecord):
         DM_rule = {
             self._type_tag: (True, StationPowerOnMethodType),  # Mandatory!
             text_type('auto_turnon'): (False, AutoTurnon),
-            text_type('vm_name'): (True, BaseString),
+            text_type('vm_name'): (True, StringValidator),
             text_type('vm_host_address'): (True, HostAddress)
         }
 
@@ -1145,11 +1188,11 @@ class DockerMachine(BaseRecord):
         raise NotImplementedError("Running 'docker-machine start' action is not supported yet... Sorry!")
 
 
-class WOL(BaseRecord):
+class WOL(BaseRecordValidator):
     """WOL :: StationPowerOnMethod"""
 
-    def __init__(self, parent):
-        BaseRecord.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(WOL, self).__init__(*args, **kwargs)
 
         self._type_tag = text_type('type')
         self._default_type = 'WOL'
@@ -1170,11 +1213,11 @@ class WOL(BaseRecord):
 
 
 ###############################################################
-class DockerComposeService(BaseRecord):
+class DockerComposeService(BaseRecordValidator):
     """DockerCompose :: Service data type"""
 
-    def __init__(self, parent):
-        BaseRecord.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(DockerComposeService, self).__init__(*args, **kwargs)
 
         self._type_tag = text_type('type')
         self._hook_tag = text_type('auto_detections')
@@ -1194,7 +1237,10 @@ class DockerComposeService(BaseRecord):
         self._create_optional = True
 
     def validate(self, d):
-        if not BaseRecord.validate(self, d):
+        if d is None:
+            d = self._default_input_data
+
+        if not BaseRecordValidator.validate(self, d):
             assert self.get_data() is None
             return False
 
@@ -1203,11 +1249,11 @@ class DockerComposeService(BaseRecord):
         # TODO: remove Validators (BaseString) from strings used as dict keys!
         _f = _d[self._file_tag]
 
-        while isinstance(_f, Base):
+        while isinstance(_f, BaseValidator):
             _f = _f.get_data()
 
         _n = _d[self._name_tag]
-        while isinstance(_n, Base):
+        while isinstance(_n, BaseValidator):
             _n = _n.get_data()
 
         if not os.path.exists(_f):  # TODO: FIXME: use URI::check() instead??
@@ -1255,8 +1301,8 @@ class DockerComposeService(BaseRecord):
 class DockerComposeApplication(DockerComposeService):
     """DockerCompose :: Application"""
 
-    def __init__(self, parent):
-        DockerComposeService.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(DockerComposeApplication, self).__init__(*args, **kwargs)
 
         _compose_rule = (self._types[self._default_type]).copy()
 
@@ -1272,11 +1318,11 @@ class DockerComposeApplication(DockerComposeService):
         # TODO: FIXME: add application to compatibleStations!
 
 ###############################################################
-class Profile(BaseRecord):
+class Profile(BaseRecordValidator):
     """Profile"""
 
-    def __init__(self, parent):
-        BaseRecord.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(Profile, self).__init__(*args, **kwargs)
 
         self._default_type = "default_profile"
 
@@ -1294,42 +1340,45 @@ class Profile(BaseRecord):
 
 
 ###############################################################
-class StationSSHOptions(BaseRecord):  # optional: "Station::ssh_options" # record: user, port, key, key_ref
+class StationSSHOptions(BaseRecordValidator):  # optional: "Station::ssh_options" # record: user, port, key, key_ref
     """StationSSHOptions"""
 
-    def __init__(self, parent):
-        BaseRecord.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(StationSSHOptions, self).__init__(*args, **kwargs)
 
         self._default_type = "default_station_ssh_options"
 
         default_rule = {
-            text_type('user'): (False, BaseString),
-            text_type('key'): (False, BaseString),
-                text_type('port'): (False, BaseString),
+            text_type('user'): (False, StringValidator),
+            text_type('key'): (False, StringValidator),
+                text_type('port'): (False, StringValidator),
         # TODO: BaseInt??  http://stackoverflow.com/questions/4187185/how-can-i-check-if-my-python-object-is-a-number
             text_type('key_ref'): (False, URI),
         }
 
         self._types = {self._default_type: default_rule}
 
-    def validate(self, data):
+    def validate(self, d):
         """check whether data is a valid ssh connection options"""
 
-        _ret = BaseRecord.validate(self, data)
+        if d is None:
+            d = self._default_input_data
+
+        _ret = super(StationSSHOptions, self).validate(d)
 
         # TODO: Check for ssh connection: Use some Python SSH Wrapper (2/3)
         return _ret
 
 
 ###############################################################
-class Station(BaseRecord): # Wrapper
+class Station(BaseRecordValidator):  # Wrapper?
     """Station"""
 
     _extends_tag = text_type('extends')
     _client_settings_tag = text_type('client_settings')
 
-    def __init__(self, parent):
-        BaseRecord.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(Station, self).__init__(*args, **kwargs)
 
         self._poweron_tag = text_type('poweron_settings')
         self._ssh_options_tag = text_type('ssh_options')
@@ -1359,12 +1408,10 @@ class Station(BaseRecord): # Wrapper
         _d = self.get_data()
         assert _d is not None
 
-        _h = None
+        _h = _d.get(self._ishidden_tag, None)
 
-        if self._ishidden_tag in _d:
-            _h = _d[self._ishidden_tag]
-        else:
-            _h = StationVisibility.parse(None, parent=self)
+        if _h is None:
+            _h = StationVisibility.parse(None, parent=self, parsed_result_is_data=True)
 
         return _h
 
@@ -1372,14 +1419,7 @@ class Station(BaseRecord): # Wrapper
         _d = self.get_data()
         assert _d is not None
 
-        _h = None
-
-        if self._address_tag in _d:
-            _h = _d[self._address_tag]
-        else:
-            _h = StationVisibility.parse(None, parent=self)
-
-        return _h
+        return _d.get(self._address_tag, None)
 
     def shutdown(self, action_args):
         ### ssh address subprocess
@@ -1452,7 +1492,7 @@ class Station(BaseRecord): # Wrapper
         _b = _d.get(self._extends_tag, None)  # StationID (validated...)
 
 #        if _b is not None:
-#            if isinstance(_b, Base):
+#            if isinstance(_b, BaseValidator):
 #                _b = _b.get_data()
 
         return _b
@@ -1462,9 +1502,10 @@ class Station(BaseRecord): # Wrapper
         assert base.get_base() is None
 
         # NOTE: at early stage there may be no parent data...
-        if delta.get_parent().get_data() is not None:
-            assert delta.get_base() in delta.get_parent().get_data()
-            assert delta.get_parent().get_data().get(delta.get_base(), None) == base
+        if delta.get_parent() is not None:
+            if delta.get_parent().get_data() is not None:
+                assert delta.get_base() in delta.get_parent().get_data()
+                assert delta.get_parent().get_data().get(delta.get_base(), None) == base
 
         _d = delta.get_data()
         _b = base.get_data()
@@ -1482,7 +1523,7 @@ class Station(BaseRecord): # Wrapper
         if bb is not None:
             dd = _d.get(k, None)
             if dd is None:
-                dd = StationClientSettings.parse(None, parent=delta.get_parent())
+                dd = StationClientSettings.parse(None, parent=delta)
 
             assert isinstance(dd, StationClientSettings)
             assert isinstance(bb, StationClientSettings)
@@ -1504,11 +1545,12 @@ class Station(BaseRecord): # Wrapper
 
 
 ###############################################################
-class BaseIDMap(Base):
+class BaseIDMap(BaseValidator):
     """Mapping: SomeTypeID -> AnyType"""
 
-    def __init__(self, parent):
-        Base.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(BaseIDMap, self).__init__(*args, **kwargs)
+
         self._default_type = None
         self._types = {}  # type -> (TypeID, Type)
 
@@ -1521,6 +1563,9 @@ class BaseIDMap(Base):
         return self._default_type
 
     def validate(self, d):
+        if d is None:
+            d = self._default_input_data
+
         assert isinstance(d, dict)
 
         self._type = self.detect_type(d)
@@ -1572,8 +1617,9 @@ class BaseIDMap(Base):
 
 ###############################################################
 class GlobalServices(BaseIDMap):
-    def __init__(self, parent):
-        BaseIDMap.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(GlobalServices, self).__init__(*args, **kwargs)
+
         self._default_type = "default_global_services"
         self._types = {self._default_type: (ServiceID, ServiceWrapper)}
 
@@ -1586,11 +1632,12 @@ class GlobalServices(BaseIDMap):
 ###############################################################
 # "client_settings": (False, StationClientSettings) # IDMap : (BaseID, BaseString)
 class StationClientSettings(BaseIDMap):
-    def __init__(self, parent):
-        BaseIDMap.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(StationClientSettings, self).__init__(*args, **kwargs)
+
         self._default_type = "default_station_client_settings"
         self._types = {
-            self._default_type: (ClientVariable, BaseScalar)
+            self._default_type: (ClientVariable, ScalarValidator)
         }  # ! TODO: only strings for now! More scalar types?! BaseScalar?
 
     # TODO: FIXME: check for default hilbert applicationId!
@@ -1613,15 +1660,17 @@ class StationClientSettings(BaseIDMap):
 
 ###############################################################
 class GlobalApplications(BaseIDMap):
-    def __init__(self, parent):
-        BaseIDMap.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(GlobalApplications, self).__init__(*args, **kwargs)
+
         self._default_type = "default_global_applications"
         self._types = {self._default_type: (ApplicationID, ApplicationWrapper)}
 
 ###############################################################
 class GlobalProfiles(BaseIDMap):
-    def __init__(self, parent):
-        BaseIDMap.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(GlobalProfiles, self).__init__(*args, **kwargs)
+
         self._default_type = "default_global_profiles"
         self._types = {self._default_type: (ProfileID, Profile)}
 
@@ -1635,13 +1684,17 @@ class GlobalProfiles(BaseIDMap):
 class GlobalStations(BaseIDMap):
     """Global mapping of station IDs to Station's"""
 
-    def __init__(self, parent):
-        BaseIDMap.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(GlobalStations, self).__init__(*args, **kwargs)
+
         self._default_type = "default_global_stations"
         self._types = {self._default_type: (StationID, Station)}  # NOTE: {StationID -> Station}
 
     def validate(self, d):
         """Extension mechanism on top of the usual ID Mapping parsing"""
+
+        if d is None:
+            d = self._default_input_data
 
         if not BaseIDMap.validate(self, d):
             return False
@@ -1697,16 +1750,19 @@ class GlobalStations(BaseIDMap):
 
 
 ###############################################################
-class BaseList(Base):
+class BaseList(BaseValidator):
     """List of entities of the same type"""
 
-    def __init__(self, parent):
-        Base.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(BaseList, self).__init__(*args, **kwargs)
 
         self._default_type = None
         self._types = {}
 
     def validate(self, d):
+        if d is None:
+            d = self._default_input_data
+
         assert self._default_type is not None
         assert len(self._types) > 0
 
@@ -1718,7 +1774,7 @@ class BaseList(Base):
 
         if (not isinstance(d, (list, dict, tuple, set))) and isinstance(d, string_types):
             try:
-                _d = [self._type.parse(BaseString.parse(d, parent=self))]
+                _d = [self._type.parse(StringValidator.parse(d, parent=self))]
                 self.get_data(_d)
                 return True
             except:
@@ -1748,8 +1804,8 @@ class BaseList(Base):
 class GroupIDList(BaseList):
     """List of GroupIDs or a single GroupID!"""
 
-    def __init__(self, parent):
-        BaseList.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(GroupIDList, self).__init__(*args, **kwargs)
 
         self._default_type = "default_GroupID_list"
         self._types = {self._default_type: GroupID}
@@ -1759,8 +1815,8 @@ class GroupIDList(BaseList):
 class ServiceList(BaseList):
     """List of ServiceIDs or a single ServiceID!"""
 
-    def __init__(self, parent):
-        BaseList.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(ServiceList, self).__init__(*args, **kwargs)
 
         self._default_type = "default_ServiceID_list"
         self._types = {self._default_type: ServiceID}
@@ -1770,19 +1826,19 @@ class ServiceList(BaseList):
 class ServiceTypeList(BaseList):
     """List of ServiceType's or a single ServiceType!"""
 
-    def __init__(self, parent):
-        BaseList.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(ServiceTypeList, self).__init__(*args, **kwargs)
 
         self._default_type = "default_ServiceType_list"
         self._types = {self._default_type: ServiceType}
 
 
 ###############################################################
-class Group(BaseRecord):  # ? TODO: GroupSet & its .parent?
+class Group(BaseRecordValidator):  # ? TODO: GroupSet & its .parent?
     """Group"""
 
-    def __init__(self, parent):
-        BaseRecord.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(Group, self).__init__(*args, **kwargs)
 
         self._default_type = "default_group"
 
@@ -1806,12 +1862,15 @@ class Group(BaseRecord):  # ? TODO: GroupSet & its .parent?
     def detect_extra_rule(self, key, value):  # Any extra unlisted keys in the mapping?
 
         if value is None:  # Set item!
-            return GroupID, BaseScalar
+            return GroupID, ScalarValidator
 
         return None
 
     def validate(self, d):
-        _ret = BaseRecord.validate(self, d)
+        if d is None:
+            d = self._default_input_data
+
+        _ret = BaseRecordValidator.validate(self, d)
 
         # TODO: FIXME: Add extra keys into include!
 
@@ -1821,50 +1880,55 @@ class Group(BaseRecord):  # ? TODO: GroupSet & its .parent?
 
 ###############################################################
 class GlobalGroups(BaseIDMap):
-    def __init__(self, parent):
-        BaseIDMap.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(GlobalGroups, self).__init__(*args, **kwargs)
+
         self._default_type = "default_global_groups"
         self._types = {self._default_type: (GroupID, Group)}
 
 
 ###############################################################
-class Preset(BaseRecord):
+class Preset(BaseRecordValidator):
     """Preset"""
 
-    def __init__(self, parent):
-        BaseRecord.__init__(self, parent)
+    def __init__(self, *args, **kwargs):
+        super(Preset, self).__init__(*args, **kwargs)
 
         self._default_type = "default_preset"
-
         # self.__tag      = "Version"
         default_rule = {
             #     self.__tag:  (True ,  ??), # Mandatory
             #     self.__tag:  (False,  ??), # Optional
         }
-
         self._types = {self._default_type: default_rule}
-
         raise NotImplementedError("Presets are not supported yet!")
 
 
 ###############################################################
 class GlobalPresets(BaseIDMap):  # Dummy for now!
-    def __init__(self, parent):
-        BaseIDMap.__init__(self, parent)
+
+    def __init__(self, *args, **kwargs):
+        super(GlobalPresets, self).__init__(*args, **kwargs)
+
         self._default_type = "default_global_presets"
         self._types = {self._default_type: (PresetID, Preset)}
 
-    def validate(self, data):
+    def validate(self, d):
+        if d is None:
+            d = self._default_input_data
+
         print("WARNING: Presets are not supported yet!")
         #        raise NotImplementedError("Presets are not supported yet!")
         return True
 
 ###############################################################
-class Hilbert(BaseRecord):
+class Hilbert(BaseRecordValidator):
     """General Hilbert Configuration format"""
 
-    def __init__(self, parent):
-        BaseRecord.__init__(self, parent)  # This is the Main Root!
+    def __init__(self, *args, **kwargs):
+        kwargs['parsed_result_is_data'] = kwargs.pop('parsed_result_is_data', False)
+
+        super(Hilbert, self).__init__(*args, **kwargs)  # This is the Main Root of all Validators!
 
         self._default_type = "default_global"
 
@@ -1877,7 +1941,7 @@ class Hilbert(BaseRecord):
 
         ### explicit (optional) Type?
         default_rule = {
-            self._version_tag: (True, SemanticVersion),  # Mandatory, specifies supported Types of Config's Entity
+            self._version_tag: (True, SemanticVersionValidator),  # Mandatory, specifies supported Types of Config's Entity
             self._services_tag: (True, GlobalServices),
             self._applications_tag: (True, GlobalApplications),
             self._profiles_tag: (True, GlobalProfiles),
@@ -1891,33 +1955,39 @@ class Hilbert(BaseRecord):
         self._default_data = None
 
     @classmethod
-    def parse(cls, d, parent=None):
-        self = cls(parent)
-
-        if d is None:
-            d = self._default_data
+    def parse(cls, d, *args, **kwargs):
+        self = cls(*args, **kwargs)
 
         if self._version_tag not in d:
             _key_note(self._version_tag, d.lc, "ERROR: Missing mandatory '{}' key field!")
             raise ConfigurationError(u"{}: {}".format("ERROR:", "Missing version tag '{0}' in the input: '{1}'!".format(self._version_tag, d)))
 
         try:
-            _v = SemanticVersion.parse(d[self._version_tag], parent=self, partial=True)
+            _v = SemanticVersionValidator.parse(d[self._version_tag], parent=self, partial=True)
         except:
             _value_error(self._version_tag, d, d.lc, "Wrong value of global '{}' specification!")
             raise
 
         self.set_version(_v)  # NOTE: globally available now!
 
-        if self.validate(d):
-            return self.get_data()
+        if self.validate(d):  # NOTE: validate should not **explicitly** throw exceptions!!!
+            if self._parsed_result_is_data:
+                return self.get_data()
 
-        return None
+            return self
 
-    def validate(self, data):
-        _ret = BaseRecord.validate(self, data)
+        # NOTE: .parse should!
+        raise ConfigurationError(u"{}: {}".format("ERROR:", "Invalid data: '{}'!".format(d)))
 
-        for offset, k in enumerate(data):
+    def validate(self, d):
+        if d is None:
+            d = self._default_data
+
+        assert isinstance(d, dict)
+
+        _ret = BaseRecordValidator.validate(self, d)
+
+        for offset, k in enumerate(d):
             if k == self._version_tag:
                 if offset != 0:
                     print("Note: '{}' specified correctly but not ahead of everything else (offset: {})!".format(
@@ -1926,8 +1996,8 @@ class Hilbert(BaseRecord):
                 break
 
         # NOTE: check uniqueness of keys among (Services/Applications):
-        _services = data.get(self._services_tag)  # Rely on the above and use get_data?
-        _applications = data.get(self._applications_tag)
+        _services = d.get(self._services_tag)  # Rely on the above and use get_data?
+        _applications = d.get(self._applications_tag)
 
         for p, k in enumerate(_services):
             _lc = _services.lc.key(k)
@@ -1960,13 +2030,7 @@ def load_yaml_file(filename):
 ###############################################################
 def parse_hilbert(d, parent=None):
     assert d is not None
-
-    cfg = Hilbert(parent)
-    if not cfg.validate(d):
-        raise ConfigurationError(u"{}: {}".format("ERROR:", "Cannot parse given configuration!"))
-    
-    return cfg
-#    return Hilbert.parse(d, parent=parent)
+    return Hilbert.parse(d, parent=parent, parsed_result_is_data=False)
 
 
 ###############################################################

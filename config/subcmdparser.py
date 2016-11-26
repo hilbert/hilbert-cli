@@ -40,8 +40,9 @@ def subcmd_fxn(cmd_fxn, name, kwargs):
 #########################
 class SortingHelpFormatter(argparse.RawTextHelpFormatter):
     def __init__(self, *args, **kwargs):
-        argparse.RawTextHelpFormatter.__init__(self, indent_increment=1, max_help_position=17,
-                 *args, **kwargs)
+        kwargs['indent_increment'] = 1
+        kwargs['max_help_position'] = 17
+        super(SortingHelpFormatter, self).__init__(*args, **kwargs)
 #    def add_arguments(self, actions):
 #        actions = sorted(actions, key=attrgetter('help'))
 #        super(SortingHelpFormatter, self).add_arguments(actions)
@@ -84,9 +85,9 @@ class SubCommandHandler(argparse.ArgumentParser):
 
         # setup the class
         if self._use_subcommand_help:
-            argparse.ArgumentParser.__init__(self, formatter_class=SortingHelpFormatter, *args, **kwargs)
-        else:
-            argparse.ArgumentParser.__init__(self, *args, **kwargs)
+            kwargs['formatter_class']=SortingHelpFormatter
+
+        super(SubCommandHandler, self).__init__(*args, **kwargs)
 
     def add_argument(self, *args, **kwargs):
         """
@@ -97,7 +98,7 @@ class SubCommandHandler(argparse.ArgumentParser):
         assert not(self._ignore_remainder and 'nargs' in kwargs and kwargs['nargs'] == argparse.REMAINDER)
         #    self._use_subcommands = False
 
-        return argparse.ArgumentParser.add_argument(self, *args, **kwargs)
+        return super(SubCommandHandler, self).add_argument(*args, **kwargs)
 
     def set_subcommands(self, subcommand_lookup):
         """
@@ -219,7 +220,7 @@ class SubCommandHandler(argparse.ArgumentParser):
             argcomplete.autocomplete(self)
 
         # parse arguments
-        args = argparse.ArgumentParser.parse_args(self, argv)
+        args = super(SubCommandHandler, self).parse_args(argv)
 
         self._has_parse = True
 
@@ -310,11 +311,5 @@ class HelpAllAction(argparse.Action):
             except:
                 pass
 
-        exit(0)
+        parser.exit(0)
         setattr(args, self.dest, values)
-
-
-
-
-
-

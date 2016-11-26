@@ -59,18 +59,18 @@ class TestValidate:
             os.chdir(cwd)
         
         assert cfg is not None
-        
+        assert isinstance(cfg, Hilbert)
+        data = cfg.data_dump()
+
+#        print(cfg)
+#        print(yaml_dump(data))
+
         d = pickle_load(f)
-        
         assert d is not None
+        assert isinstance(d, dict)
 
-        assert type(d) == type(cfg)
-        
-        print(cfg)
-        print(yaml_dump(cfg.data_dump()))
+        assert type(data) == type(d)
 
+#        print(yaml_dump(d))
 
-        print(d)
-        print(yaml_dump(d.data_dump()))
-
-        assert d == cfg
+        assert data == d

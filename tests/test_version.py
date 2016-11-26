@@ -11,38 +11,62 @@ DIR=path.dirname( path.dirname( path.abspath(__file__) ) )
 sys.path.append(DIR)
 sys.path.append(path.join(DIR, 'config'))
 
-from helpers import *
-from hilbert_cli_config import *
-from subcmdparser import *
+# from helpers import *
+from hilbert_cli_config import SemanticVersionValidator, load_yaml
+# from subcmdparser import *
 
 import pytest                        # NOQA
 
+# NOTE: supports partial versions!
+import semantic_version              # NOQA
 
-def load(s):
-    return load_yaml(s)
 
-from semantic_version import Version  # supports partial versions
+# TODO: FIXME: set globally format version for SemanticVersionValidator!
+
+def _helper(s, partial=False):
+    v = None
+    try:
+        v = semantic_version.Version(s, partial=partial)
+    except:
+        pass
+
+    assert v is not None
+    assert isinstance(v, semantic_version.Version)
+
+    yaml_data = load_yaml("'{}'".format(s))
+    assert yaml_data is not None
+
+    # NOTE: Validator parsing
+    validator = SemanticVersionValidator.parse(yaml_data, parent=None, partial=partial, parsed_result_is_data=False)
+
+    assert validator is not None
+    assert isinstance(validator, SemanticVersionValidator)
+    validator_data = validator.get_data()
+    assert validator_data is not None
+    assert isinstance(validator_data, semantic_version.Version)
+
+    return v == validator_data
+
 
 class TestVersions:
-    def test_1(self):
-        v = '0.0'
-        assert Version(v, partial=True) == \
-               SemanticVersion.parse(load("'{}'" . format(v)), partial=True).get_data()
-
-        v = '0.1'
-        assert Version(v, partial=True) == \
-               SemanticVersion.parse(load("'{}'" . format(v)), partial=True).get_data()
-
-        v = '1.2'
-        assert Version(v, partial=True) == \
-               SemanticVersion.parse(load("'{}'" . format(v)), partial=True).get_data()
-
-    def test_2(self):
+    def test_good(self):
         v = '0.0.1'
-        assert Version(v) == SemanticVersion.parse(load("'{}'" . format(v))).get_data()
+        assert _helper(v)
 
         v = '0.1.2'
-        assert Version(v) == SemanticVersion.parse(load("'{}'" . format(v))).get_data()
+        assert _helper(v)
 
         v = '1.2.3'
-        assert Version(v) == SemanticVersion.parse(load("'{}'" . format(v))).get_data()
+        assert _helper(v)
+
+    def test_good_partial(self):
+        v = '0.0'
+        assert _helper(v, partial=True)
+
+        v = '0.1'
+        assert _helper(v, partial=True)
+
+        v = '1.2'
+        assert _helper(v, partial=True)
+
+# TODO: add failure tests: e.g. wrong version + with exceptions...

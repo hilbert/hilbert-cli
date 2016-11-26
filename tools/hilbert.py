@@ -4,7 +4,7 @@
 # encoding: utf-8
 # coding: utf-8
 
-# PYTHON_ARGCOMPLETE_OK
+# PYTHON_ARGCOMPLETE_OK           # NOQA
 
 from __future__ import absolute_import, print_function, unicode_literals
 
@@ -126,6 +126,8 @@ def input_handler(parser, ctx, args):
 
     return cfg
 
+
+###############################################################################
 def output_handler(parser, ctx, args):
     global PEDANTIC
     args = vars(args)
@@ -183,7 +185,7 @@ def cmd_query(parser, context, args):
 
     assert obj is not None
 
-    if isinstance(obj, Base):
+    if isinstance(obj, BaseValidator):
         print(yaml_dump(obj.data_dump()))
     else:
         print(yaml_dump(obj))
@@ -223,7 +225,7 @@ def cmd_list_applications(parser, context, args):
 
     assert obj is not None
 
-    if isinstance(obj, Base):
+    if isinstance(obj, BaseValidator):
         print(yaml_dump(obj.data_dump()))
     else:
         print(yaml_dump(obj))
@@ -257,7 +259,7 @@ def cmd_list_stations(parser, context, args):
 
     assert obj is not None
 
-    if isinstance(obj, Base):
+    if isinstance(obj, BaseValidator):
         print(yaml_dump(obj.data_dump()))
     else:
         print(yaml_dump(obj))
@@ -291,7 +293,7 @@ def cmd_list_profiles(parser, context, args):
 
     assert obj is not None
 
-    if isinstance(obj, Base):
+    if isinstance(obj, BaseValidator):
         print(yaml_dump(obj.data_dump()))
     else:
         print(yaml_dump(obj))
@@ -324,7 +326,7 @@ def cmd_list_groups(parser, context, args):
 
     assert obj is not None
 
-    if isinstance(obj, Base):
+    if isinstance(obj, BaseValidator):
         print(yaml_dump(obj.data_dump()))
     else:
         print(yaml_dump(obj))
@@ -357,7 +359,7 @@ def cmd_list_services(parser, context, args):
 
     assert obj is not None
 
-    if isinstance(obj, Base):
+    if isinstance(obj, BaseValidator):
         print(yaml_dump(obj.data_dump()))
     else:
         print(yaml_dump(obj))
@@ -366,7 +368,43 @@ def cmd_list_services(parser, context, args):
     return args
 
 # NOTE: just a helper ATM
-def cmd_action(parser, context, args, stationId, action, action_args):
+def cmd_action(parser, context, args, Action=None, appIdRequired=False):
+    args = parser.parse_args(args)
+    _args = vars(args)
+
+    action = Action
+    if action is None:
+        assert 'Action' in _args
+        action = _args['Action']
+
+    log.debug("Action: '%s'", action)
+
+    assert action is not None
+    assert action != ''
+
+
+    # stationId,
+    assert 'StationID' in _args
+    stationId = _args['StationID']
+    log.debug("Input StationID: '%s'", stationId)
+    stationId = StationID.parse(stationId, parent=None, parsed_result_is_data=True)
+    log.debug("Checked StationID: '%s'", stationId)
+
+    action_args = None
+
+    if appIdRequired:
+        applicationID = _args.get('ApplicationID', None)
+        assert applicationID is not None
+        log.debug("Input ApplicationID: '%s'", applicationID)
+        applicationID = ApplicationID.parse(applicationID, parent=None, parsed_result_is_data=True)
+        log.debug("Checked ApplicationID: '%s'", applicationID)
+        action_args = applicationID
+
+    elif 'action_args' in _args:
+        action_args = _args.get('action_args', None)
+
+
+
     stations = None
     log.debug("Validating given StationID: '%s'...", stationId)
     try:
@@ -386,7 +424,6 @@ def cmd_action(parser, context, args, stationId, action, action_args):
     assert station is not None
 
     log.debug("StationID is valid according to the Configuration!")
-
     log.debug("Running action: '{0} {1}' on station '{2}'" .format(action, str(action_args), stationId))
     try:
         station.run_action(action, action_args)  # NOTE: temporary API for now
@@ -395,9 +432,10 @@ def cmd_action(parser, context, args, stationId, action, action_args):
         exit(1)
     return args
 
-@subcmd('poweron', help='poweron a station')
-def cmd_poweron(parser, context, args):
-    log.debug("Running '{}'" . format('cmd_poweron'))
+@subcmd('start', help='poweron a station')
+def cmd_start(parser, context, args):
+    action = 'start'
+    log.debug("Running 'cmd_{}'" . format(action))
 
     group = parser.add_mutually_exclusive_group()
 
@@ -407,28 +445,18 @@ def cmd_poweron(parser, context, args):
                          help="specify input dump file")
 
     parser.add_argument('StationID', help="station to power-on via network")
-    parser.add_argument('action_args', nargs='?', help="optional arguments for poweron", metavar='args')
+#    parser.add_argument('action_args', nargs='?', help="optional arguments for poweron", metavar='args')
 
-    args = parser.parse_args(args)
-    _args = vars(args)
-
-    assert 'StationID' in _args
-    stationId = _args['StationID']
-    log.debug("StationID: '%s'", stationId)
-
-    action_args = None
-    if 'action_args' in _args:
-        action_args = _args['action_args']
-
-    cmd_action(parser, context, args, stationId, 'poweron', action_args)
+    cmd_action(parser, context, args, Action=action, appIdRequired=False)
 
     log.debug("Done")
     return args
 
 
-@subcmd('shutdown', help='shutdown a station')
-def cmd_shutdown(parser, context, args):
-    log.debug("Running '{}'" . format('cmd_shutdown'))
+@subcmd('stop', help='shutdown a station')
+def cmd_stop(parser, context, args):
+    action = 'stop'
+    log.debug("Running 'cmd_{}'" . format(action))
 
     group = parser.add_mutually_exclusive_group()
 
@@ -438,28 +466,18 @@ def cmd_shutdown(parser, context, args):
                          help="specify input dump file")
 
     parser.add_argument('StationID', help="specify the station")
-    parser.add_argument('action_args', nargs='?', help="optional arguments for shutdown", metavar='args')
+#    parser.add_argument('action_args', nargs='?', help="optional arguments for shutdown", metavar='args')
 
-    args = parser.parse_args(args)
-    _args = vars(args)
-
-    assert 'StationID' in _args
-    stationId = _args['StationID']
-    log.debug("StationID: '%s'", stationId)
-
-    action_args = None
-    if 'action_args' in _args:
-        action_args = _args['action_args']
-
-    cmd_action(parser, context, args, stationId, 'shutdown', action_args)
+    cmd_action(parser, context, args, Action=action, appIdRequired=False)
 
     log.debug("Done")
     return args
 
 
-@subcmd('deploy', help='deploy local configuration to a station')
-def cmd_deploy(parser, context, args):
-    log.debug("Running '{}'" . format('cmd_deploy'))
+@subcmd('cfg_deploy', help="deploy station's local configuration to corresponding host")
+def cmd_cfg_deploy(parser, context, args):
+    action = 'cfg_deploy'
+    log.debug("Running 'cmd_{}'" . format(action))
 
     group = parser.add_mutually_exclusive_group()
 
@@ -469,28 +487,18 @@ def cmd_deploy(parser, context, args):
                          help="specify input dump file")
 
     parser.add_argument('StationID', help="specify the station")
-    parser.add_argument('action_args', nargs='?', help="optional arguments for deploy", metavar='args')
+#    parser.add_argument('action_args', nargs='?', help="optional arguments for deploy", metavar='args')
 
-    args = parser.parse_args(args)
-    _args = vars(args)
-
-    assert 'StationID' in _args
-    stationId = _args['StationID']
-    log.debug("StationID: '%s'", stationId)
-
-    action_args = None
-    if 'action_args' in _args:
-        action_args = _args['action_args']
-
-    cmd_action(parser, context, args, stationId, 'deploy', action_args)
+    cmd_action(parser, context, args, Action=action, appIdRequired=False)
 
     log.debug("Done")
     return args
 
 
-@subcmd('start', help='start a service/application on a station')
-def cmd_start(parser, context, args):
-    log.debug("Running '{}'" . format('cmd_start'))
+@subcmd('app_start', help='start an application on a station')
+def cmd_app_start(parser, context, args):
+    action = 'app_start'
+    log.debug("Running 'cmd_{}'" . format(action))
 
     group = parser.add_mutually_exclusive_group()
 
@@ -500,28 +508,19 @@ def cmd_start(parser, context, args):
                          help="specify input dump file")
 
     parser.add_argument('StationID', help="specify the station")
-    parser.add_argument('action_args', nargs='?', help="optional argument for start: ApplicationID/ServiceID ", metavar='id')
+    parser.add_argument('ApplicationID', help="specify the application to start")
+#    parser.add_argument('action_args', nargs='?', help="optional argument for start: ApplicationID/ServiceID ", metavar='id')
 
-    args = parser.parse_args(args)
-    _args = vars(args)
-
-    assert 'StationID' in _args
-    stationId = _args['StationID']
-    log.debug("StationID: '%s'", stationId)
-
-    action_args = None
-    if 'action_args' in _args:
-        action_args = _args['action_args']
-
-    cmd_action(parser, context, args, stationId, 'start', action_args)
+    cmd_action(parser, context, args, Action=action, appIdRequired=True)
 
     log.debug("Done")
     return args
 
 
-@subcmd('finish', help='finish a service/application on a station')
-def cmd_finish(parser, context, args):
-    log.debug("Running '{}'" . format('cmd_finish'))
+@subcmd('app_stop', help='stop an application on a station')
+def cmd_app_stop(parser, context, args):
+    action = 'app_stop'
+    log.debug("Running 'cmd_{}'" . format(action))
 
     group = parser.add_mutually_exclusive_group()
 
@@ -531,28 +530,19 @@ def cmd_finish(parser, context, args):
                          help="specify input dump file")
 
     parser.add_argument('StationID', help="specify the station")
-    parser.add_argument('action_args', nargs='?', help="optional argument for finish: ApplicationID/ServiceID ", metavar='id')
+    parser.add_argument('ApplicationID', help="specify the application to stop")
+#    parser.add_argument('action_args', nargs='?', help="optional argument for finish: ApplicationID/ServiceID ", metavar='id')
 
-    args = parser.parse_args(args)
-    _args = vars(args)
-
-    assert 'StationID' in _args
-    stationId = _args['StationID']
-    log.debug("StationID: '%s'", stationId)
-
-    action_args = None
-    if 'action_args' in _args:
-        action_args = _args['action_args']
-
-    cmd_action(parser, context, args, stationId, 'finish', action_args)
+    cmd_action(parser, context, args, Action=action, appIdRequired=True)
 
     log.debug("Done")
     return args
 
 
-@subcmd('app_switch', help='switch top application on a station')
-def cmd_app_switch(parser, context, args):
-    log.debug("Running '{}'" . format('cmd_app_switch'))
+@subcmd('app_change', help="change station's top application")
+def cmd_app_change(parser, context, args):
+    action = 'app_change'
+    log.debug("Running 'cmd_{}'" . format(action))
 
     group = parser.add_mutually_exclusive_group()
 
@@ -562,60 +552,31 @@ def cmd_app_switch(parser, context, args):
                          help="specify input dump file")
 
     parser.add_argument('StationID', help="specify the station")
-    parser.add_argument('action_args', nargs=1, help="new top Application", metavar='ApplicationID')
-    parser.add_argument('other_args', nargs='?', help="optional arguments for 'app_switch'", metavar='args')
+    parser.add_argument('ApplicationID', help="new top Application")
+#    parser.add_argument('other_args', nargs='?', help="optional arguments for 'app_change'", metavar='args')
 
-    args = parser.parse_args(args)
-    _args = vars(args)
-
-    assert 'StationID' in _args
-    stationId = _args['StationID']
-    log.debug("StationID: '%s'", stationId)
-
-    action_args = None
-    if 'action_args' in _args:
-        action_args = _args['action_args']
-
-    cmd_action(parser, context, args, stationId, 'app_switch', action_args)
+    cmd_action(parser, context, args, Action=action, appIdRequired=True)
 
     log.debug("Done")
     return args
 
 
 
-# @subcmd('station_action', help=argparse.SUPPRESS)
-def cmd_station_action(parser, context, args):
-    log.debug("Running '{}'" . format('station_action'))
+# @subcmd('run_action', help='run specified action on given station with given arguments...')
+def cmd_run_action(parser, context, args):
+    log.debug("Running 'cmd_{}'" . format('run_action'))
 
     group = parser.add_mutually_exclusive_group()
-
     group.add_argument('--configfile', required=False,
                          help="specify input .YAML file (default: 'Hilbert.yml')")
     group.add_argument('--configdump', required=False,
                          help="specify input dump file")
-
-    #    parser.add_argument('-a', '--action', required=True, help="specify the action")
 
     parser.add_argument('Action', help="specify the action")
     parser.add_argument('StationID', help="specify the station")
+    parser.add_argument('action_args', nargs='?', help="optional arguments for the action", metavar='args')
 
-    parser.add_argument('-g', '--action_args', required=False, help="specify the action arguments")
-
-    args = parser.parse_args(args)
-    _args = vars(args)
-
-    assert 'StationID' in _args
-    stationId = _args['StationID']
-    log.debug("StationID: '%s'", stationId)
-
-    assert 'Action' in _args
-    action = _args['Action']
-
-    action_args = None
-    if 'action_args' in _args:
-        action_args = _args['action_args']
-
-    cmd_action(parser, context, args, stationId, action, action_args)
+    cmd_action(parser, context, args, Action=None, appIdRequired=False)
 
     log.debug("Done")
     return args
@@ -630,14 +591,7 @@ class PedanticModeAction(argparse.Action):
         PEDANTIC = True
         if PEDANTIC:
             log.debug("PEDANTIC mode is ON!")
-
-   #     print(self)
-  #      print(args)
- #       print(values)
-#        print(self.dest)
-
-        # setattr(args, self.dest, values)
-
+#        setattr(args, self.dest, values)
 
 def _version():
     import platform
@@ -647,11 +601,13 @@ def _version():
 
     log.debug("Running '{}'".format('version'))
 
-    log.debug("Python           version: {}".format(platform.python_version()))
-    log.debug("ruamel.yaml      version: {}".format(yaml.__version__))
-    log.debug("dill             version: {}".format(dill.__version__))
-    log.debug("semantic_version version: {}".format(semantic_version.__version__))
-    log.info("Hilbert Config API {}".format(Hilbert(None).get_api_version()))
+    log.debug("Python (platform) version: {}".format(platform.python_version()))
+    log.debug("ruamel.yaml       version: {}".format(yaml.__version__))
+    log.debug("dill              version: {}".format(dill.__version__))
+    log.debug("logging           version: {}".format(logging.__version__))
+    log.debug("semantic_version  version: {}".format(semantic_version.__version__))
+
+    print("Hilbert Configuration API {}".format(Hilbert(None).get_api_version()))
 
     log.debug("Done")
 
@@ -683,7 +639,8 @@ def main():
     # %(created)f         Time when the LogRecord was created (time.time() return value)
     # %(asctime)s         Textual time when the LogRecord was created
     # %(msecs)d           Millisecond portion of the creation time
-    # %(relativeCreated)d Time in milliseconds when the LogRecord was created, relative to the time the logging module was loaded
+    # %(relativeCreated)d Time in milliseconds when the LogRecord was created,
+    #                     relative to the time the logging module was loaded
     #                     (typically at application startup time)
     # %(thread)d          Thread ID (if available)
     # %(threadName)s      Thread name (if available)
