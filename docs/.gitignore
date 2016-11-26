@@ -1,0 +1,4 @@
+doxy/
+epydoc/
+pep8.report.txt
+pylint_*.html

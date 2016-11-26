@@ -8,8 +8,6 @@
 
 from __future__ import absolute_import, print_function, unicode_literals
 
-assert __name__ == "__main__"
-
 import sys
 from os import path
 DIR=path.dirname(path.dirname(path.abspath(__file__)))
@@ -669,4 +667,5 @@ def main():
     args = handler.run(_argv)
     handler.exit(status=0)
 
-main()
+if __name__ == "__main__":
+    main()
