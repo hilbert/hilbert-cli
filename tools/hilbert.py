@@ -495,7 +495,7 @@ def cmd_cfg_deploy(parser, context, args):
     return args
 
 
-@subcmd('app_start', help='start an application on a station')
+# @subcmd('app_start', help='start an application on a station')
 def cmd_app_start(parser, context, args):
     action = 'app_start'
     log.debug("Running 'cmd_{}'" . format(action))
@@ -516,8 +516,7 @@ def cmd_app_start(parser, context, args):
     log.debug("Done")
     return args
 
-
-@subcmd('app_stop', help='stop an application on a station')
+# @subcmd('app_stop', help='stop the current application on a station')
 def cmd_app_stop(parser, context, args):
     action = 'app_stop'
     log.debug("Running 'cmd_{}'" . format(action))
@@ -530,7 +529,7 @@ def cmd_app_stop(parser, context, args):
                          help="specify input dump file")
 
     parser.add_argument('StationID', help="specify the station")
-    parser.add_argument('ApplicationID', help="specify the application to stop")
+#    parser.add_argument('ApplicationID', help="specify the application to stop")
 #    parser.add_argument('action_args', nargs='?', help="optional argument for finish: ApplicationID/ServiceID ", metavar='id')
 
     cmd_action(parser, context, args, Action=action, appIdRequired=True)
