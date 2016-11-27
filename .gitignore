@@ -6,3 +6,6 @@ lastapp.cfg
 *.pyc
 __pycache__
 .idea
+.tox/
+.cache/
+MANIFEST

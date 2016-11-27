@@ -162,8 +162,6 @@ class SubCommandHandler(argparse.ArgumentParser):
 
         parser._logging_handler_done = True
 
-
-
     def parse_args(self, argv=None):
         """
         Works the same as `argparse.ArgumentParser.parse_args`.
