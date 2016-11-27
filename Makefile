@@ -12,9 +12,12 @@ usage: # Print Targets
 	@grep '^[^#[:space:]].*:' Makefile
 
 check: # Run the tests
-	/bin/bash -c 'cd tests/ && py.test -v test_*.py'
-	/bin/bash -c 'cd tests/ && py.test-3 -v test_*.py'
-
+	/bin/bash -c 'py.test -v -l --tb=auto --full-trace --color=auto tests/test_*.py'
+	/bin/bash -c 'py.test-3 -v -l --tb=auto --full-trace --color=auto tests/test_*.py'
+	
+tox: tox.ini setup.py # Run clean testing via tox
+	tox
+	
 pep8: ${SRC} # Check for PEP8 compliance
 	pep8 --first --show-source --show-pep8 --statistics --max-line-length=100 --format=pylint ${SRC} > docs/pep8.report.txt 2>&1 || echo $?
 
