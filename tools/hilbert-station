@@ -1,24 +1,156 @@
 #! /usr/bin/env bash
 
 TOOL=$(basename "$0")
+LOGLEVEL=0
 
-CONFIG_DIR="${CONFIG_DIR:-${HOME}/.config/${TOOL}}"
-mkdir -p "${CONFIG_DIR}"
+HILBERT_CONFIG_DIR="${HILBERT_CONFIG_DIR:-${HOME}/.config/${TOOL}}"
+mkdir -p "${HILBERT_CONFIG_DIR}"
 
 CLI_VERSION_ID="\$Id$"
 
-echo "DEBUG [${TOOL}]: This tool:  [$0]"
-echo "DEBUG [${TOOL}]: Version:    [${CLI_VERSION_ID}]"
+usage () {
+      echo "${TOOL} - Station part for Linux systems"
+      echo "Usage: "
+      echo "    ${TOOL} -h                      Display this help message."
+      echo "    ${TOOL} -v                      Increase verbosity"
+      echo "    ${TOOL} -q                      Decrease verbosity"
+      echo "    ${TOOL} -p                      Pedantic mode"
+      echo "    ${TOOL} -V                      Display version info."
+      echo "    ${TOOL} start                   Start everything"
+      echo "    ${TOOL} stop                    Stop everything and shutdown"
+      echo "    ${TOOL} prepare <new_cfg>       Install a new local configuration"
+      echo "    ${TOOL} app_switch <app_id>     Change the currently running top application to specified one"
+      echo "    ${TOOL} dm_start <vm_name>      Start a VM using docker-machine"  # on the VM host system
+}
 
-echo "DEBUG [${TOOL}]: Workdir:    [${PWD}]"
-echo "DEBUG [${TOOL}]: Config Dir: [${CONFIG_DIR}]"
-echo "DEBUG [${TOOL}]: Configs:    ($(ls ${CONFIG_DIR} | xargs))"
+version () {
+    echo "DEBUG [${TOOL}]: This tool:  [$0]"
+    echo "DEBUG [${TOOL}]: Version:    [${CLI_VERSION_ID}]"
+
+    echo "DEBUG [${TOOL}]: Workdir:    [${PWD}]"
+    echo "DEBUG [${TOOL}]: Config Dir: [${HILBERT_CONFIG_DIR}]"
+    echo "DEBUG [${TOOL}]: Configs:    ($(ls ${HILBERT_CONFIG_DIR} | xargs))"
+
+    echo "DEBUG [${TOOL}]: Host:       [`hostname`]"
+    echo "DEBUG [${TOOL}]: System:     [`uname -a`]"
+}
 
 
-echo "DEBUG [${TOOL}]: Host:       [`hostname`]"
-echo "DEBUG [${TOOL}]: System:     [`uname -a`]"
+cmd_prepare () {
+    subcommand="prepare"
+    arg=$1; shift
+
+    if [[ -z ${arg} ]]; then
+      echo "ERROR [${TOOL}]: Wrong argument '${arg}' to '${subcommand}'!" 1>&2
+      usage
+      exit 1
+    fi
+
+    echo "ERROR [${TOOL}]: Sorry '${subcommand} ${arg} [$*]' not yet implemented!"
+    exit 2
+}
+cmd_app_change () {
+    subcommand="app_change"
+    arg=$1; shift
+
+    if [[ -z ${arg} ]]; then
+      echo "ERROR [${TOOL}]: Wrong argument '${arg}' to '${subcommand}'!" 1>&2
+      usage
+      exit 1
+    fi
+
+    echo "ERROR [${TOOL}]: Sorry '${subcommand} ${arg} [$*]' not yet implemented!"
+    exit 2
+}
+
+cmd_dm_start () {
+    subcommand="dm_start"
+    arg=$1; shift
+
+    if [[ -z ${arg} ]]; then
+      echo "ERROR [${TOOL}]: Wrong argument '${arg}' to '${subcommand}'!" 1>&2
+      usage
+      exit 1
+    fi
+
+    echo "ERROR [${TOOL}]: Sorry '${subcommand} ${arg} [$*]' not yet implemented!"
+    exit 2
+}
+
+cmd_start () {
+    subcommand="start"
+    echo "ERROR [${TOOL}]: Sorry '$subcommand [$*]' not yet implemented!"
+    exit 2
+}
+
+cmd_stop () {
+    subcommand="stop"
+    echo "ERROR [${TOOL}]: Sorry '$subcommand [$*]' not yet implemented!"
+    exit 2
+}
+
 
 echo "DEBUG [${TOOL}]: Input args: ($@)"
-echo "ERROR [${TOOL}]: not yet implemented!"
-exit 2
+
+while getopts ":hqvpV" opt; do
+  case ${opt} in
+    h )
+      usage
+      exit 0
+      ;;
+    V )
+      version
+      exit 0
+      ;;
+    p )
+      set -e
+      ;;
+    v )
+      set -v
+      set -x
+      ;;
+    q )
+      set +v
+      set +x
+      ;;
+   \? )
+     echo "Invalid Option: -$OPTARG" 1>&2
+     exit 1
+     ;;
+  esac
+done
+
+shift $((OPTIND -1))
+subcommand=$1; shift
+
+echo "DEBUG [${TOOL}]: subcommand to run: '$subcommand'"
+
+case "$subcommand" in
+  prepare)
+    cmd_prepare "$@"
+    ;;
+  app_switch|app_change)
+    cmd_app_change "$@"
+    ;;
+  dm_start)
+    cmd_dm_start "$@"
+    ;;
+  stop)
+    cmd_stop "$@"
+    ;;
+  start)
+    cmd_start "$@"
+    ;;
+esac
+
+if [[ -z "${subcommand}" ]]; then
+    usage
+else
+    echo "ERROR [${TOOL}]: Invalid sub-command: '$subcommand'" 1>&2
+    exit 1
+fi
+
+echo "DEBUG [${TOOL}]: Done"
+
+exit 0
 
