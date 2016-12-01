@@ -23,12 +23,18 @@ import sys
 import os
 import re, tokenize
 import tempfile
+import subprocess, shlex
+# import paramiko
+
 
 import pprint as PP
 from abc import *
 
 ###############################################################
+logging.basicConfig(format='%(levelname)s  [%(filename)s:%(lineno)d]: %(message)s', level=logging.DEBUG)
 log = logging.getLogger(__name__)
+log.setLevel(logging.DEBUG)
+
 _pp = PP.PrettyPrinter(indent=4)
 
 ###############################################################
@@ -81,10 +87,44 @@ elif PY2:
     def is_valid_id(k):
         return re.match(tokenize.Name + '$', k)
 
+
 ###############################################################
 def pprint(cfg):
     global _pp
     _pp.pprint(cfg)
+
+
+###############################################################
+def _execute(_cmd, timeout=None, shell=False, stdout=None, stderr=None):  # True??? Try several times? Overall timeout?
+    global PEDANTIC
+    __cmd = ' '.join(_cmd)
+    # stdout = tmp, stderr = open("/dev/null", 'w')
+    # stdout=open("/dev/null", 'w'), stderr=open("/dev/null", 'w'))
+    log.debug("Executing shell command: '{}'...".format(__cmd))
+
+    retcode = None
+    with subprocess.Popen(_cmd, shell=shell, stdout=stdout, stderr=stderr) as p:
+        try:
+            retcode = p.wait(timeout=timeout)  # ?
+        except:
+            p.kill()
+            p.wait()
+            log.exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
+            raise
+
+    assert retcode is not None
+    log.debug("Exit code: '{}'".format(retcode))
+
+    if retcode:
+        if not PEDANTIC:  # Bad error code [{0}] while
+            log.warning("Error exit code {0}, while executing '{1}'!".format(retcode, __cmd))
+        else:  # Pedantic mode?
+            log.error("Error exit code {0}, while executing '{1}'!".format(retcode, __cmd))
+            raise Exception("Error exit code {0}, while executing '{1}'".format(retcode, __cmd))
+    else:
+        log.debug("Successful command '{}' execution!".format(__cmd))
+
+    return retcode
 
 
 ###############################################################
@@ -236,8 +276,30 @@ class BaseValidator(AbstractValidator):
 
         self.__API_VERSION_ID = "$Id$"
 
-    def get_parent(self):
-        return self._parent
+    def get_parent(self, cls=None):
+        if cls is None:
+            return self._parent
+
+        if self._parent is None:
+            return None
+
+        _p = self._parent
+        while isinstance(_p, BaseValidator):
+            if isinstance(_p, cls):
+                break
+            _t = _p._parent
+            if _t is None:
+                break
+            _p = _t
+
+        assert _p is not None
+        if isinstance(_p, cls):
+            return _p
+
+        log.error("Sorry: could not find parent of specified class ({0})!"
+                  "Found top is of type: {1}".format(cls, type(_p)))
+        return None
+
 
     def get_api_version(self):
         return self.__API_VERSION_ID
@@ -712,6 +774,8 @@ class URI(BaseValidator):
 
     def validate(self, d):
         """check whether data is a valid URI"""
+        global PEDANTIC
+
         if d is None:
             d = self._default_input_data
 
@@ -842,8 +906,56 @@ class AutoDetectionScript(StringValidator):
         super(AutoDetectionScript, self).__init__(*args, **kwargs)
         self._default_data = ''
 
+
+    def check_script(self, script):
+        global PEDANTIC
+
+        assert script is not None
+
+        _ret = True
+        log.debug('Checking auto-detection script: {}'.format(script))
+
+        # NOTE: trying to check the BASH script: shellcheck & bash -n 'string':
+        fd, path = tempfile.mkstemp()
+        try:
+            with os.fdopen(fd, 'w') as tmp:
+                tmp.write(script)
+
+            _cmd = ["bash", "-n", path]
+            try:
+                # NOTE: Check for valid bash script
+                retcode = _execute(_cmd)
+            except:
+                log.exception("Error while running '{}' to check auto-detection script!".format(' '.join(_cmd)))
+                return False  #                if PEDANTIC:  # TODO: add a special switch?
+
+            if retcode != 0:
+                log.error("Error while running '{0}' to check auto-detection script: {1}!".format(' '.join(_cmd), retcode))
+                return False
+
+            # NOTE: additionall tool: shellcheck (haskell!)
+            # FIXME: what if this tool is missing!? TODO: Check for it once!
+            _cmd = ["shellcheck", "-s", "bash", path]
+            try:
+                # NOTE: Check for valid bash script
+                retcode = _execute(_cmd)
+            except:
+                log.exception("Error while running '{}' to check auto-detection script!".format(' '.join(_cmd)))
+                return False
+
+            if retcode != 0:
+                log.error("Error while running '{0}' to check auto-detection script: {1}!".format(' '.join(_cmd), retcode))
+                return False
+
+        finally:
+            os.remove(path)
+
+        return True
+
     def validate(self, d):
         """check whether data is a valid script"""
+
+        global PEDANTIC
 
         if d is None:
             d = self._default_data
@@ -860,41 +972,18 @@ class AutoDetectionScript(StringValidator):
                 self.set_data(script)
                 return True
         except:
-            log.error("Wrong input to AutoDetectionScript::validate: {}". format(d))
+            log.exception("Wrong input to AutoDetectionScript::validate: {}". format(d))
             return False
 
 
-        # NOTE: trying to check the BASH script: shellcheck & bash -n 'string':
-        fd, path = tempfile.mkstemp()
-        try:
-            with os.fdopen(fd, 'w') as tmp:
-                tmp.write(script)
+        if not self.check_script(script):
+            if PEDANTIC:
+                log.error("Bad script: {0}".format(script))
+                return False
+            else:
+                log.warning("Bad script: {0}".format(script))
 
-            _cmd = ["bash", "-n", path]
-            try:
-                # NOTE: Check for valid bash script
-                subprocess.check_call(_cmd)  # stdout=open("/dev/null", 'w'), stderr=open("/dev/null", 'w'))
-                _ret = True
-            except:
-                print("WARNING: error running 'bash -n' to check '{0}' (exit code: {1})!" . format(text_type(script), sys.exc_info()))
-                _ret = not PEDANTIC # TODO: add a special switch?
-
-            # NOTE: additionall tool: shellcheck (haskell!)
-            _cmd = ["shellcheck", "-s", "bash", path]
-            try:
-                # NOTE: Check for valid bash script
-                subprocess.check_call(_cmd)  # stdout=open("/dev/null", 'w'), stderr=open("/dev/null", 'w'))
-                _ret = True
-            except:
-                print("WARNING: error running 'shellcheck' to check '{0}' (exit code: {1})!".format(text_type(script), sys.exc_info()))
-                _ret = not PEDANTIC  # TODO: add a special switch?
-
-        finally:
-            os.remove(path)
-
-        if _ret:
-            self.set_data(script)
-
+        self.set_data(script)
         return True
 
 
@@ -951,9 +1040,6 @@ class Icon(URI):
 
 
 ###############################################################
-import subprocess  # , shlex
-# import paramiko
-
 class HostAddress(StringValidator):
     """SSH alias"""
 
@@ -963,43 +1049,118 @@ class HostAddress(StringValidator):
 
     def validate(self, d):
         """check whether data is a valid ssh alias?"""
+        global PEDANTIC
+
         if d is None:
             d = self._default_data
 
-        _h = StringValidator.parse(d, parent=self)
+        _h = StringValidator.parse(d, parent=self, parsed_result_is_data=True)
 
-        if not self.check_ssh_alias(_h):
-            if PEDANTIC:
+        if _h.startswith("'") and _h.endswith("'"):
+            _h = _h[1:-1]
+        if _h.startswith('"') and _h.endswith('"'):
+            _h = _h[1:-1]
+
+        if PEDANTIC:
+            if not self.check_ssh_alias(_h, shell=False, timeout=2):
                 return False
 
         self.set_data(_h)
         return True
 
-    def recheck(self):
-        return self.check_ssh_alias(self.set_data())
+    def get_ip_address(self):
+        pass
 
-    ## SSH call?
+    def get_address(self):
+        return self.get_data()
+
+    def recheck(self):
+        return self.check_ssh_alias(self.get_address())
+
+    # TODO: check/use SSH/SCP calls!
+    def scp(self, source, target, **kwargs):
+        global PEDANTIC
+
+        assert self.recheck()
+        _h = self.get_address()  # 'jabberwocky' #
+
+        _cmd = shlex.split("scp -q -F {3} {0} {1}:{2}".format(source, _h, target, os.path.join(os.environ['HOME'], ".ssh", "config")))
+        __cmd = ' '.join(_cmd)
+
+        #            client = paramiko.SSHClient()
+        #            client.load_system_host_keys()
+        try:
+            retcode = _execute(_cmd, **kwargs)
+        except:
+            log.exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
+            if not PEDANTIC:
+                return
+            raise
+
+        assert retcode is not None
+        if not retcode:
+            log.debug("Command ({}) execution success!".format(__cmd))
+            return
+        else:
+            log.error("Could not run scp command: '{0}'! Return code: {1}".format(__cmd, retcode))
+            if PEDANTIC:
+                raise Exception("Could not run scp command: '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
+
+    def ssh(self, cmd, **kwargs):
+        global PEDANTIC
+
+        assert self.recheck()
+        _h = self.get_address()  # 'jabberwocky'
+
+        # TODO: maybe respect SSH Settings for the parent station!?
+
+        _cmd = shlex.split("ssh -q -F {2} {0} {1}".format(_h, ' '.join(cmd), os.path.join(os.environ['HOME'], ".ssh", "config")))
+        __cmd = ' '.join(_cmd)
+
+        #            client = paramiko.SSHClient()
+        #            client.load_system_host_keys()
+        try:
+            retcode = _execute(_cmd, **kwargs)
+        except:
+            log.exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
+            raise
+
+        assert retcode is not None
+        if not retcode:
+            log.debug("Command ({}) execution success!".format(__cmd))
+            return
+        else:
+            log.error("Could not run remote ssh command: '{0}'! Return code: {1}".format(__cmd, retcode))
+#            if PEDANTIC:
+            raise Exception("Could not run remote ssh command: '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
+
 
     @classmethod
-    def check_ssh_alias(cls, _h):
+    def check_ssh_alias(cls, _h, **kwargs):
         """Check for ssh alias"""
+        global PEDANTIC
 
         log.debug("Checking ssh alias: '{0}'...".format(text_type(_h)))
         try:
 #            client = paramiko.SSHClient()
 #            client.load_system_host_keys()
 
-            _cmd = ["ssh", "-o", "ConnectTimeout=1", _h, "exit 0"]
-            subprocess.check_call(_cmd, stdout=open("/dev/null", 'w')) # , stderr=open("/dev/null", 'w')
-            log.debug("Ssh alias '{0}' is functional!" . format(text_type(_h)))
+            _cmd = ["ssh", "-q", "-F", os.path.join(os.environ['HOME'], ".ssh", "config"), "-o", "ConnectTimeout=1", _h, "exit 0"]
+            retcode = _execute(_cmd, **kwargs)  # , stdout=open("/dev/null", 'w'), stderr=open("/dev/null", 'w')
 
-            return True
-        except subprocess.CalledProcessError as err:
-            log.warning("Non-functional ssh alias: '{0}' => exit code: {1}!" . format(text_type(_h), err.returncode))
-        except: # Any other exception is wrong...
-            log.warning("Non-functional ssh alias: '{0}'. Moreover: Unexpected error: {1}" . format(text_type(_h), sys.exc_info()))
+            if retcode:
+                log.warning("Non-functional ssh alias: '{0}' => exit code: {1}!".format(text_type(_h), retcode))
+            else:
+                log.debug("Ssh alias '{0}' is functional!" . format(text_type(_h)))
 
-        return False
+            return retcode == 0
+        except:
+            log.exception("Non-functional ssh alias: '{0}'. Moreover: Unexpected error: {1}" . format(text_type(_h), sys.exc_info()))
+            if PEDANTIC:
+                raise
+
+            return False
+
 
 ###############################################################
 class HostMACAddress(StringValidator):
@@ -1082,7 +1243,7 @@ class VariadicRecordWrapper(BaseValidator):
         assert self._default_type is not None
         assert self._default_type in self._types
 
-        _rule = self._types[self._default_type] # Version dependent!
+        _rule = self._types[self._default_type]  # Version dependent!
         assert _rule is not None
 
         assert self._type_cls is not None
@@ -1094,7 +1255,7 @@ class VariadicRecordWrapper(BaseValidator):
 
         t = None
         try:
-            t = self._type_cls.parse(d[self._type_tag], parent=self.get_parent())  # parsed_result_is_data=True?
+            t = self._type_cls.parse(d[self._type_tag], parent=self.get_parent(), parsed_result_is_data=True)
         except:
             log.exception("Wrong type data: {}".format(d[self._type_tag]))
             return False
@@ -1104,7 +1265,7 @@ class VariadicRecordWrapper(BaseValidator):
             _key_error(self._type_tag, t, _lc, "ERROR: unsupported/wrong variadic type: '{}'")
             return False
 
-        tt = _rule[t](self)
+        tt = _rule[t](parent=self.get_parent())
 
         if not tt.validate(d):
             _lc = d.lc.key(self._type_tag)
@@ -1123,11 +1284,12 @@ class StationPowerOnMethodWrapper(VariadicRecordWrapper):
         super(StationPowerOnMethodWrapper, self).__init__(*args, **kwargs)
 
         T = StationPowerOnMethodType
-        self._type_cls = T
-        _wol = {T.parse("WOL"): WOL, T.parse("DockerMachine"): DockerMachine}
 
-        self._default_type = "default_WOL_poweron_method_wrapper"
-        self._types[self._default_type] = _wol
+        self._type_cls = T
+        _wol_dm = {T.parse("WOL", parsed_result_is_data=True): WOL, T.parse("DockerMachine", parsed_result_is_data=True): DockerMachine}
+
+        self._default_type = "default_poweron_wrapper"
+        self._types[self._default_type] = _wol_dm
 
 
 ###############################################################
@@ -1139,7 +1301,7 @@ class ServiceWrapper(VariadicRecordWrapper):
 
         T = ServiceType
         self._type_cls = T
-        _dc = {T.parse("compose"): DockerComposeService}
+        _dc = {T.parse("compose", parsed_result_is_data=True): DockerComposeService}
 
         self._default_type = "default_docker_compose_service_wrapper"
         self._types[self._default_type] = _dc
@@ -1154,7 +1316,7 @@ class ApplicationWrapper(ServiceWrapper):
 
         t = ServiceType  # NOTE: same for docker-compose Services and Applications!
         self._type_cls = t
-        _dc = {t.parse("compose"): DockerComposeApplication}
+        _dc = {t.parse("compose", parsed_result_is_data=True): DockerComposeApplication}
 
         self._default_type = "default_docker_compose_application_wrapper"
         self._types[self._default_type] = _dc
@@ -1164,57 +1326,157 @@ class ApplicationWrapper(ServiceWrapper):
 class DockerMachine(BaseRecordValidator):
     """DockerMachine :: StationPowerOnMethod"""
 
+    # _DM = 'docker-machine'
+    _HILBERT_STATION = '~/bin/hilbert-station'  # TODO: look at station for this..?
+
     def __init__(self, *args, **kwargs):
         super(DockerMachine, self).__init__(*args, **kwargs)
 
         self._type_tag = text_type('type')
+        self._vm_host_address_tag = text_type('vm_host_address')
+        self._vm_name_tag = text_type('vm_name')
 
         self._default_type = 'DockerMachine'
 
         DM_rule = {
             self._type_tag: (True, StationPowerOnMethodType),  # Mandatory!
             text_type('auto_turnon'): (False, AutoTurnon),
-            text_type('vm_name'): (True, StringValidator),
-            text_type('vm_host_address'): (True, HostAddress)
+            self._vm_name_tag: (True, StringValidator),
+            self._vm_host_address_tag: (True, HostAddress)
         }
 
         self._types = {self._default_type: DM_rule}  # ! NOTE: AMT - maybe later...
 
+    def get_vm_name(self):
+        _d = self.get_data()
+        assert _d is not None
+        _a = _d.get(self._vm_name_tag, None)
+        if (_a is None) or (not bool(_a)):
+            log.error('Missing vm_name!')
+            raise Exception('Missing vm_name!')
 
-    def run_action(self, action, action_args):
-        assert action == 'poweron'
+        if _a.startswith("'") and _a.endswith("'"):
+            _a = _a[1:-1]
+        if _a.startswith('"') and _a.endswith('"'):
+            _a = _a[1:-1]
+
+        return _a
+
+
+    def get_vm_host_address(self):
+        _d = self.get_data()
+        assert _d is not None
+        _a = _d.get(self._vm_host_address_tag, None)
+        if (_a is None) or (not bool(_a)):
+            log.error('Missing vm_host_address!')
+            raise Exception('Missing vm_host_address!')
+
+        return _a
+
+    def start(self):  # , action, action_args):
+        global PEDANTIC
+
+        _a = self.get_vm_host_address()
+        assert _a is not None
+        assert isinstance(_a, HostAddress)
+
+        _n = self.get_vm_name()
+
+        # DISPLAY =:0
+        _cmd = [self._HILBERT_STATION, 'dm_start', _n]  # self._DM
+        try:
+            _ret = _a.ssh(_cmd, shell=True)
+        except:
+            s = "Could not power-on virtual station {0} (at {1})".format(_n, _a)
+            if not PEDANTIC:
+                log.warning(s)
+                return False
+            else:
+                log.exception(s)
+                raise
+
+        return _ret
 
         # process call: ssh to vm_host + docker-machione start vm_id
-        raise NotImplementedError("Running 'docker-machine start' action is not supported yet... Sorry!")
+#        raise NotImplementedError("Running 'docker-machine start' action is not supported yet... Sorry!")
 
 
 class WOL(BaseRecordValidator):
     """WOL :: StationPowerOnMethod"""
+
+    _WOL = 'wakeonlan'
 
     def __init__(self, *args, **kwargs):
         super(WOL, self).__init__(*args, **kwargs)
 
         self._type_tag = text_type('type')
         self._default_type = 'WOL'
+        self._MAC_tag = text_type('mac')
 
         WOL_rule = {
             self._type_tag: (True, StationPowerOnMethodType),  # Mandatory!
             text_type('auto_turnon'): (False, AutoTurnon),
-            text_type('mac'): (True, HostMACAddress)
+            self._MAC_tag: (True, HostMACAddress)
         }
 
         self._types = {self._default_type: WOL_rule}
 
-    def run_action(self, action, action_args):
-        assert action == 'poweron'
+    def get_MAC(self):
+        _d = self.get_data()
+        assert _d is not None
+        _MAC = _d.get(self._MAC_tag, None)
+        assert _MAC is not None
+        assert _MAC != ''
+        return _MAC
 
-        # process call: wakeonlan + mac + IP address (get from parent's ssh alias!?)
-        raise NotImplementedError("Running 'WOL' action is not supported yet... Sorry!")
+
+
+    def start(self):  # , action, action_args):
+        global PEDANTIC
+
+        _address = None
+        _parent = self.get_parent(cls=Station)
+
+        if _parent is not None:
+            if isinstance(_parent, Station):
+                _address = _parent.get_address()
+                assert _address is not None
+                assert isinstance(_address, HostAddress)
+                _address = _address.get_address()
+
+        _MAC = self.get_MAC()
+
+        if (_address is None) or (_address == ''):
+            log.warning("Sorry: could not get station's address for this WOL MethodObject!")
+            _cmd = [self._WOL, _MAC]
+            if PEDANTIC:
+                raise Exception("Sorry: could not get station's address for this WOL MethodObject!")
+        else:
+            _cmd = [self._WOL, "-i", _address, _MAC]  # IP?
+
+        __cmd = ' '.join(_cmd)
+        try:
+            retcode = _execute(_cmd, shell=False)
+            assert retcode is not None
+            if not retcode:
+                log.debug("Command ({}) execution success!".format(__cmd))
+                return
+            else:
+                log.error("Could not poweron via '{0}'! Return code: {1}".format(__cmd, retcode))
+                if PEDANTIC:
+                    raise Exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
+        except:
+            log.exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
+            if not PEDANTIC:
+                return
+            raise
 
 
 ###############################################################
 class DockerComposeService(BaseRecordValidator):
     """DockerCompose :: Service data type"""
+
+    _DC = "docker-compose"
 
     def __init__(self, *args, **kwargs):
         super(DockerComposeService, self).__init__(*args, **kwargs)
@@ -1236,11 +1498,47 @@ class DockerComposeService(BaseRecordValidator):
 
         self._create_optional = True
 
+    def check_service(self, _f, _n):
+        global PEDANTIC
+
+        # TODO: Check the corresponding file for such a service -> Service in DockerService!
+        fd, path = tempfile.mkstemp()
+        try:
+            with os.fdopen(fd, 'w') as tmp:
+               _cmd = [self._DC, "-f", _f, "config"]  # TODO: use '--services'?
+               try:
+                   retcode = _execute(_cmd, shell=False, stdout=tmp, stderr=open("/dev/null", 'w'))
+               except:
+                   log.exception("Exception while running '{}'!".format(' '.join(_cmd)))
+                   return False
+#                   _ret = not PEDANTIC  # TODO: add a special switch?
+
+            if retcode:
+                return False
+
+            with open(path, 'r') as tmp:
+                dc = load_yaml(tmp)  # NOTE: loading external Docker-Compose's YML file using our validating loader!
+                ss = None
+                for k in dc['services']:
+                    if k == _n:
+                        ss = dc['services'][k]
+                        break
+
+                if ss is None:
+                    log.error("missing service/application '{}' in file '{}' !".format(_n, _f))
+                    return False
+        finally:
+            os.remove(path)
+
+        return True
+
     def validate(self, d):
+        global PEDANTIC
+
         if d is None:
             d = self._default_input_data
 
-        if not BaseRecordValidator.validate(self, d):
+        if not BaseRecordValidator.validate(self, d):  # TODO: use .parse?
             assert self.get_data() is None
             return False
 
@@ -1263,38 +1561,14 @@ class DockerComposeService(BaseRecordValidator):
             log.warning("Missing file with docker-compose configuration: '{0}'. Cannot check the service reference id: '{1}'" .format(_f, _n))
             return True
 
+        if not self.check_service(_f, _n):
+            if PEDANTIC:
+                log.error("Bad service {0} in {1}".format(_n, _f))
+                return False
+            else:
+                log.warning("Bad service {0} in {1}".format(_n, _f))
 
-        # TODO: Check the corresponding file for such a service -> Service in DockerService!
-
-        DC = "docker-compose"
-
-        fd, path = tempfile.mkstemp()
-        try:
-            with os.fdopen(fd, 'w') as tmp:
-               _cmd = [DC, "-f", _f, "config"]  # TODO: use '--services'?
-               try:
-                   subprocess.check_call(_cmd, stdout=tmp, stderr=open("/dev/null", 'w'))
-                   _ret = True
-               except:
-                   print("WARNING: error running '{}' to check '{}' (exit code: {})!".format(DC, _f, sys.exc_info()))
-                   _ret = not PEDANTIC  # TODO: add a special switch?
-
-            with open(path, 'r') as tmp:
-                dc = load_yaml(tmp)  # NOTE: loading external Docker-Compose's YML file using our validating loader!
-                ss = None
-                for k in dc['services']:
-                    if k == _n:
-                        ss = dc['services'][k]
-                        break
-
-                if ss is None:
-                    print("ERROR: missing service/application '{}' in file '{}' !".format(_n, _f))
-                    _ret = False
-        finally:
-#            print(path)
-            os.remove(path)
-
-        return _ret
+        return True  # _ret
 
 
 ###############################################################
@@ -1377,6 +1651,8 @@ class Station(BaseRecordValidator):  # Wrapper?
     _extends_tag = text_type('extends')
     _client_settings_tag = text_type('client_settings')
 
+    _HILBERT_STATION = '~/bin/hilbert-station'
+
     def __init__(self, *args, **kwargs):
         super(Station, self).__init__(*args, **kwargs)
 
@@ -1384,25 +1660,28 @@ class Station(BaseRecordValidator):  # Wrapper?
         self._ssh_options_tag = text_type('ssh_options')
         self._address_tag = text_type('address')
         self._ishidden_tag = text_type('hidden')
+        self._profile_tag = text_type('profile')
 
         self._default_type = "default_station"
         default_rule = {
-            self._extends_tag: (False, StationID),
+            Station._extends_tag: (False, StationID),
             text_type('name'): (True, BaseUIString),
             text_type('description'): (True, BaseUIString),
             text_type('icon'): (False, Icon),
-            text_type('profile'): (True, ProfileID),
+            self._profile_tag: (True, ProfileID),
             self._address_tag: (True, HostAddress),
             self._poweron_tag: (False, StationPowerOnMethodWrapper),  # !! variadic, PowerOnType...
             self._ssh_options_tag: (False, StationSSHOptions),  # !!! record: user, port, key, key_ref
             text_type('omd_tag'): (True, StationOMDTag),  # ! like ServiceType: e.g. agent. Q: Is this mandatory?
             self._ishidden_tag: (False, StationVisibility),  # Q: Is this mandatory?
-            self._client_settings_tag: (False, StationClientSettings)  # IDMap : (BaseID, BaseString)
+            Station._client_settings_tag: (False, StationClientSettings)  # IDMap : (BaseID, BaseString)
         }  # text_type('type'): (False, StationType), # TODO: ASAP!!!
 
         self._types = {self._default_type: default_rule}
 
         self._compatible_applications = None  # TODO: FIXME!
+
+        self._HILBERT_STATION = '~/bin/hilbert-station'
 
     def is_hidden(self):
         _d = self.get_data()
@@ -1415,43 +1694,173 @@ class Station(BaseRecordValidator):  # Wrapper?
 
         return _h
 
-    def get_address(self):
+    def get_profile(self):
+        _d = self.get_data()
+        assert _d is not None
+        _profile_id = _d.get(self._profile_tag, None)
+
+        assert _profile_id is not None
+        assert _profile_id != ''
+
+        _parent = self.get_parent(cls=Hilbert)
+        assert isinstance(_parent, Hilbert)
+
+        _profile = _parent.query('Profiles/{}/all' . format(_profile_id))
+        assert _profile is not None
+        assert isinstance(_profile, Profile)
+        return _profile
+
+    def get_address(self):  # TODO: IP?
+        _d = self.get_data()
+        assert _d is not None
+        _a = _d.get(self._address_tag, None)
+        if (_a is None) or (not bool(_a)):
+            log.error('Missing station address!')
+            raise Exception('Missing station address!')
+
+        assert isinstance(_a, HostAddress)
+
+        log.debug('HostAddress: {}'.format(_a))
+        return _a
+
+    def shutdown(self):
+        global PEDANTIC
+
+        _a = self.get_address()
+
+        assert _a is not None
+        assert isinstance(_a, HostAddress)
+
+        try:
+            _ret = _a.ssh([self._HILBERT_STATION, "stop"], shell=False)
+        except:
+            s = "Could not shutdown station {}".format(_a)
+            if not PEDANTIC:
+                log.warning(s)
+                return False
+            else:
+                log.exception(s)
+                raise
+
+        return _ret
+
+    def deploy(self):
+        global PEDANTIC
+
+
+        # TODO: get_client_settings()
+        _d = self.get_data()
+        _settings = _d.get(self._client_settings_tag, None)
+
+        if _settings is None:
+            if not PEDANTIC:
+                log.warning('Missing client settings for this station. Nothing to deploy!')
+            else:
+                log.error('Missing client settings for this station. Nothing to deploy!')
+                raise Exception('Missing client settings for this station. Nothing to deploy!')
+
+        if isinstance(_settings, BaseValidator):
+            _settings = _settings.get_data()
+
+        default_app_id = _settings.get('hilbert_station_default_application', None)
+        # check default_app_id!
+
+        _profile = self.get_profile()
+        if isinstance(_profile, BaseValidator):
+            _profile = _profile.get_data()
+
+        # All supported applications??!?
+        _services = _profile.get(text_type('services'), [])
+        assert _services is not None
+        if isinstance(_services, BaseValidator):
+            _services = _services.get_data()
+
+        assert isinstance(_services, list)
+
+        _a = self.get_address()
+
+        assert _a is not None
+        assert isinstance(_a, HostAddress)
+
+        fd, path = tempfile.mkstemp()
+        try:
+            with os.fdopen(fd, 'w') as tmp:
+                tmp.write("hilbert_station_profile_services=({})\n".format(' '.join(_services)))
+                for k in _settings:
+                    tmp.write("{0}='{1}'\n".format(k, str(_settings.get(k, ''))))
+
+#            _cmd = ["scp", path, "{0}:/tmp/{1}".format(_a, os.path.basename(path))]  # self._HILBERT_STATION, 'deploy'
+
+            try:
+                _a.scp(path, "/tmp/{}".format(os.path.basename(path)), shell=False)
+            except:
+                s = "Could not deploy new local settings to {}".format(_a)
+                if not PEDANTIC:
+                    log.warning(s)
+                    return False
+                else:
+                    log.exception(s)
+                    raise
+        finally:
+            os.remove(path)
+
+        _cmd = [self._HILBERT_STATION, "prepare", os.path.join("/tmp", os.path.basename(path))]
+        try:
+            _a.ssh(_cmd, shell=False)
+        except:
+            s = "Could not prepare the station using the new configuration file with {}".format(' '.join(_cmd))
+            if not PEDANTIC:
+                log.warning(s)
+                return False
+            else:
+                log.exception(s)
+                raise
+
+        #        ### see existing deploy.sh!?
+        # TODO: what about other external resources? docker-compose*.yml etc...?
+        # TODO: restart hilbert-station?
+
+#        raise NotImplementedError("Cannot deploy local configuration to this station!")
+
+#    def start_service(self, action_args):
+#        raise NotImplementedError("Cannot start a service/application on this station!")
+
+#    def finish_service(self, action_args):
+#        raise NotImplementedError("Cannot finish a service/application on this station!")
+
+    def app_switch(self, app_id):
+        global PEDANTIC
+
+        _a = self.get_address()
+
+        assert _a is not None
+        assert isinstance(_a, HostAddress)
+
+        try:
+            _ret = _a.ssh([self._HILBERT_STATION, "app_switch", app_id], shell=False)
+        except:
+            s = "Could not change top application on the station '{0}' to '{1}'".format(_a, app_id)
+            if not PEDANTIC:
+                log.warning(s)
+                return False
+            else:
+                log.exception(s)
+                raise
+
+        return _ret
+
+#        raise NotImplementedError("Cannot switch to a different application on this station!")
+
+    def poweron(self):
         _d = self.get_data()
         assert _d is not None
 
-        return _d.get(self._address_tag, None)
-
-    def shutdown(self, action_args):
-        ### ssh address subprocess
-        raise NotImplementedError("Cannot shutdown this station!")
-
-    def deploy(self, action_args):
-        ### see existing deploy.sh!?
-        raise NotImplementedError("Cannot deploy local configuration to this station!")
-
-    def start_service(self, action_args):
-        raise NotImplementedError("Cannot start a service/application on this station!")
-
-    def finish_service(self, action_args):
-        raise NotImplementedError("Cannot finish a service/application on this station!")
-
-    def app_switch(self, action_args):
-        raise NotImplementedError("Cannot switch an application on this station!")
-
-    def poweron(self, action_args):
-        _d = self.get_data()
-        assert _d is not None
-
-        if not self._poweron_tag in _d:
-            log.error("Cannot Power-On this station since the corresponding method is missing!")
-            raise NotImplementedError("Cannot Power-On this station!")
-
-        poweron = _d[self._poweron_tag]
+        poweron = _d.get(self._poweron_tag, None)
         if poweron is None:
-            log.error("Cannot Power-On this station since the corresponding method was not specified properly!")
-            raise NotImplementedError("Cannot Power-On this station!")
+            log.error("Missing/wrong Power-On Method configuration for this station!")
+            raise Exception("Missing/wrong Power-On Method configuration for this station!")
 
-        poweron.run_action('poweron', action_args)  # ????
+        poweron.start()  # , action_args????
 
     def run_action(self, action, action_args):
         """
@@ -1459,31 +1868,33 @@ class Station(BaseRecordValidator):  # Wrapper?
 
         :param action_args: arguments to the action
         :param action:
-                poweron <StationID> [<args>]
-                shutdown <StationID> [<args>]
-                deploy <StationID> [<args>]
-                start <StationID> [<ServiceID/ApplicationID>]
-                finish <StationID> [<ServiceID/ApplicationID>]
-                app_switch <StationID> <new ApplicationID>
+                start  (poweron)
+                stop  (shutdown)
+                cfg_deploy
+                app_change <ApplicationID>
+#                start [<ServiceID/ApplicationID>]
+#                finish [<ServiceID/ApplicationID>]
 
         :return: nothing.
         """
 
-        if action == 'poweron':
-            self.poweron(action_args)
-        elif action == 'shutdown':
-            self.shutdown(action_args)
-        elif action == 'deploy':
-            self.deploy(action_args)
-        elif action == 'start':
-            self.start_service(action_args)
-        elif action == 'finish':
-            self.finish_service(action_args)
-        elif action == 'app_switch':
-            self.app_switch(action_args)
+        if action not in ['start', 'stop', 'cfg_deploy', 'app_change']:
+            raise Exception("Running action '{0}({1})' is not supported!" . format(action, action_args))
 
         # Run 'ssh address hilbert-station action action_args'?!
-        raise NotImplementedError("Running action '{0} {1}' is not supported yet... Sorry!" . format(action, action_args))
+        if action == 'start':
+            self.poweron()  # action_args
+        elif action == 'cfg_deploy':
+            self.deploy()  # action_args
+        elif action == 'stop':
+            self.shutdown()  # action_args
+        elif action == 'app_change':
+            self.app_switch(action_args)  # ApplicationID
+
+#        elif action == 'start':
+#            self.start_service(action_args)
+#        elif action == 'finish':
+#            self.finish_service(action_args)
 
 
     def get_base(self):
