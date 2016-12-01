@@ -28,6 +28,9 @@ import argparse                        # NOQA
 import logging
 log = logging.getLogger(__name__)  #
 
+__CLI_VERSION_ID = "$Id$"
+
+
 #import traceback
 #def main_exception_handler(type, value, tb):
 #    log.exception("Uncaught exception! Type: {0}, Value: {1}, TB: {2}".format(type, value, traceback.format_tb(tb)))

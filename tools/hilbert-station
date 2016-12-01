@@ -1,0 +1,24 @@
+#! /usr/bin/env bash
+
+TOOL=$(basename "$0")
+
+CONFIG_DIR="${CONFIG_DIR:-${HOME}/.config/${TOOL}}"
+mkdir -p "${CONFIG_DIR}"
+
+CLI_VERSION_ID="\$Id$"
+
+echo "DEBUG [${TOOL}]: This tool:  [$0]"
+echo "DEBUG [${TOOL}]: Version:    [${CLI_VERSION_ID}]"
+
+echo "DEBUG [${TOOL}]: Workdir:    [${PWD}]"
+echo "DEBUG [${TOOL}]: Config Dir: [${CONFIG_DIR}]"
+echo "DEBUG [${TOOL}]: Configs:    ($(ls ${CONFIG_DIR} | xargs))"
+
+
+echo "DEBUG [${TOOL}]: Host:       [`hostname`]"
+echo "DEBUG [${TOOL}]: System:     [`uname -a`]"
+
+echo "DEBUG [${TOOL}]: Input args: ($@)"
+echo "ERROR [${TOOL}]: not yet implemented!"
+exit 2
+
