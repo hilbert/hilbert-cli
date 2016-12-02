@@ -161,3 +161,6 @@ port-deployment action: `prepare.sh StationID`
 
 * One can now add 'StationID' (by its fixed host-name or IP if static) to OMD (**local** URL: supernova.mfo.de/default) according to http://blog.unicsolution.com/2014/02/how-to-setup-omd-in-1-hour.html (section: Start Monitoring Target Hosts)
 
+
+## License
+This project is licensed under the [Apache v2 license](LICENSE). See also [Notice](NOTICE).
