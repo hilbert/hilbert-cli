@@ -153,7 +153,7 @@ def cmd_list(parser, context, args, obj):
     return cfg.query(obj)
 
 
-@subcmd('cfg_query', help='query some part of configuraton. possibly dump it to a file')
+@subcmd('cfg_query', help='query some part of configuration. possibly dump it to a file')
 def cmd_query(parser, context, args):
     log.debug("Running '{}'" . format('cfg_query'))
 

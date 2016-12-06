@@ -1,8 +1,5 @@
 #!/bin/sh
 
-set -v                                                                                                                                 
-set -x                                                                                                                                 
-
 unset DISPLAY
 
 while : 

@@ -1,14 +1,8 @@
 #!/bin/sh
 
-set -v
-set -x
-
 SELFDIR=`dirname "$0"`
 SELFDIR=`cd "$SELFDIR" && pwd`
 cd "${SELFDIR}/"
-
-### set -e
-## unset DISPLAY
 
 #! NOTE: cleanup all previously started containers:
 # docker ps -aq | xargs --no-run-if-empty docker rm -fv
@@ -18,18 +12,25 @@ if [ -r "./station.cfg" ]; then
     . "./station.cfg"
 fi
 
-if [ -r "./startup.cfg" ]; then
-    . "./startup.cfg"
-fi
-
-
 station_default_app="${station_default_app:-$default_app}"
 
+## TODO: FIXME: check stopped containers!
 if [ -r "/tmp/lastapp.cfg" ]; then
     . "/tmp/lastapp.cfg"
 else
     export current_app="${station_default_app}"
 fi
+
+#if hash ethtool 2>/dev/null; then
+#   ## TODO: FIXME: 'NET_IF'???
+#   for i in `LANG=C netstat -rn | awk '/^0.0.0.0/ {thif=substr($0,74); print thif;} /^default.*UG/ {thif=substr($0,65); print thif;}'`; 
+#   do
+##      echo "DEBUG: trying to enable WOL for interface: [$i]..."
+##      sudo -n -P ethtool -s "$i" wol g
+#      echo "DEBUG: checking WOL setting for interface: [$i]: "
+#      sudo -n -P ethtool "$i" | grep Wake-on
+#   done
+#fi
 
 
 if [ -r "./docker.cfg" ]; then

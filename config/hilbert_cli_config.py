@@ -318,7 +318,7 @@ class BaseValidator(AbstractValidator):
     def set_version(cls, v):
         """To be set once only for any Validator class!"""
         assert len(cls.__version) == 1
-        assert cls.__version[0] is None
+#        assert cls.__version[0] is None  # NOTE: bad for testing!
         cls.__version[0] = v
 
     @classmethod
@@ -344,6 +344,8 @@ class BaseValidator(AbstractValidator):
         :return:
         """
         self = cls(*args, **kwargs)
+
+        log.debug("{1}::parse( input type: {0} )".format(type(d), type(self)))
 
         if self.validate(d):  # NOTE: validate should not **explicitly** throw exceptions!!!
             if self._parsed_result_is_data:
@@ -609,7 +611,7 @@ class ScalarValidator(BaseValidator):
 
         if d is not None:
             if isinstance(d, (list, dict, tuple, set)):  # ! Check if data is not a container?
-                print("ERROR: value: '{}' is not a scalar value!!" . format(d))
+                log.error("value: '{}' is not a scalar value!!" . format(d))
                 return False
 
             if isinstance(d, string_types):
@@ -625,20 +627,20 @@ class StringValidator(ScalarValidator):
     def __init__(self, *args, **kwargs):
         super(StringValidator, self).__init__(*args, **kwargs)
 
-        self._default_data = ''
+        self._default_input_data = ''
 
     def validate(self, d):
         """check whether data is a valid string. Note: should not care about format version"""
 
         if d is None:
-            d = self._default_data
+            d = self._default_input_data
 
         assert d is not None
 
         s = ScalarValidator.parse(d, parent=self)
 
         if not isinstance(s, string_types):
-            print("ERROR: value: '{}' is not a string!!" . format(d))
+            log.error("value: '{}' is not a string!!" . format(d))
             return False
 
         self.set_data(text_type(d))
@@ -648,12 +650,13 @@ class StringValidator(ScalarValidator):
 ###############################################################
 class SemanticVersionValidator(BaseValidator):
     def __init__(self, *args, **kwargs):
-        partial = kwargs.pop('partial', False)
+        partial = kwargs.pop('partial', True)
 #        kwargs['parsed_result_is_data'] = kwargs.pop('parsed_result_is_data', False)
         super(SemanticVersionValidator, self).__init__(*args, **kwargs)
 
 #        self._parsed_result_is_data = False
         self._partial = partial
+        self._default_input_data = '0.0.0'
 
     def validate(self, d):
         """check the string data to be a valid semantic version"""
@@ -661,7 +664,19 @@ class SemanticVersionValidator(BaseValidator):
         if d is None:
             d = self._default_input_data
 
-        _t = StringValidator.parse(d, parent=self, parsed_result_is_data=True)
+        log.debug("{1}::validate( input type: {0} )".format(type(d), type(self)))
+#        log.debug("SemanticVersionValidator::validate( input data: {0} )".format(str(d)))
+
+        try:
+            _t = StringValidator.parse(d, parent=self, parsed_result_is_data=True)
+        except:
+            log.warning("Input is not a string: {}".format(d))
+            try:
+                _t = StringValidator.parse(str(d), parent=self, parsed_result_is_data=True)
+            except:
+                log.error("Input cannot be converted into a version string: {}".format(d))
+                return False
+
 
         # self.get_version(None) # ???
         _v = None
@@ -685,13 +700,13 @@ class BaseUIString(StringValidator):
     def __init__(self, *args, **kwargs):
         super(BaseUIString, self).__init__(*args, **kwargs)
 
-        self._default_data = None
+        self._default_input_data = None
 
     def validate(self, d):
         """check whether data is a valid (non-empty) string"""
 
         if d is None:
-            d = self._default_data
+            d = self._default_input_data
 
         if not super(BaseUIString, self).validate(d):
             self.set_data(None)
@@ -723,7 +738,7 @@ class BaseEnum(BaseValidator):  # TODO: Generalize to not only strings...?
         t = StringValidator.parse(d, parent=self, parsed_result_is_data=True)
 
         if not (t in self._enum_list): # check withing a list of possible string values
-            print("ERROR: string value: '{}' is not among known enum items!!".format(d))
+            log.error("string value: '{}' is not among known enum items!!".format(d))
             return False
 
         self.set_data(t)
@@ -737,7 +752,7 @@ class ServiceType(BaseEnum):  # Q: Is 'Service::type' mandatory? default: 'compo
 
         compose = text_type('compose')
         self._enum_list = [compose]  # NOTE: 'docker' and others may be possible later on
-        self._default_data = compose
+        self._default_input_data = compose
 
 
 ###############################################################
@@ -747,7 +762,7 @@ class StationOMDTag(BaseEnum):  # Q: Is 'Station::omd_tag' mandatory? default: '
 
         _v = text_type('standalone')
         self._enum_list = [text_type('agent'), text_type('windows'), _v]  # NOTE: possible values of omd_tag
-        self._default_data = _v
+        self._default_input_data = _v
 
 
 ###############################################################
@@ -759,7 +774,7 @@ class StationPowerOnMethodType(BaseEnum):  # Enum: [WOL], AMTvPRO, DockerMachine
         wol = text_type('WOL')
         # NOTE: the list of possible values of PowerOnMethod::type (will depend on format version)
         self._enum_list = [wol, text_type('DockerMachine')]  # NOTE: 'AMTvPRO' and others may be possible later on
-        self._default_data = wol
+        self._default_input_data = wol
 
 
 ###############################################################
@@ -789,7 +804,7 @@ class URI(BaseValidator):
             try:
                 urlopen(v).close()
             except:
-                print("WARNING: URL: '{}' is not accessible!".format(v))
+                log.warning("URL: '{}' is not accessible!".format(v))
                 _ret = not PEDANTIC
 
         # TODO: FIXME: base location should be the input file's dirname???
@@ -803,7 +818,7 @@ class URI(BaseValidator):
             self._type = text_type('dir')
 
         if not _ret:
-            print("WARNING: missing/unsupported resource location: {}".format(v))
+            log.warning("missing/unsupported resource location: {}".format(v))
             _ret = (not PEDANTIC)
 
         if _ret:
@@ -827,7 +842,7 @@ class BaseID(BaseValidator):
         v = StringValidator.parse(d, parent=self, parsed_result_is_data=True)
 
         if not is_valid_id(v):
-            print("ERROR: not a valid variable identifier! Input: '{}'" . format(d))
+            log.error("not a valid variable identifier! Input: '{}'" . format(d))
             return False
 
         self.set_data(v)
@@ -849,12 +864,12 @@ class ClientVariable(BaseID):  #
         _ret = True
 
         if not (v == v.lower() or v == v.upper()):  # ! Variables are all lower or upper case!
-            print("ERROR: a variable must be either in lower or upper case! Input: '{}'" . format(d))
+            log.error("a variable must be either in lower or upper case! Input: '{}'" . format(d))
             _ret = False
 
         # NOTE: starting with hilbert_ or HILBERT_ with letters, digits and '_'??
         if not re.match('^hilbert(_[a-z0-9]+)+$', v.lower()):
-            print("ERROR: variable must start with HILBERT/hilbert and contain words separated by underscores!"
+            log.error("variable must start with HILBERT/hilbert and contain words separated by underscores!"
                   " Input: '{}" .format(d))
             _ret = False
 
@@ -904,7 +919,7 @@ class PresetID(BaseID):
 class AutoDetectionScript(StringValidator):
     def __init__(self, *args, **kwargs):
         super(AutoDetectionScript, self).__init__(*args, **kwargs)
-        self._default_data = ''
+        self._default_input_data = ''
 
 
     def check_script(self, script):
@@ -958,7 +973,7 @@ class AutoDetectionScript(StringValidator):
         global PEDANTIC
 
         if d is None:
-            d = self._default_data
+            d = self._default_input_data
 
         if (d is None) or (d == '') or (d == text_type('')):
             self.set_data(text_type(''))
@@ -996,7 +1011,7 @@ class DockerComposeServiceName(StringValidator):  # TODO: any special checks her
     def validate(self, d):
         """check whether data is a valid service name in file due to DockerComposeRef"""
         if d is None:
-            d = self._default_data
+            d = self._default_input_data
 
         try:
             n = StringValidator.parse(d, parent=self, parsed_result_is_data=True)
@@ -1012,12 +1027,12 @@ class DockerComposeRef(URI):
     def __init__(self, *args, **kwargs):
         super(DockerComposeRef, self).__init__(*args, **kwargs)
 
-        self._default_data = text_type('docker-compose.yml')
+        self._default_input_data = text_type('docker-compose.yml')
 
     def validate(self, d):
         """check whether data is a valid docker-compose file name"""
         if d is None:
-            d = self._default_data
+            d = self._default_input_data
 
         # TODO: call docker-compose on the referenced file! Currently in DockerService!?
 
@@ -1052,7 +1067,7 @@ class HostAddress(StringValidator):
         global PEDANTIC
 
         if d is None:
-            d = self._default_data
+            d = self._default_input_data
 
         _h = StringValidator.parse(d, parent=self, parsed_result_is_data=True)
 
@@ -1173,7 +1188,7 @@ class HostMACAddress(StringValidator):
         """check whether data is a valid ssh alias?"""
 
         if d is None:
-            d = self._default_data
+            d = self._default_input_data
 
         v = StringValidator.parse(d, parent=self)
 
@@ -1197,7 +1212,7 @@ class BoolValidator(ScalarValidator):
             d = self._default_input_data
 
         if not isinstance(d, bool):
-            print("ERROR: not a boolean value: '{}'" . format(d))
+            log.error("not a boolean value: '{}'" . format(d))
             return False
 
         self.set_data(d)
@@ -1207,13 +1222,13 @@ class BoolValidator(ScalarValidator):
 class StationVisibility(BoolValidator):  ## "hidden": True / [False]
     def __init__(self, *args, **kwargs):
         super(StationVisibility, self).__init__(*args, **kwargs)
-        self._default_data = False
+        self._default_input_data = False
 
 
 class AutoTurnon(BoolValidator):  # Bool, False
     def __init__(self, *args, **kwargs):
         super(AutoTurnon, self).__init__(*args, **kwargs)
-        self._default_data = False  # no powering on by default!?
+        self._default_input_data = False  # no powering on by default!?
 
 
 ###############################################################
@@ -1643,6 +1658,21 @@ class StationSSHOptions(BaseRecordValidator):  # optional: "Station::ssh_options
         # TODO: Check for ssh connection: Use some Python SSH Wrapper (2/3)
         return _ret
 
+###############################################################
+class StationType(BaseEnum):
+    """Type of station defines the set of required data fields!"""
+
+    def __init__(self, *args, **kwargs):
+        super(StationType, self).__init__(*args, **kwargs)
+
+        # NOTE: the list of possible values of Station::type (will depend on format version)
+        self._default_input_data = text_type('hidden')  # NOTE: nothing is required. For extension only!
+        self._enum_list = [self._default_input_data,
+                           text_type('standalone'),  # No remote control via SSH & Hilbert client...
+                           text_type('server'),  # Linux with Hilbert client part installed but no remote control!
+                           text_type('standard')  # Linux with Hilbert client part installed!
+                           ]  # ,text_type('special')
+
 
 ###############################################################
 class Station(BaseRecordValidator):  # Wrapper?
@@ -1650,6 +1680,7 @@ class Station(BaseRecordValidator):  # Wrapper?
 
     _extends_tag = text_type('extends')
     _client_settings_tag = text_type('client_settings')
+    _type_tag = text_type('type')
 
     _HILBERT_STATION = '~/bin/hilbert-station'
 
@@ -1659,7 +1690,7 @@ class Station(BaseRecordValidator):  # Wrapper?
         self._poweron_tag = text_type('poweron_settings')
         self._ssh_options_tag = text_type('ssh_options')
         self._address_tag = text_type('address')
-        self._ishidden_tag = text_type('hidden')
+        self._ishidden_tag = text_type('hidden')  # TODO: deprecate with "fake" station type?
         self._profile_tag = text_type('profile')
 
         self._default_type = "default_station"
@@ -1674,8 +1705,9 @@ class Station(BaseRecordValidator):  # Wrapper?
             self._ssh_options_tag: (False, StationSSHOptions),  # !!! record: user, port, key, key_ref
             text_type('omd_tag'): (True, StationOMDTag),  # ! like ServiceType: e.g. agent. Q: Is this mandatory?
             self._ishidden_tag: (False, StationVisibility),  # Q: Is this mandatory?
-            Station._client_settings_tag: (False, StationClientSettings)  # IDMap : (BaseID, BaseString)
-        }  # text_type('type'): (False, StationType), # TODO: ASAP!!!
+            Station._client_settings_tag: (False, StationClientSettings),  # IDMap : (BaseID, BaseString)
+            Station._type_tag: (False, StationType)
+        }  #
 
         self._types = {self._default_type: default_rule}
 
@@ -1763,19 +1795,20 @@ class Station(BaseRecordValidator):  # Wrapper?
             _settings = _settings.get_data()
 
         default_app_id = _settings.get('hilbert_station_default_application', None)
-        # check default_app_id!
+        # TODO: check default_app_id!
+        # TODO: all compatible applications!?
 
         _profile = self.get_profile()
         if isinstance(_profile, BaseValidator):
             _profile = _profile.get_data()
 
         # All supported applications??!?
-        _services = _profile.get(text_type('services'), [])
-        assert _services is not None
-        if isinstance(_services, BaseValidator):
-            _services = _services.get_data()
+        _serviceIDs = _profile.get(text_type('services'), [])  # TODO: profile.get_services()
+        assert _serviceIDs is not None
+        assert isinstance(_serviceIDs, ServiceList)  # list of ServiceID
 
-        assert isinstance(_services, list)
+        _serviceIDs = _serviceIDs.get_data()
+        assert isinstance(_serviceIDs, list)  # list of strings (with ServiceIDs)?
 
         _a = self.get_address()
 
@@ -1785,11 +1818,22 @@ class Station(BaseRecordValidator):  # Wrapper?
         fd, path = tempfile.mkstemp()
         try:
             with os.fdopen(fd, 'w') as tmp:
-                tmp.write("hilbert_station_profile_services=({})\n".format(' '.join(_services)))
+                # TODO: FIXME: list references into docker-compose.yml???
+                # TODO: use bash array to serialize all Services/Applications!
+                # NOTE: Only handles (IDs) are to be used below:
+                # NOTE: ATM only compose && Application/ServiceIDs == refs to the same docker-compose.yml!
+                # TODO: NOTE: may differ depending on Station::type!
+                tmp.write("hilbert_station_profile_services=\"{}\"\n".format(' '.join(_serviceIDs)))
                 for k in _settings:
-                    tmp.write("{0}='{1}'\n".format(k, str(_settings.get(k, ''))))
+                    tmp.write("{0}=\"{1}\"\n".format(k, str(_settings.get(k, ''))))
+                tmp.write("background_services=\"${hilbert_station_profile_services}\"\n")
+                tmp.write("default_app=\"${hilbert_station_default_application}\"\n")
+                # TODO: collect all compatible applications!
+                tmp.write("possible_apps=\"${default_app}\"\n")
 
-#            _cmd = ["scp", path, "{0}:/tmp/{1}".format(_a, os.path.basename(path))]  # self._HILBERT_STATION, 'deploy'
+            # TODO: add also all further necessary resources (docker-compose.yml etc) and tar.gz it for deployment?!
+            #            _cmd = ["scp", path, "{0}:/tmp/{1}".format(_a, os.path.basename(path))]  # self._HILBERT_STATION, 'deploy'
+
 
             try:
                 _a.scp(path, "/tmp/{}".format(os.path.basename(path)), shell=False)
@@ -1802,7 +1846,12 @@ class Station(BaseRecordValidator):  # Wrapper?
                     log.exception(s)
                     raise
         finally:
-            os.remove(path)
+            log.debug("Temporary Station Configuration File: {}".format(path))
+#            s = ''
+#            with os.open(path, 'r') as tmp:
+#                s += tmp.readline() + '\n'
+#            log.debug("New Station Configuration: {}".format(s))
+#            os.remove(path)
 
         _cmd = [self._HILBERT_STATION, "prepare", os.path.join("/tmp", os.path.basename(path))]
         try:
@@ -1965,6 +2014,8 @@ class BaseIDMap(BaseValidator):
         self._default_type = None
         self._types = {}  # type -> (TypeID, Type)
 
+        self._default_input_data = {}
+
     def detect_type(self, d):
         """determine the type of variadic data for the format version"""
 
@@ -1986,7 +2037,12 @@ class BaseIDMap(BaseValidator):
 
         (_id_rule, _rule) = self._types[self._type]
 
-        _lc = d.lc  # starting position?
+        try:
+            _lc = d.lc  # starting position?
+        except:
+            log.warning("Input data bears no ruamel.yaml line/column data!")
+            _lc = (0, 0)
+
         (s, c) = _get_line_col(_lc)
 
         _d = {}
@@ -2156,6 +2212,8 @@ class GlobalStations(BaseIDMap):
 
 #        if _ret:
 #            self.set_data(_processed)
+
+        # TODO: FIXME: check for required fields after extension only!!!
 
         return _ret
 
@@ -2328,7 +2386,7 @@ class GlobalPresets(BaseIDMap):  # Dummy for now!
         if d is None:
             d = self._default_input_data
 
-        print("WARNING: Presets are not supported yet!")
+        log.warning("Presets are not supported yet!")
         #        raise NotImplementedError("Presets are not supported yet!")
         return True
 
@@ -2363,7 +2421,7 @@ class Hilbert(BaseRecordValidator):
 
         self._types = {self._default_type: default_rule}
 
-        self._default_data = None
+        self._default_input_data = None
 
     @classmethod
     def parse(cls, d, *args, **kwargs):
@@ -2391,8 +2449,9 @@ class Hilbert(BaseRecordValidator):
         raise ConfigurationError(u"{}: {}".format("ERROR:", "Invalid data: '{}'!".format(d)))
 
     def validate(self, d):
+        global PEDANTIC
         if d is None:
-            d = self._default_data
+            d = self._default_input_data
 
         assert isinstance(d, dict)
 
@@ -2401,27 +2460,45 @@ class Hilbert(BaseRecordValidator):
         for offset, k in enumerate(d):
             if k == self._version_tag:
                 if offset != 0:
-                    print("Note: '{}' specified correctly but not ahead of everything else (offset: {})!".format(
-                        self._version_tag, offset))
-                    _ret = False
+                    if not PEDANTIC:
+                        log.warning("'{}' specified correctly but not ahead of everything else (offset: {})!"
+                            .format(self._version_tag, offset))
+                    else:
+                        log.error("'{}' specified correctly but not ahead of everything else (offset: {})!"
+                            .format(self._version_tag, offset))
+                        _ret = False
                 break
 
+        if not _ret:
+            log.error("Wrong Hilbert configuration!")
+            return _ret
+
+        _d = self.get_data()
         # NOTE: check uniqueness of keys among (Services/Applications):
-        _services = d.get(self._services_tag)  # Rely on the above and use get_data?
-        _applications = d.get(self._applications_tag)
 
-        for p, k in enumerate(_services):
-            _lc = _services.lc.key(k)
+        # TODO: add get_service(s) and get_application(s)?
+        _services = self.query("{0}/{1}".format(self._services_tag, 'data'))
+        _applications = self.query("{0}/{1}".format(self._applications_tag, 'data'))  # _d.get()
 
-            if k in _applications:
-                print("Error: '{}' is both a ServiceID and an ApplicationID:".format(k))
-                _key_error(k, _services[k], _lc, "Service key: {}")
+        assert _services is not None
+        assert _applications is not None
 
-                _alc = _applications.lc.key(k)
-                _key_error(k, _applications[k], _alc, "Application key: {}")
+        if (len(_services) > 0) and (len(_applications) > 0):
+            for p, k in enumerate(_services):
+                if k in _applications:
+                    log.error("'{}' is both a ServiceID and an ApplicationID:".format(k))
+
+                    __services = d.get(self._services_tag)  # Rely on the above and use get_data?
+                    __applications = d.get(self._applications_tag)
+
+                    _key_error(k, __services[k], __services.lc.key(k), "Service key: {}")
+                    _key_error(k, __applications[k], __applications.lc.key(k), "Application key: {}")
+
+                    _ret = False
 
         # ! TODO: check Uniqueness of keys among (Profiles/Stations/Groups) !!!!
-        # ! TODO: check for GroupID <-> StationID <-> ProfileID
+        # ! TODO: check for GroupID <-> StationID <-!=-> ProfileID
+
         return _ret
 
 ###############################################################
