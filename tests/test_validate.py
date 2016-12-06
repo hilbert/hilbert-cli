@@ -33,44 +33,52 @@ FIXTURE_DIR = os.path.abspath(os.path.join(
         'data',
             ))
 
-class TestValidate:
-    def test_1(self, capsys):
-        global INPUT_DIRNAME
+def hilbert_validation(input_yaml_file, data_file):
+    global INPUT_DIRNAME
 
-        g = os.path.join(FIXTURE_DIR, 'Hilbert.yml')
-        f = os.path.join(FIXTURE_DIR, 'Hilbert.yml.data.pickle')
+    input_file = os.path.join(FIXTURE_DIR, input_yaml_file)
+    data_file = os.path.join(FIXTURE_DIR, data_file)
 
-        print(g)
-        print(f)
+    assert os.path.exists(input_file)
+    assert os.path.exists(data_file)
 
-        assert os.path.exists(g)
-        assert os.path.exists(f)
+    # Load Hilbert configuration in YAML format
+    yml = load_yaml_file(input_file)
+    assert yml is not None
 
-        yml = load_yaml_file(g)
-        assert yml is not None
+    # Load previously verified data
+    d = pickle_load(data_file)
+    assert d is not None
+    assert isinstance(d, dict)
 
+    cwd = os.getcwd()
+    try:
         INPUT_DIRNAME = FIXTURE_DIR
+        os.chdir(INPUT_DIRNAME)
+        cfg = parse_hilbert(yml)
+    finally:
+        os.chdir(cwd)
 
-        cwd = os.getcwd()
-        try:
-            os.chdir(INPUT_DIRNAME)
-            cfg = parse_hilbert(yml)
-        finally:
-            os.chdir(cwd)
-        
-        assert cfg is not None
-        assert isinstance(cfg, Hilbert)
-        data = cfg.data_dump()
+    assert cfg is not None
+    assert isinstance(cfg, Hilbert)
 
-#        print(cfg)
-#        print(yaml_dump(data))
+    data = cfg.data_dump()
+    assert isinstance(data, dict)
 
-        d = pickle_load(f)
-        assert d is not None
-        assert isinstance(d, dict)
+    #        print(cfg)
+    #        print(yaml_dump(data))
+    #        print(yaml_dump(d))
 
-        assert type(data) == type(d)
+    # NOTE: Main check:
+    assert data == d  # Compare dictionaries with simple data!
 
-#        print(yaml_dump(d))
 
-        assert data == d
+class TestValidate:
+    def test_minimal_sample(self, capsys):
+        hilbert_validation('miniHilbert.yml', 'miniHilbert.yml.data.pickle')
+
+    def test_sample(self, capsys):
+        hilbert_validation('Hilbert.yml', 'Hilbert.yml.data.pickle')
+
+    def test_single(self, capsys):
+        hilbert_validation('singleHostHilbert.yml', 'singleHostHilbert.yml.data.pickle')
