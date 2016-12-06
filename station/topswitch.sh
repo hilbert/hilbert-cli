@@ -1,21 +1,12 @@
 #!/bin/sh
 
-set -v
-set -x
-
 SELFDIR=`dirname "$0"`
 SELFDIR=`cd "$SELFDIR" && pwd`
 
-## set -e
-## unset DISPLAY
 cd "${SELFDIR}/"
 
 if [ -r "./station.cfg" ]; then
     source "./station.cfg"
-fi
-
-if [ -r "./startup.cfg" ]; then
-    source "./startup.cfg"
 fi
 
 if [ -r "/tmp/lastapp.cfg" ]; then
