@@ -16,6 +16,8 @@ LOGLEVEL=0
 
 # NOTE: locking following: http://stackoverflow.com/a/1985512 by Przemyslaw Pawelczyk <przemoc@gmail.com>
 # NOTE: uses flock from util-linux[-ng]
+
+# NOTE: /var/lock/ == /run/lock/ => will be removed in case of a crash! No stale lockfile is possible!
 LOCKFILE="/var/lock/${TOOL}"
 LOCKFD=99
 
@@ -26,20 +28,19 @@ _prepare_locking()  { eval "exec $LOCKFD>\"$LOCKFILE\""; trap _no_more_locking E
 
 # PUBLIC
 exlock_now()        { _lock xn; }  # obtain an exclusive lock immediately or fail
-exlock()            { _lock x; }   # obtain an exclusive lock
+exlock()            { _lock x; }   # obtain an exclusive lock. wait
 shlock()            { _lock s; }   # obtain a shared lock
 unlock()            { _lock u; }   # drop a lock
 
 # TODO(?): evaluate other ways according to http://stackoverflow.com/questions/1715137/the-best-way-to-ensure-only-1-copy-of-bash-script-is-running
 
 exec 3>&1 4>&2
-### [ -f ${LOCKFILE} ] && /bin/rm -f
 trap 'exec 2>&4 1>&3 ' 0 1 2 3 13 15 RETURN
 exec 2>&1
 # 1>log.out
 
 start_locking () {
-    DEBUG "NOTE: Checking for exclusive (locked) usage of ${TOOL} (with given subcommand)"
+    DEBUG "Starting exclusive (locked) usage of ${TOOL}..."
 
     # ON START:
     _prepare_locking
@@ -49,7 +50,7 @@ start_locking () {
 
     if exlock_now
     then
-      DEBUG "Lockfile: $(ls -la ${LOCKFILE})"
+      DEBUG "Obtained exclusive lock of [$(ls -la ${LOCKFILE})]"
     else
       DEBUG "Lockfile: $(ls -la ${LOCKFILE})"
       ERROR "Another user is already running ${TOOL}: please try again later!"
@@ -85,21 +86,24 @@ Hilbert - client part for Linux systems
 
 positional arguments:
  subcommand:
-   app_change <app_id>     Change the currently running top application to specified one
-   start                   Start Hilbert on the system
-   stop                    Stop Hilbert on the system and shutdown it
-
-   prepare [<new_cfg>]     Update after installing a new local configuration (post-deployment action)
-   dm_start <vm_name>      Start a VM using docker-machine
+   init [<cfg>]            init station based on given or installed configuration
+   list_applications       list of supported applications
+   app_change <app_id>     change the currently running top application to specified
+   start                   start Hilbert on the system
+   stop                    stop Hilbert on the system
+   shutdown                shut down the system
 
 optional arguments:
  -h      show this help message and exit
  -V      show version info and exit
- -p      turn on pedantic mode
  -v      increase verbosity
  -q      decrease verbosity
 EOF
 }
+
+#  -p      turn on pedantic mode
+#   dm_start <vm_name>      Start a VM using docker-machine  -> separate script!!!
+
 
 version () {
  cat << EOF
@@ -236,10 +240,10 @@ cmd_install_station_config() {
     if [[ ! -L "${ALL_CONFIG_DIR}" ]]; then
       WARNING "${ALL_CONFIG_DIR} is not a link!"
     fi
-
 }
-cmd_prepare () {
-    subcommand="prepare"
+
+cmd_init () {
+    subcommand="init"
     arg=$1; shift
 
     if [[ -n "${arg}" ]]; then
@@ -252,11 +256,8 @@ cmd_prepare () {
     else
       exec "${HILBERT_CONFIG_DIR}/prepare.sh"
     fi
-
-
-#    # ERROR "Sorry '${subcommand} ${arg} [$*]' not yet implemented!"
-#    exit 2
 }
+
 cmd_app_change () {
     subcommand="app_change"
     arg=$1; shift
@@ -277,21 +278,6 @@ cmd_app_change () {
     fi
 }
 
-cmd_dm_start () {
-    subcommand="dm_start"
-    arg=$1; shift
-
-    if [[ -z ${arg} ]]; then
-      ERROR "Wrong argument '${arg}' to '${subcommand}'!"
-      usage
-      exit 1
-    fi
-
-    DM="${DM:-docker-machine}"  # TODO: check if ${DM} exists and is an executable!
-    DEBUG "executing: [${DM} start \"${arg}\"]"
-    exec ${DM} start "${arg}"
-}
-
 cmd_default () {
     if [[ ! -x "${HILBERT_CONFIG_DIR}/default.sh" ]]; then
       ERROR "'${HILBERT_CONFIG_DIR}/default.sh' is not executable!"
@@ -301,26 +287,37 @@ cmd_default () {
     fi
 }
 
+cmd_list_applications () {
+    subcommand="start"
+
+    # TODO: read config and handle the following: variables!
+    source "${HILBERT_CONFIG_FILE}" # only: key="...value..."!
+
+    for app in ${possible_apps}; do
+      echo " - ${app}"
+    done
+
+    DEBUG "Default application: ${default_app}"
+}
+
 cmd_start () {
     subcommand="start"
 
     # TODO: read config and handle the following: variables!
     source "${HILBERT_CONFIG_FILE}" # only: key="...value..."!
 
-    if [[ "${hilbert_autostart}" != "True" ]]; then
-      DEBUG "hilbert_autostart: ${hilbert_autostart} (True/False)"
-      DEBUG "hilbert_autostart_delay: ${hilbert_autostart_delay} (positive int)"
 
-      INFO "Auto-starting is not enabled in ${HILBERT_CONFIG_FILE}"
-      DEBUG "Will NOT start Hilbert!.."
-      exit 0
-    fi
+#    if [[ "${hilbert_autostart}" != "True" ]]; then
+#      DEBUG "hilbert_autostart: ${hilbert_autostart} (True/False)"
+#      DEBUG "hilbert_autostart_delay: ${hilbert_autostart_delay} (positive int)"
+#
+#      INFO "Auto-starting is not enabled in ${HILBERT_CONFIG_FILE}"
+#      DEBUG "Will NOT start Hilbert!.."
+#      exit 0
+#    fi
 
-    DEBUG "Sleeping for [${hilbert_autostart_delay}] sec (due to 'hilbert_autostart_delay' from '${HILBERT_CONFIG_FILE}')..."
-    sleep "${hilbert_autostart_delay}"
-
-    # TODO: check hilbert_autostart and exit is False!
-    # TODO: sleep hilbert_autostart_delay
+#    DEBUG "Sleeping for [${hilbert_autostart_delay}] sec (due to 'hilbert_autostart_delay' from '${HILBERT_CONFIG_FILE}')..."
+#    sleep "${hilbert_autostart_delay}"
 
     cmd_default
 }
@@ -340,6 +337,11 @@ cmd_stop () {
     # TODO: NOTE: any arguments?
 
     cmd_finishall
+}
+
+cmd_shutdown () {
+    subcommand="shutdown"
+    # TODO: NOTE: any arguments?
 
     DEBUG "Shutting this system down..." # -h now?
     shutdown
@@ -351,26 +353,41 @@ subcommand=$1; shift
 DEBUG "Subcommand to handle: '$subcommand'"
 
 case "$subcommand" in
-  prepare)
+  list_applications)
     start_locking
-    cmd_prepare "$@"
+    cmd_list_applications "$@"  # TODO: arguments?
+    exit 0
     ;;
-  app_switch|app_change)
+
+  init)  # |prepare
+    start_locking
+    cmd_init "$@"
+    exit 0
+    ;;
+  app_change)  # app_switch|
     start_locking
     cmd_app_change "$@"
-    ;;
-  dm_start)
-    # User should be able to start multiple VMs in parallel...
-    cmd_dm_start "$@"
+    exit 0
     ;;
   stop)
     start_locking
     cmd_stop "$@"  # TODO: arguments?
+    exit 0
+    ;;
+  shutdown)
+    start_locking
+    cmd_shutdown "$@"  # TODO: arguments?
     ;;
   start)
     start_locking
     cmd_start "$@"  # TODO: arguments?
     ;;
+
+  dm_start)
+    ERROR "Please use a separate script for starting a VM via docker-machine!"
+    exit 2
+    ;;
+
   cmd_*) # hidden subcommand-s
     start_locking  # NOTE: Just to be sure!..
     ${subcommand} "$@"
@@ -388,5 +405,31 @@ else
     ERROR "Invalid sub-command: '$subcommand'"
     exit 1
 fi
+
+
+
+exit 255
+
+############### Separate script for the Server system...
+
+cmd_dm_start () {
+    subcommand="dm_start"
+    arg=$1; shift
+
+    if [[ -z ${arg} ]]; then
+      ERROR "Wrong argument '${arg}' to '${subcommand}'!"
+      usage
+      exit 1
+    fi
+
+    DM="${DM:-docker-machine}"  # TODO: check if ${DM} exists and is an executable!
+    DEBUG "executing: [${DM} start \"${arg}\"]"
+    exec ${DM} start "${arg}"
+}
+
+#  dm_start)
+#    # User should be able to start multiple VMs in parallel...
+#    cmd_dm_start "$@"
+#    ;;
 
 
