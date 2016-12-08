@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#! /usr/bin/env python
 
 # -*- coding: utf-8 -*-
 # encoding: utf-8
@@ -7,9 +7,11 @@
 # PYTHON_ARGCOMPLETE_OK           # NOQA
 
 from __future__ import absolute_import, print_function, unicode_literals
-
 import sys
 from os import path
+import argparse                        # NOQA
+import logging
+
 DIR=path.dirname(path.dirname(path.abspath(__file__)))
 
 sys.path.append(DIR)
@@ -18,14 +20,31 @@ sys.path.append(path.join(DIR, 'config'))
 from helpers import *
 from hilbert_cli_config import *
 from subcmdparser import *
-
 #from config.hilbert_cli_config import *
 #from config.helpers import *
 #from config.subcmdparser import *
 
-import argparse                        # NOQA
+# datefmt='%Y.%m.%d %I:%M:%S %p'
+logging.basicConfig(format='%(levelname)s  [%(filename)s:%(lineno)d]: %(message)s')
+# %(name)s            Name of the logger (logging channel)
+# %(levelno)s         Numeric logging level for the message (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+# %(levelname)s       Text logging level for the message ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+# %(pathname)s        Full pathname of the source file where the logging call was issued (if available)
+# %(filename)s        Filename portion of pathname
+# %(module)s          Module (name portion of filename)
+# %(lineno)d          Source line number where the logging call was issued (if available)
+# %(funcName)s        Function name
+# %(created)f         Time when the LogRecord was created (time.time() return value)
+# %(asctime)s         Textual time when the LogRecord was created
+# %(msecs)d           Millisecond portion of the creation time
+# %(relativeCreated)d Time in milliseconds when the LogRecord was created,
+#                     relative to the time the logging module was loaded
+#                     (typically at application startup time)
+# %(thread)d          Thread ID (if available)
+# %(threadName)s      Thread name (if available)
+# %(process)d         Process ID (if available)
+# %(message)s         The result of record.getMessage(), computed just as the record is emitted
 
-import logging
 log = logging.getLogger(__name__)  #
 
 __CLI_VERSION_ID = "$Id$"
@@ -139,12 +158,17 @@ def output_handler(parser, ctx, args):
         log.debug("Specified output dump file: {}".format(od))
         assert od is not None
 
-        if URI(None).validate(od):
-            if not PEDANTIC:
-                log.warning("Output dump file: '{}' already exists! Will be overwritten!".format(od))
-            else:
-                log.warning("Output dump file: '{}' already exists! Cannot overwrite it in PEDANTIC mode!".format(od))
-                od = None
+        f = URI(None)
+        if f.validate(od):
+            if os.path.exists(f.get_data()):  # TODO: testme!
+                if not PEDANTIC:
+                    log.warning("Output dump file: '{}' already exists! Will be overwritten!".format(od))
+                else:
+                    log.warning("Output dump file: '{}' already exists! Cannot overwrite it in PEDANTIC mode!".format(od))
+                    od = None
+        else:  # TODO: testme!
+            log.error("Wrong output file: '{}'".format(od))
+            od = None
     return od
 
 
@@ -587,7 +611,6 @@ class PedanticModeAction(argparse.Action):
 
     def __call__(self, parser, args, values, option_string=None):
         global PEDANTIC
-        args = parser.logging_handler(args)
         PEDANTIC = True
         if PEDANTIC:
             log.debug("PEDANTIC mode is ON!")
@@ -599,7 +622,7 @@ def _version():
     import ruamel.yaml as yaml
     import semantic_version
 
-    log.debug("Running '{}'".format('version'))
+    log.debug("Running '--{}'".format('version'))
 
     log.debug("Python (platform) version: {}".format(platform.python_version()))
     log.debug("ruamel.yaml       version: {}".format(yaml.__version__))
@@ -607,7 +630,8 @@ def _version():
     log.debug("logging           version: {}".format(logging.__version__))
     log.debug("semantic_version  version: {}".format(semantic_version.__version__))
 
-    print("Hilbert Configuration API {}".format(Hilbert(None).get_api_version()))
+    print("Hilbert Configuration API:     {}".format(Hilbert(None).get_api_version()))
+    print("Logging Level:                 {}".format(logging.getLevelName(logging.getLogger().level)))
 
     log.debug("Done")
 
@@ -617,37 +641,13 @@ class ListVersionsAction(argparse.Action):
         super(ListVersionsAction, self).__init__(option_strings=option_strings, *args, **kwargs)
 
     def __call__(self, parser, args, values, option_string=None):
-        args = parser.logging_handler(args)
         _version()
         parser.exit(status=0)
 #        setattr(args, self.dest, values)
 
 
 def main():
-    # datefmt='%Y.%m.%d %I:%M:%S %p'
-    logging.basicConfig(format='%(levelname)s  [%(filename)s:%(lineno)d]: %(message)s', level=logging.INFO)
-    log.setLevel(logging.INFO)
-
-    # %(name)s            Name of the logger (logging channel)
-    # %(levelno)s         Numeric logging level for the message (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-    # %(levelname)s       Text logging level for the message ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
-    # %(pathname)s        Full pathname of the source file where the logging call was issued (if available)
-    # %(filename)s        Filename portion of pathname
-    # %(module)s          Module (name portion of filename)
-    # %(lineno)d          Source line number where the logging call was issued (if available)
-    # %(funcName)s        Function name
-    # %(created)f         Time when the LogRecord was created (time.time() return value)
-    # %(asctime)s         Textual time when the LogRecord was created
-    # %(msecs)d           Millisecond portion of the creation time
-    # %(relativeCreated)d Time in milliseconds when the LogRecord was created,
-    #                     relative to the time the logging module was loaded
-    #                     (typically at application startup time)
-    # %(thread)d          Thread ID (if available)
-    # %(threadName)s      Thread name (if available)
-    # %(process)d         Process ID (if available)
-    # %(message)s         The result of record.getMessage(), computed just as the record is emitted
-
-    handler = SubCommandHandler(use_subcommand_help=True, enable_autocompletion=True, log=log,
+    handler = SubCommandHandler(use_subcommand_help=True, enable_autocompletion=True,
                    prog='hilbert',
                    description="Hilbert - server tool: loads configuration and does something using it")
 

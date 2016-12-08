@@ -5,6 +5,8 @@ import inspect                         # NOQA
 import logging                         # NOQA
 from operator import attrgetter
 
+log = logging.getLogger(__name__)  #
+
 #################################
 # decorator
 #################################
@@ -43,9 +45,6 @@ class SortingHelpFormatter(argparse.RawTextHelpFormatter):
         kwargs['indent_increment'] = 1
         kwargs['max_help_position'] = 17
         super(SortingHelpFormatter, self).__init__(*args, **kwargs)
-#    def add_arguments(self, actions):
-#        actions = sorted(actions, key=attrgetter('help'))
-#        super(SortingHelpFormatter, self).add_arguments(actions)
 
 #########################
 class SubCommandHandler(argparse.ArgumentParser):
@@ -70,11 +69,6 @@ class SubCommandHandler(argparse.ArgumentParser):
         self._use_subcommand_help = kwargs.pop('use_subcommand_help', False)
         self._enable_autocompletion = kwargs.pop('enable_autocompletion', False)
 
-        self._log = kwargs.pop('log', None)
-        if self._log is None:
-            self._log = logging.getLogger(__name__)
-
-        self._logging_handler_done = False
 
         self._ignore_remainder = False
         self._use_subcommands = True
@@ -130,46 +124,13 @@ class SubCommandHandler(argparse.ArgumentParser):
 
         return
 
-    def logging_handler(parser, args):
-        if not parser._logging_handler_done:
-
-            _args = vars(args)
-
-            log = parser._log
-            level = log.level
-
-            # NOTE: logging levels are as follows:
-            # logging.CRITICAL = 50
-            # logging.ERROR = 40
-            # logging.WARNING = 30
-            # logging.INFO = 20
-            # logging.DEBUG = 10
-            # logging.NOTSET = 0
-
-            delta = _args.get('verbose', None)
-            if delta is not None:
-                level = max(logging.DEBUG, level - int(delta) * logging.DEBUG)
-
-            delta = _args.get('quiet', None)
-            if delta is not None:
-                level = min(logging.CRITICAL, level + int(delta) * logging.DEBUG)
-
-            if log.level != level:
-                log.debug("Changing logging level: {0} -> {1}"
-                          .format(logging.getLevelName(log.level), logging.getLevelName(level)))
-                log.setLevel(level)
-                log.debug("New logging level: {0}".format(logging.getLevelName(log.level)))
-
-        parser._logging_handler_done = True
-
     def parse_args(self, argv=None):
         """
         Works the same as `argparse.ArgumentParser.parse_args`.
         """
-
         group = self.add_mutually_exclusive_group()
-        group.add_argument("-v", "--verbose", action="count", help='increase verbosity')
-        group.add_argument("-q", "--quiet", action="count", help='decrease verbosity')
+        group.add_argument("-v", "--verbose", action=CountedVerboseAction, help='increase verbosity')
+        group.add_argument("-q", "--quiet", action=CountedQuietAction, help='decrease verbosity')
 
         # add_argument, set_logging_level, set_subcommands,
         #    handler.set_logging_argument('-l', '--log_level', default_level=logging.INFO)
@@ -258,7 +219,7 @@ class SubCommandHandler(argparse.ArgumentParser):
         #     # call the logging config fxn
         #     self._logging_config_fxn(level, args)
 
-        self.logging_handler(args)
+#        self.logging_handler(args)
 #        pedantic_handler(self, vars(args))
 
         # generate the context
@@ -268,15 +229,56 @@ class SubCommandHandler(argparse.ArgumentParser):
 
         # create the sub command argument parser
         scmd_parser = argparse.ArgumentParser(prog='%s %s' % (self.prog, args.cmd), add_help=True)
-        scmd_parser._log = self._log
 
         # handle the subcommands
         self._subcommand_lookup[args.cmd](scmd_parser, context, args.cargs)
 
         return args  # run()
 
+# logging.CRITICAL = 50
+# logging.ERROR = 40
+# logging.WARNING = 30
+# logging.INFO = 20
+# logging.DEBUG = 10
+# logging.NOTSET = 0
+class CountedVerboseAction(argparse._CountAction):
+    def __init__(self, *args, **kwargs):
+        super(CountedVerboseAction, self).__init__(*args, **kwargs)
 
-class MyHelpAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        new_count = argparse._ensure_value(namespace, self.dest, 0) + 1
+        setattr(namespace, self.dest, new_count)
+
+        _log = logging.getLogger()  # root logger!
+        level = max(logging.DEBUG, _log.level - logging.DEBUG)
+
+        if _log.level != level:
+            log.debug("Changing logging level: %s -> %s",
+                logging.getLevelName(_log.level),
+                logging.getLevelName(level))
+            _log.setLevel(level)
+            log.debug("New logging level: %s", logging.getLevelName(_log.level))
+
+
+class CountedQuietAction(argparse._CountAction):
+    def __init__(self, *args, **kwargs):
+        super(CountedQuietAction, self).__init__(*args, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        new_count = argparse._ensure_value(namespace, self.dest, 0) + 1
+        setattr(namespace, self.dest, new_count)
+
+        _log = logging.getLogger()  # root logger!
+        level = min(logging.CRITICAL, _log.level + logging.DEBUG)
+
+        if _log.level != level:
+            log.debug("Changing logging level: %s -> %s",
+                logging.getLevelName(_log.level),
+                logging.getLevelName(level))
+            _log.setLevel(level)
+            log.debug("New logging level: %s", logging.getLevelName(_log.level))
+
+class MyHelpAction(argparse.Action):  ### _HelpAction??
     def __init__(self,
                  option_strings,
                  dest=argparse.SUPPRESS,
@@ -294,7 +296,7 @@ class MyHelpAction(argparse.Action):
         raise BaseException("Help was printed!")
 
 
-class HelpAllAction(argparse.Action):
+class HelpAllAction(argparse.Action):  ### _HelpAction??
     def __init__(self, option_strings, *args, **kwargs):
         super(HelpAllAction, self).__init__(option_strings=option_strings, *args, **kwargs)
 

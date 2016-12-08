@@ -1,9 +1,9 @@
 #! /bin/bash
 
-if hash docker-compose 2>/dev/null; then
-  echo "DEBUG: using $(which docker-compose), $(docker-compose --version)"
-  ln -s `which docker-compose` "${PWD}/compose"
-else
+#if hash docker-composei 2>/dev/null; then
+#  echo "DEBUG: using $(which docker-compose), $(docker-compose --version)"
+#  ln -s `which docker-compose` "${PWD}/compose"
+#else
  #! Get Docker compose
  DOCKER_COMPOSE_VERSION=1.9.0 # NOTE: update to newer compose version if necessary!
  DOCKER_COMPOSE_BASE_URL="https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}"
@@ -37,6 +37,13 @@ else
   if [ -x ./docker-compose.sh ]; then 
     ln -s "${PWD}/docker-compose.sh" "${PWD}/compose"
   fi
+ fi
+#fi
+
+if [ ! -x ./compose ]; then 
+ if hash docker-composei 2>/dev/null; then
+  echo "DEBUG: using $(which docker-compose), $(docker-compose --version)"
+  ln -s `which docker-compose` "${PWD}/compose"
  fi
 fi
 

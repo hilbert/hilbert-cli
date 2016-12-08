@@ -31,9 +31,9 @@ import pprint as PP
 from abc import *
 
 ###############################################################
-logging.basicConfig(format='%(levelname)s  [%(filename)s:%(lineno)d]: %(message)s', level=logging.DEBUG)
+# logging.basicConfig(format='%(levelname)s  [%(filename)s:%(lineno)d]: %(message)s', level=logging.DEBUG)
 log = logging.getLogger(__name__)
-log.setLevel(logging.DEBUG)
+# log.setLevel(logging.DEBUG)
 
 _pp = PP.PrettyPrinter(indent=4)
 
@@ -95,7 +95,8 @@ def pprint(cfg):
 
 
 ###############################################################
-def _execute(_cmd, timeout=None, shell=False, stdout=None, stderr=None):  # True??? Try several times? Overall timeout?
+# timeout=None,
+def _execute(_cmd, shell=False, stdout=None, stderr=None):  # True??? Try several times? Overall timeout?
     global PEDANTIC
     __cmd = ' '.join(_cmd)
     # stdout = tmp, stderr = open("/dev/null", 'w')
@@ -103,14 +104,13 @@ def _execute(_cmd, timeout=None, shell=False, stdout=None, stderr=None):  # True
     log.debug("Executing shell command: '{}'...".format(__cmd))
 
     retcode = None
-    with subprocess.Popen(_cmd, shell=shell, stdout=stdout, stderr=stderr) as p:
-        try:
-            retcode = p.wait(timeout=timeout)  # ?
-        except:
-            p.kill()
-            p.wait()
-            log.exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
-            raise
+    try:
+        #    with subprocess.Popen(_cmd, shell=shell, stdout=stdout, stderr=stderr) as p:
+        # timeout=timeout,
+        retcode = subprocess.call(_cmd, shell=shell, stdout=stdout, stderr=stderr)
+    except:
+        log.exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
+        raise
 
     assert retcode is not None
     log.debug("Exit code: '{}'".format(retcode))
@@ -1154,13 +1154,14 @@ class HostAddress(StringValidator):
     def check_ssh_alias(cls, _h, **kwargs):
         """Check for ssh alias"""
         global PEDANTIC
+        timeout = kwargs.pop('timeout', 2)
 
         log.debug("Checking ssh alias: '{0}'...".format(text_type(_h)))
         try:
 #            client = paramiko.SSHClient()
 #            client.load_system_host_keys()
 
-            _cmd = ["ssh", "-q", "-F", os.path.join(os.environ['HOME'], ".ssh", "config"), "-o", "ConnectTimeout=1", _h, "exit 0"]
+            _cmd = ["ssh", "-q", "-F", os.path.join(os.environ['HOME'], ".ssh", "config"), "-o", "ConnectTimeout={}".format(timeout), _h, "exit 0"]
             retcode = _execute(_cmd, **kwargs)  # , stdout=open("/dev/null", 'w'), stderr=open("/dev/null", 'w')
 
             if retcode:
@@ -1515,6 +1516,8 @@ class DockerComposeService(BaseRecordValidator):
 
     def check_service(self, _f, _n):
         global PEDANTIC
+
+        return True  # TODO: FIXME: takes TOOOOO long at HITS!?!?
 
         # TODO: Check the corresponding file for such a service -> Service in DockerService!
         fd, path = tempfile.mkstemp()

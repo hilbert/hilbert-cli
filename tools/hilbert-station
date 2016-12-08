@@ -18,7 +18,13 @@ LOGLEVEL=0
 # NOTE: uses flock from util-linux[-ng]
 
 # NOTE: /var/lock/ == /run/lock/ => will be removed in case of a crash! No stale lockfile is possible!
-LOCKFILE="/var/lock/${TOOL}"
+if [[ -w "/var/lock/lockdev" ]]; then
+  LOCKFILE="/var/lock/lockdev/${TOOL}"
+elif [[ -w "/var/lock/" ]]; then
+  LOCKFILE="/var/lock/${TOOL}"
+else
+  LOCKFILE="/tmp/_var_lock_${TOOL}"
+fi
 LOCKFD=99
 
 # PRIVATE
@@ -341,10 +347,10 @@ cmd_stop () {
 
 cmd_shutdown () {
     subcommand="shutdown"
-    # TODO: NOTE: any arguments?
+    arg=$@
 
-    DEBUG "Shutting this system down..." # -h now?
-    shutdown
+    DEBUG "Shutting this system down... Arguments: [${arg}]" # -h now?
+    shutdown ${arg} || sudo -n -P shutdown ${arg}
 }
 
 shift $((OPTIND -1))
