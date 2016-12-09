@@ -149,7 +149,6 @@ def input_handler(parser, ctx, args):
 
 ###############################################################################
 def output_handler(parser, ctx, args):
-    global PEDANTIC
     args = vars(args)
 
     od = None
@@ -161,7 +160,7 @@ def output_handler(parser, ctx, args):
         f = URI(None)
         if f.validate(od):
             if os.path.exists(f.get_data()):  # TODO: testme!
-                if not PEDANTIC:
+                if not get_PEDANTIC():
                     log.warning("Output dump file: '{}' already exists! Will be overwritten!".format(od))
                 else:
                     log.warning("Output dump file: '{}' already exists! Cannot overwrite it in PEDANTIC mode!".format(od))
@@ -605,16 +604,15 @@ def cmd_run_action(parser, context, args):
     log.debug("Done")
     return args
 
-class PedanticModeAction(argparse.Action):
-    def __init__(self, option_strings, *args, **kwargs):
-        super(PedanticModeAction, self).__init__(option_strings=option_strings, *args, **kwargs)
 
-    def __call__(self, parser, args, values, option_string=None):
-        global PEDANTIC
-        PEDANTIC = True
-        if PEDANTIC:
-            log.debug("PEDANTIC mode is ON!")
-#        setattr(args, self.dest, values)
+class PedanticModeAction(argparse._StoreTrueAction):
+    def __init__(self, *args, **kwargs):
+        super(PedanticModeAction, self).__init__(*args, **kwargs)
+
+    def __call__(self, *args, **kwargs):
+        super(PedanticModeAction, self).__call__(*args, **kwargs)
+        start_pedantic_mode()
+
 
 def _version():
     import platform
@@ -631,7 +629,8 @@ def _version():
     log.debug("semantic_version  version: {}".format(semantic_version.__version__))
 
     print("Hilbert Configuration API:     {}".format(Hilbert(None).get_api_version()))
-    print("Logging Level:                 {}".format(logging.getLevelName(logging.getLogger().level)))
+    print("Root Logging Level:            {}".format(logging.getLevelName(logging.getLogger().level)))
+    print("PEDANTIC mode:                 {}".format(get_PEDANTIC()))
 
     log.debug("Done")
 
@@ -652,7 +651,7 @@ def main():
                    description="Hilbert - server tool: loads configuration and does something using it")
 
     handler.add_argument('-p', '--pedantic', action=PedanticModeAction,
-                      nargs=0, default=argparse.SUPPRESS, required=False, type=None, metavar=None,
+                      default=argparse.SUPPRESS, required=False,
                       help="turn on pedantic mode")
 
     handler.add_argument('-V', '--version', action=ListVersionsAction,

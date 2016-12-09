@@ -44,6 +44,17 @@ INPUT_DIRNAME = './'  # NOTE: base location for external resources
 
 
 ###############################################################
+def start_pedantic_mode():
+    global PEDANTIC
+    PEDANTIC = True
+    if PEDANTIC:
+        log.debug("PEDANTIC mode is ON!")
+
+
+def get_PEDANTIC():
+    return PEDANTIC
+
+###############################################################
 if PY3 and (sys.version_info[1] >= 4):
     class AbstractValidator(ABC):
         """AbstractValidator is the root Base class for any concrete implementation of entities
@@ -97,7 +108,6 @@ def pprint(cfg):
 ###############################################################
 # timeout=None,
 def _execute(_cmd, shell=False, stdout=None, stderr=None):  # True??? Try several times? Overall timeout?
-    global PEDANTIC
     __cmd = ' '.join(_cmd)
     # stdout = tmp, stderr = open("/dev/null", 'w')
     # stdout=open("/dev/null", 'w'), stderr=open("/dev/null", 'w'))
@@ -567,8 +577,12 @@ class BaseRecordValidator(BaseValidator):
                 _extra_rule = self.detect_extra_rule(k, v)  # (KeyValidator, ValueValidator)
 
                 if _extra_rule is None:
-                    _key_error(k, v, lc, "WARNING: Unhandled extra Key: '{}' (type: '%s')" % self._type)
-                    _ret = False
+                    if PEDANTIC:
+                        _key_error(k, v, lc, "ERROR: Unhandled extra Key: '{}' (type: '%s')" % self._type)
+                        _ret = False
+                    else:
+                        _key_error(k, v, lc, "WARNING: Unhandled extra Key: '{}' (type: '%s')" % self._type)
+                        continue
                 else:
                     try:
                         _k = (_extra_rule[0]).parse(k, parent=self)
@@ -789,8 +803,6 @@ class URI(BaseValidator):
 
     def validate(self, d):
         """check whether data is a valid URI"""
-        global PEDANTIC
-
         if d is None:
             d = self._default_input_data
 
@@ -923,8 +935,6 @@ class AutoDetectionScript(StringValidator):
 
 
     def check_script(self, script):
-        global PEDANTIC
-
         assert script is not None
 
         _ret = True
@@ -969,9 +979,6 @@ class AutoDetectionScript(StringValidator):
 
     def validate(self, d):
         """check whether data is a valid script"""
-
-        global PEDANTIC
-
         if d is None:
             d = self._default_input_data
 
@@ -1064,8 +1071,6 @@ class HostAddress(StringValidator):
 
     def validate(self, d):
         """check whether data is a valid ssh alias?"""
-        global PEDANTIC
-
         if d is None:
             d = self._default_input_data
 
@@ -1094,8 +1099,6 @@ class HostAddress(StringValidator):
 
     # TODO: check/use SSH/SCP calls!
     def scp(self, source, target, **kwargs):
-        global PEDANTIC
-
         assert self.recheck()
         _h = self.get_address()  # 'jabberwocky' #
 
@@ -1122,8 +1125,6 @@ class HostAddress(StringValidator):
                 raise Exception("Could not run scp command: '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
 
     def ssh(self, cmd, **kwargs):
-        global PEDANTIC
-
         assert self.recheck()
         _h = self.get_address()  # 'jabberwocky'
 
@@ -1153,7 +1154,6 @@ class HostAddress(StringValidator):
     @classmethod
     def check_ssh_alias(cls, _h, **kwargs):
         """Check for ssh alias"""
-        global PEDANTIC
         timeout = kwargs.pop('timeout', 2)
 
         log.debug("Checking ssh alias: '{0}'...".format(text_type(_h)))
@@ -1390,8 +1390,6 @@ class DockerMachine(BaseRecordValidator):
         return _a
 
     def start(self):  # , action, action_args):
-        global PEDANTIC
-
         _a = self.get_vm_host_address()
         assert _a is not None
         assert isinstance(_a, HostAddress)
@@ -1448,8 +1446,6 @@ class WOL(BaseRecordValidator):
 
 
     def start(self):  # , action, action_args):
-        global PEDANTIC
-
         _address = None
         _parent = self.get_parent(cls=Station)
 
@@ -1515,7 +1511,6 @@ class DockerComposeService(BaseRecordValidator):
         self._create_optional = True
 
     def check_service(self, _f, _n):
-        global PEDANTIC
 
         return True  # TODO: FIXME: takes TOOOOO long at HITS!?!?
 
@@ -1551,8 +1546,6 @@ class DockerComposeService(BaseRecordValidator):
         return True
 
     def validate(self, d):
-        global PEDANTIC
-
         if d is None:
             d = self._default_input_data
 
@@ -1759,8 +1752,6 @@ class Station(BaseRecordValidator):  # Wrapper?
         return _a
 
     def shutdown(self):
-        global PEDANTIC
-
         _a = self.get_address()
 
         assert _a is not None
@@ -1795,9 +1786,6 @@ class Station(BaseRecordValidator):  # Wrapper?
 
 
     def deploy(self):
-        global PEDANTIC
-
-
         # TODO: get_client_settings()
         _d = self.get_data()
         _settings = _d.get(self._client_settings_tag, None)
@@ -1900,8 +1888,6 @@ class Station(BaseRecordValidator):  # Wrapper?
 #        raise NotImplementedError("Cannot finish a service/application on this station!")
 
     def app_change(self, app_id):
-        global PEDANTIC
-
         _a = self.get_address()
 
         assert _a is not None
@@ -2471,7 +2457,6 @@ class Hilbert(BaseRecordValidator):
         raise ConfigurationError(u"{}: {}".format("ERROR:", "Invalid data: '{}'!".format(d)))
 
     def validate(self, d):
-        global PEDANTIC
         if d is None:
             d = self._default_input_data
 
