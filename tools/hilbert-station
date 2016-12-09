@@ -10,6 +10,8 @@
 #      NOTE: in PEDANTIC mode some non-critical issues may be treated this way.
 #  - any other value: something unexpected has happened!
 
+## NOTE: see also http://tldp.org/LDP/abs/html/exitcodes.html
+
 
 TOOL=$(basename "$0") # script_name=`basename "$0"` # script_name="${script_name%.*}"
 LOGLEVEL=0
@@ -134,8 +136,9 @@ EOF
 }
 DEBUG "Input args: ($@)"
 
+BASH_SUBEXEC_OPTIONS=""
 
-while getopts ":hqvpV" opt; do
+while getopts ":hqvV" opt; do   # NOTE: removed 'p' for now
   case ${opt} in
     h )
       usage
@@ -145,17 +148,20 @@ while getopts ":hqvpV" opt; do
       version
       exit 0
       ;;
-    p )
-      DEBUG "Turned-on the pedantic mode!(?)"
-      set -e # TODO: test this!!
-      ;;
+#    p )
+#      DEBUG "Turned-on the pedantic mode!(?)"
+#      set -e # TODO: test this!!
+#      ;;
     v )
+      # NOTE: see also http://tldp.org/LDP/Bash-Beginners-Guide/html/sect_02_03.html
       DEBUG "Turning on tracing of bash command execution + verbosity..."
+      BASH_SUBEXEC_OPTIONS="-xv" # "--debugger --verbose"
       set -v
       set -x
       ;;
     q )
       DEBUG "Turning off tracing of bash command execution + verbosity..."
+      BASH_SUBEXEC_OPTIONS=""
       set +v
       set +x
       ;;
@@ -299,11 +305,21 @@ cmd_list_applications () {
     # TODO: read config and handle the following: variables!
     source "${HILBERT_CONFIG_FILE}" # only: key="...value..."!
 
-    for app in ${possible_apps}; do
-      echo " - ${app}"
-    done
+    if [[ -n "${default_app}" ]]; then
+      echo "Default application: ${default_app}"
+    else
+      echo "No default application: is this a server?!"
+    fi
 
-    DEBUG "Default application: ${default_app}"
+    if [[ -n "${possible_apps}" ]]; then
+      echo "Possible applications: "
+      for app in ${possible_apps}; do
+        echo " - ${app}"
+      done
+    else
+      echo "No application can be run on this station... this must be a server..!"
+    fi
+
 }
 
 cmd_start () {
@@ -313,14 +329,14 @@ cmd_start () {
     source "${HILBERT_CONFIG_FILE}" # only: key="...value..."!
 
 
-#    if [[ "${hilbert_autostart}" != "True" ]]; then
-#      DEBUG "hilbert_autostart: ${hilbert_autostart} (True/False)"
-#      DEBUG "hilbert_autostart_delay: ${hilbert_autostart_delay} (positive int)"
-#
-#      INFO "Auto-starting is not enabled in ${HILBERT_CONFIG_FILE}"
-#      DEBUG "Will NOT start Hilbert!.."
-#      exit 0
-#    fi
+    if [[ "${hilbert_autostart}" == "False" ]]; then
+      DEBUG "hilbert_autostart: ${hilbert_autostart} (True/False)"
+      DEBUG "hilbert_autostart_delay: ${hilbert_autostart_delay} (positive int)"
+
+      INFO "Auto-starting is not enabled in ${HILBERT_CONFIG_FILE}"
+      DEBUG "Would NOT start Hilbert now!.."
+      exit 0
+    fi
 
 #    DEBUG "Sleeping for [${hilbert_autostart_delay}] sec (due to 'hilbert_autostart_delay' from '${HILBERT_CONFIG_FILE}')..."
 #    sleep "${hilbert_autostart_delay}"
@@ -334,7 +350,8 @@ cmd_finishall () {
     if [[ ! -x "${HILBERT_CONFIG_DIR}/finishall.sh" ]]; then
       WARNING "'${HILBERT_CONFIG_DIR}/finishall.sh' is not executable!"
     else
-      "${HILBERT_CONFIG_DIR}/finishall.sh"
+      bash ${BASH_SUBEXEC_OPTIONS} "${HILBERT_CONFIG_DIR}/finishall.sh"
+#       bash -x "${HILBERT_CONFIG_DIR}/finishall.sh"  # TODO: run this if tracing/debugging was enabled!
     fi
 }
 
@@ -403,39 +420,12 @@ case "$subcommand" in
     ;;
 esac
 
-if [[ -z "${subcommand}" ]]; then
-    usage
-    DEBUG "Script successfully finished without handling any subcommands..."
-    exit 0
-else
+if [[ -n "${subcommand}" ]]; then
     ERROR "Invalid sub-command: '$subcommand'"
     exit 1
 fi
 
-
-
-exit 255
-
-############### Separate script for the Server system...
-
-cmd_dm_start () {
-    subcommand="dm_start"
-    arg=$1; shift
-
-    if [[ -z ${arg} ]]; then
-      ERROR "Wrong argument '${arg}' to '${subcommand}'!"
-      usage
-      exit 1
-    fi
-
-    DM="${DM:-docker-machine}"  # TODO: check if ${DM} exists and is an executable!
-    DEBUG "executing: [${DM} start \"${arg}\"]"
-    exec ${DM} start "${arg}"
-}
-
-#  dm_start)
-#    # User should be able to start multiple VMs in parallel...
-#    cmd_dm_start "$@"
-#    ;;
-
-
+# NOTE: "${subcommand}" == ""
+usage
+DEBUG "Script successfully finished without handling any subcommands..."
+exit 0
