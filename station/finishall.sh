@@ -1,8 +1,5 @@
 #!/bin/sh
 
-set -v
-set -x
-
 SELFDIR=`dirname "$0"`
 SELFDIR=`cd "$SELFDIR" && pwd`
 cd "${SELFDIR}/"
@@ -14,9 +11,9 @@ if [ -r "./station.cfg" ]; then
     . "./station.cfg"
 fi
 
-if [ -r "./startup.cfg" ]; then
-    . "./startup.cfg"
-fi
+#if [ -r "./startup.cfg" ]; then
+#    . "./startup.cfg"
+#fi
 
 #if [ -r "./docker.cfg" ]; then
 #    . "./docker.cfg"

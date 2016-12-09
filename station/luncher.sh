@@ -1,8 +1,5 @@
 #!/bin/sh
 
-set -v
-set -x
-
 #
 # Run docker-compose within 'ddd'
 #
@@ -36,9 +33,9 @@ if [ -r "./station.cfg" ]; then
     . "./station.cfg"
 fi
 
-if [ -r "./startup.cfg" ]; then
-    . "./startup.cfg"
-fi
+#if [ -r "./startup.cfg" ]; then
+#    . "./startup.cfg"
+#fi
 
 if [ -r "/tmp/lastapp.cfg" ]; then
     . "/tmp/lastapp.cfg"

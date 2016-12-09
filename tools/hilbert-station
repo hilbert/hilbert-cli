@@ -1,0 +1,441 @@
+#! /usr/bin/env bash
+
+# TODO: add some more description here?
+# NOTE: Custom argument/option handling only using `getopts`!
+
+# NOTE: Exit codes may be as follows (see status.sh, others will be updated):
+#  - 0: success (no error detected). There maybe warnings
+#  - 1: detected error which is not our fault (e.g. network / HW etc): user can try again
+#  - 2: error due to wrong usage of scripts (bad arguments) / in config files or some assumption was violated.
+#      NOTE: in PEDANTIC mode some non-critical issues may be treated this way.
+#  - any other value: something unexpected has happened!
+
+
+TOOL=$(basename "$0") # script_name=`basename "$0"` # script_name="${script_name%.*}"
+LOGLEVEL=0
+
+# NOTE: locking following: http://stackoverflow.com/a/1985512 by Przemyslaw Pawelczyk <przemoc@gmail.com>
+# NOTE: uses flock from util-linux[-ng]
+
+# NOTE: /var/lock/ == /run/lock/ => will be removed in case of a crash! No stale lockfile is possible!
+if [[ -w "/var/lock/lockdev" ]]; then
+  LOCKFILE="/var/lock/lockdev/${TOOL}"
+elif [[ -w "/var/lock/" ]]; then
+  LOCKFILE="/var/lock/${TOOL}"
+else
+  LOCKFILE="/tmp/_var_lock_${TOOL}"
+fi
+LOCKFD=99
+
+# PRIVATE
+_lock()             { flock -$1 $LOCKFD; }
+_no_more_locking()  { _lock u; _lock xn && rm -f $LOCKFILE; }
+_prepare_locking()  { eval "exec $LOCKFD>\"$LOCKFILE\""; trap _no_more_locking EXIT; }
+
+# PUBLIC
+exlock_now()        { _lock xn; }  # obtain an exclusive lock immediately or fail
+exlock()            { _lock x; }   # obtain an exclusive lock. wait
+shlock()            { _lock s; }   # obtain a shared lock
+unlock()            { _lock u; }   # drop a lock
+
+# TODO(?): evaluate other ways according to http://stackoverflow.com/questions/1715137/the-best-way-to-ensure-only-1-copy-of-bash-script-is-running
+
+exec 3>&1 4>&2
+trap 'exec 2>&4 1>&3 ' 0 1 2 3 13 15 RETURN
+exec 2>&1
+# 1>log.out
+
+start_locking () {
+    DEBUG "Starting exclusive (locked) usage of ${TOOL}..."
+
+    # ON START:
+    _prepare_locking
+    # Simplest example is avoiding running multiple instances of script: `exlock_now || exit 1`
+    # Remember! Lock file is removed when one of the scripts exits and it is
+    #           the only script holding the lock or lock is not acquired at all.
+
+    if exlock_now
+    then
+      DEBUG "Obtained exclusive lock of [$(ls -la ${LOCKFILE})]"
+    else
+      DEBUG "Lockfile: $(ls -la ${LOCKFILE})"
+      ERROR "Another user is already running ${TOOL}: please try again later!"
+      exit 2
+    fi
+
+}
+
+function INFO() {
+ echo "INFO [${TOOL}:${FUNCNAME[1]}] $*"
+}
+function WARNING() {
+ echo "WARNING [${TOOL}:${FUNCNAME[1]}] $*"
+}
+function DEBUG() {
+ echo "DEBUG [${TOOL}:${FUNCNAME[1]}] $*"
+}
+function ERROR(){
+ echo "ERROR [${TOOL}:${FUNCNAME[1]}] $*"
+}
+
+# TODO: read HILBERT_CONFIG_DIR from `~/.hilbert-station` ?
+export HILBERT_CONFIG_DIR="${HILBERT_CONFIG_DIR:-${HOME}/.config/${TOOL}}"
+export HILBERT_CONFIG_FILE="${HILBERT_CONFIG_FILE:-${HILBERT_CONFIG_DIR}/station.cfg}"
+
+CLI_VERSION_ID="\$Id$"
+
+usage () {
+ cat << EOF
+usage: ${TOOL} [-h] [-p] [-V] [-v | -q] subcommand
+
+Hilbert - client part for Linux systems
+
+positional arguments:
+ subcommand:
+   init [<cfg>]            init station based on given or installed configuration
+   list_applications       list of supported applications
+   app_change <app_id>     change the currently running top application to specified
+   start                   start Hilbert on the system
+   stop                    stop Hilbert on the system
+   shutdown                shut down the system
+
+optional arguments:
+ -h      show this help message and exit
+ -V      show version info and exit
+ -v      increase verbosity
+ -q      decrease verbosity
+EOF
+}
+
+#  -p      turn on pedantic mode
+#   dm_start <vm_name>      Start a VM using docker-machine  -> separate script!!!
+
+
+version () {
+ cat << EOF
+This tool:   [$0]
+Version:     [${CLI_VERSION_ID}]
+Lockfile:    [$(ls -l ${LOCKFILE})]
+
+Workdir:     [${PWD}]
+Config Dir:  [${HILBERT_CONFIG_DIR}]
+Config file: [$(readlink -f ${HILBERT_CONFIG_FILE})]
+All Configs: [$(sh -c "cd ${HILBERT_CONFIG_DIR}/ && ls *.cfg | xargs")]
+
+Host:        [$(hostname)]
+System:      [$(uname -a)]
+EOF
+
+ DEBUG "${HILBERT_CONFIG_FILE}:
+["
+ cat "${HILBERT_CONFIG_FILE}"  # TODO: indent the file contents for pretty-printing?
+ DEBUG "
+]"
+}
+DEBUG "Input args: ($@)"
+
+
+while getopts ":hqvpV" opt; do
+  case ${opt} in
+    h )
+      usage
+      exit 0
+      ;;
+    V )
+      version
+      exit 0
+      ;;
+    p )
+      DEBUG "Turned-on the pedantic mode!(?)"
+      set -e # TODO: test this!!
+      ;;
+    v )
+      DEBUG "Turning on tracing of bash command execution + verbosity..."
+      set -v
+      set -x
+      ;;
+    q )
+      DEBUG "Turning off tracing of bash command execution + verbosity..."
+      set +v
+      set +x
+      ;;
+   \? )
+     ERROR "Invalid Option: -$OPTARG"
+     exit 1
+     ;;
+  esac
+done
+
+
+
+if [[ ! -d "${HILBERT_CONFIG_DIR}" ]]; then
+  WARNING "Configuration directory '${HILBERT_CONFIG_DIR}' is missing!"
+  mkdir -p "${HILBERT_CONFIG_DIR}"
+fi
+
+if [[ ! -r "${HILBERT_CONFIG_DIR}" ]]; then
+  WARNING "Configuration directory '${HILBERT_CONFIG_DIR}' is unreadable!"
+  chmod u+rwx "${HILBERT_CONFIG_DIR}"
+fi
+
+if [[ ! -d "${HILBERT_CONFIG_DIR}" ]]; then
+  ERROR "Configuration directory '${HILBERT_CONFIG_DIR}' is missing!"
+  exit 1
+fi
+
+if [[ ! -r "${HILBERT_CONFIG_DIR}" ]]; then
+  ERROR "Configuration directory '${HILBERT_CONFIG_DIR}' is unreadable!"
+  exit 1
+fi
+
+DEBUG "Configuration directory '${HILBERT_CONFIG_DIR}' exists and is readable..."
+
+if [[ ! -r "${HILBERT_CONFIG_FILE}" ]]; then
+  WARNING "Station Configuration file '${HILBERT_CONFIG_FILE}' is unreadable!"
+#  exit 1
+else
+  DEBUG "Station Configuration file '${HILBERT_CONFIG_FILE}' exists and is readable..."
+fi
+
+
+
+cmd_install_station_config() {
+    subcommand="prepare(install_station_config)"
+    arg=$1; shift
+
+    if [[ -z "${arg}" ]]; then
+      ERROR "Wrong argument '${arg}' to '${subcommand}'!"
+      usage
+      exit 1
+    fi
+
+    if [[ ! -r "${arg}" ]]; then
+      ERROR "New configuration file '${arg}' is not readable!"
+      usage
+      exit 1
+    fi
+
+    # TODO: what about further resources? Maybe a .tar.gz and unpack it into ${new_cfg_dir}?
+
+    # NOTE: New configuration directory
+    # TODO: make sure there is no such dir yet!
+    new_cfg_dir=$(mktemp -d --tmpdir=${HILBERT_CONFIG_DIR} "`basename ${arg}`.XXXXXXXXXX")
+    DEBUG "new_cfg_dir: ${new_cfg_dir}"
+
+    mkdir -p "${new_cfg_dir}"
+
+    # NOTE: take over the deployed station configuration file!
+    DEBUG "Moving ${arg} => ${new_cfg_dir}/station.cfg"
+    mv "${arg}" "${new_cfg_dir}/station.cfg"
+
+    ALL_CONFIG_DIR="${HILBERT_CONFIG_DIR}/configs"
+
+    # What about the rest of resources?
+    if [[ -L "${ALL_CONFIG_DIR}" ]]; then
+      DEBUG "${ALL_CONFIG_DIR} -> $(readlink -f ${ALL_CONFIG_DIR})"
+
+      # TODO: remove older config?
+      unlink "${ALL_CONFIG_DIR}"
+    fi
+
+    # NOTE: atomic configuration update!
+    # TODO: FIXME: full path in symbolic link => may interfere when volume-mounted...
+    # use basename ${new_cfg_dir}??? instead?
+    ln -sf "${new_cfg_dir}" "${ALL_CONFIG_DIR}"
+
+    if [[ ! -L "${ALL_CONFIG_DIR}" ]]; then
+      WARNING "${ALL_CONFIG_DIR} is not a link!"
+    fi
+}
+
+cmd_init () {
+    subcommand="init"
+    arg=$1; shift
+
+    if [[ -n "${arg}" ]]; then
+      cmd_install_station_config "${arg}"
+    fi
+
+    if [[ ! -x "${HILBERT_CONFIG_DIR}/prepare.sh" ]]; then
+      ERROR "'${HILBERT_CONFIG_DIR}/prepare.sh' is not executable!"
+      exit 1
+    else
+      exec "${HILBERT_CONFIG_DIR}/prepare.sh"
+    fi
+}
+
+cmd_app_change () {
+    subcommand="app_change"
+    arg=$1; shift
+
+    if [[ -z ${arg} ]]; then
+      ERROR "Wrong argument '${arg}' to '${subcommand}'!"
+      usage
+      exit 1
+    fi
+
+    # TODO: read configuration. Check whether arg is a valid application
+
+    if [[ ! -x "${HILBERT_CONFIG_DIR}/topswitch.sh" ]]; then
+      ERROR "'${HILBERT_CONFIG_DIR}/topswitch.sh' is not executable!"
+      exit 1
+    else
+      exec "${HILBERT_CONFIG_DIR}/topswitch.sh" "${arg}"
+    fi
+}
+
+cmd_default () {
+    if [[ ! -x "${HILBERT_CONFIG_DIR}/default.sh" ]]; then
+      ERROR "'${HILBERT_CONFIG_DIR}/default.sh' is not executable!"
+      exit 1
+    else
+      exec "${HILBERT_CONFIG_DIR}/default.sh"
+    fi
+}
+
+cmd_list_applications () {
+    subcommand="start"
+
+    # TODO: read config and handle the following: variables!
+    source "${HILBERT_CONFIG_FILE}" # only: key="...value..."!
+
+    for app in ${possible_apps}; do
+      echo " - ${app}"
+    done
+
+    DEBUG "Default application: ${default_app}"
+}
+
+cmd_start () {
+    subcommand="start"
+
+    # TODO: read config and handle the following: variables!
+    source "${HILBERT_CONFIG_FILE}" # only: key="...value..."!
+
+
+#    if [[ "${hilbert_autostart}" != "True" ]]; then
+#      DEBUG "hilbert_autostart: ${hilbert_autostart} (True/False)"
+#      DEBUG "hilbert_autostart_delay: ${hilbert_autostart_delay} (positive int)"
+#
+#      INFO "Auto-starting is not enabled in ${HILBERT_CONFIG_FILE}"
+#      DEBUG "Will NOT start Hilbert!.."
+#      exit 0
+#    fi
+
+#    DEBUG "Sleeping for [${hilbert_autostart_delay}] sec (due to 'hilbert_autostart_delay' from '${HILBERT_CONFIG_FILE}')..."
+#    sleep "${hilbert_autostart_delay}"
+
+    cmd_default
+}
+
+cmd_finishall () {
+    subcommand="stop(finishall)"
+
+    if [[ ! -x "${HILBERT_CONFIG_DIR}/finishall.sh" ]]; then
+      WARNING "'${HILBERT_CONFIG_DIR}/finishall.sh' is not executable!"
+    else
+      "${HILBERT_CONFIG_DIR}/finishall.sh"
+    fi
+}
+
+cmd_stop () {
+    subcommand="stop"
+    # TODO: NOTE: any arguments?
+
+    cmd_finishall
+}
+
+cmd_shutdown () {
+    subcommand="shutdown"
+    arg=$@
+
+    DEBUG "Shutting this system down... Arguments: [${arg}]" # -h now?
+    shutdown ${arg} || sudo -n -P shutdown ${arg}
+}
+
+shift $((OPTIND -1))
+subcommand=$1; shift
+
+DEBUG "Subcommand to handle: '$subcommand'"
+
+case "$subcommand" in
+  list_applications)
+    start_locking
+    cmd_list_applications "$@"  # TODO: arguments?
+    exit 0
+    ;;
+
+  init)  # |prepare
+    start_locking
+    cmd_init "$@"
+    exit 0
+    ;;
+  app_change)  # app_switch|
+    start_locking
+    cmd_app_change "$@"
+    exit 0
+    ;;
+  stop)
+    start_locking
+    cmd_stop "$@"  # TODO: arguments?
+    exit 0
+    ;;
+  shutdown)
+    start_locking
+    cmd_shutdown "$@"  # TODO: arguments?
+    ;;
+  start)
+    start_locking
+    cmd_start "$@"  # TODO: arguments?
+    ;;
+
+  dm_start)
+    ERROR "Please use a separate script for starting a VM via docker-machine!"
+    exit 2
+    ;;
+
+  cmd_*) # hidden subcommand-s
+    start_locking  # NOTE: Just to be sure!..
+    ${subcommand} "$@"
+
+    DEBUG "Script successfully handled hidden subcommand: [${subcommand}]!"
+    exit 0
+    ;;
+esac
+
+if [[ -z "${subcommand}" ]]; then
+    usage
+    DEBUG "Script successfully finished without handling any subcommands..."
+    exit 0
+else
+    ERROR "Invalid sub-command: '$subcommand'"
+    exit 1
+fi
+
+
+
+exit 255
+
+############### Separate script for the Server system...
+
+cmd_dm_start () {
+    subcommand="dm_start"
+    arg=$1; shift
+
+    if [[ -z ${arg} ]]; then
+      ERROR "Wrong argument '${arg}' to '${subcommand}'!"
+      usage
+      exit 1
+    fi
+
+    DM="${DM:-docker-machine}"  # TODO: check if ${DM} exists and is an executable!
+    DEBUG "executing: [${DM} start \"${arg}\"]"
+    exec ${DM} start "${arg}"
+}
+
+#  dm_start)
+#    # User should be able to start multiple VMs in parallel...
+#    cmd_dm_start "$@"
+#    ;;
+
+

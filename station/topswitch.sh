@@ -1,25 +1,15 @@
-#!/bin/sh
-
-set -v
-set -x
+#!/bin/bash
 
 SELFDIR=`dirname "$0"`
 SELFDIR=`cd "$SELFDIR" && pwd`
-
-## set -e
-## unset DISPLAY
 cd "${SELFDIR}/"
 
 if [ -r "./station.cfg" ]; then
-    source "./station.cfg"
-fi
-
-if [ -r "./startup.cfg" ]; then
-    source "./startup.cfg"
+    . "./station.cfg"
 fi
 
 if [ -r "/tmp/lastapp.cfg" ]; then
-    source "/tmp/lastapp.cfg"
+    . "/tmp/lastapp.cfg"
     old="${current_app}"
     unset current_app
     mv -f "/tmp/lastapp.cfg" "/tmp/lastapp.cfg.bak"

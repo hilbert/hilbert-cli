@@ -1,0 +1,97 @@
+Version: 0.6.0 # 0.MAJOR.MINOR, later: MAJOR.MINOR
+
+Services: # file: docker-compose.yml,
+  omd_agent: { type: compose, ref: omd_agent, auto_detections: 'export HB_URL=${HILBERT_HEARTBEAT_URL}' }
+  omd:       { type: compose, ref: omd_anew, auto_detections: 'export OMD=${HILBERT_OMD_PATH}' }
+  # ptmx, registry, mng qr_handler
+
+Profiles:
+  standalone:
+    services: []
+    description: Generic Networking, without SSH & Docker & OMD agent.
+    name: standalone
+    supported_types: []
+
+  server:
+    services: [ ptmx, omd_agent, omd, registry, mng ]
+    description: Only for Server Station
+    name: server
+    supported_types: [ compose ]
+
+  simple:
+    services: [ ptmx, omd_agent ]
+    description: Any Linux station without QR Scanner
+    name: simple
+    supported_types: [ compose ]
+
+  qr:
+    services: [ ptmx, omd_agent, qr_handler ]
+    description: Linux stations with QR Scanner
+    name: Tracking
+    supported_types: [ compose ]
+
+Stations:
+  station_defaults: # fake station: only used to share default settings
+    name: hidden default station
+    description: Not a real station - Just hidden default settings
+    profile: standalone
+    omd_tag: standalone
+    address: Problematic.SSH.Alias
+    hidden: true # hide on Dashboard
+    client_settings:
+      hilbert_autostart: true # Station starts Hilbert upon booting
+      hilbert_autostart_delay: 20 # … with this delay in [sec]
+      HILBERT_PREFERRED_LANGUAGE: de
+      HILBERT_HEARTBEAT_URL: http://127.0.0.1:8888
+      HILBERT_CUPS_SERVER: printer1.public.supernova:631
+      HILBERT_HIDE_MOUSE_CURSOR: 1
+      HILBERT_ALSA_CARD: 1
+      HILBERT_CUSTOMIZATIONS: nv,alsa
+
+  testhost1:
+    profile: standalone
+    omd_tag: standalone
+    hidden: false
+    description: Some STANDALONE Station
+    name: Test 1
+    address: test1.host.dns.name
+    poweron_settings: { type: WOL, mac: '11:22:33:44:55:66', auto_turnon: true }
+
+  supernova:
+    extends: station_defaults
+    hidden: true #
+    description: 'Server Station: Supernova'
+    name: Supernova Server
+    address: supernova.mfo.de
+    profile: server
+    omd_tag: agent
+    client_settings:
+      hilbert_autostart_delay: 0 # no delay before starting Hilbert here
+      HILBERT_SERVER_CONFIG_PATH: '${HOME}/.config/hilbert-server/' # where to keep sync'ed content
+      HILBERT_OMD_PATH: '${HOME}/.config/hilbert-omd/' # persistent storage for OMD
+      HILBERT_REGISTRY_DATA_PATH: '${HOME}/.config/hilbert-registry-data/' # persistent storage for docker registry
+
+  vb_hb_test_a:
+    extends: station_defaults
+    hidden: false
+    address: 192.168.99.109 # No static DNS host name for VMs
+    description: 'Testing Virtual Station: A'
+    name: 'Virtual Station: Test A'
+    omd_tag: agent
+    profile: simple
+    poweron_settings: { type: DockerMachine, auto_turnon: true, vm_host_address: supernova.mfo.de, vm_name: vb-hb-test-a }
+    client_settings:
+      hilbert_autostart_delay: 10 # 10 sec. delay before starting here Hilbert-CLI-Station
+      hilbert_station_default_application: hb_test_a
+
+Groups:
+  mygroup: { simple, exclude: [qr] }
+
+Applications:
+  hb_test:
+    type: compose
+    ref: hb_test # file: docker-compose.yml # default - may be omitted
+    auto_detections: 'export HB_URL=${HILBERT_HEARTBEAT_URL}'
+    name: HB-Test
+    description: Random HB testing
+    compatibleStations: { mygroup }

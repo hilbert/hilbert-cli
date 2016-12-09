@@ -1,0 +1,27 @@
+language: python
+sudo: false
+
+cache:
+  directories:
+    - $HOME/.cache/pip
+
+matrix:
+  include:
+    - python: 2.7
+      env: TOXENV=py27
+    - python: 3.4
+      env: TOXENV=py34
+
+install:
+  - ./.travis/install.sh
+
+script:
+  - source ~/.venv/bin/activate
+  - tox
+
+notifications:
+  email:
+    recipients:
+      - malex984+travis.cli@gmail.com
+  on_success: never
+  on_failure: always
