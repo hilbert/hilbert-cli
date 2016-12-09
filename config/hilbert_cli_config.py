@@ -22,9 +22,9 @@ import collections
 import sys
 import os
 import re, tokenize
-import tempfile
 import subprocess, shlex
 # import paramiko
+import tempfile  # See also https://security.openstack.org/guidelines/dg_using-temporary-files-securely.html
 
 
 import pprint as PP
@@ -1820,6 +1820,27 @@ class Station(BaseRecordValidator):  # Wrapper?
 
         assert _a is not None
         assert isinstance(_a, HostAddress)
+
+        # TODO: deployment should create a temporary directory + /station.cfg + /docker-compose.yml etc!?
+        # tmpdir = tempfile.mkdtemp()
+        # predictable_filename = 'station.cfg'
+        #
+        # # Ensure the file is read/write by the creator only
+        # saved_umask = os.umask(0077)
+        #
+        # path = os.path.join(tmpdir, predictable_filename)
+        # print path
+        # try:
+        #     with open(path, "w") as tmp:
+        #         tmp.write("station settings!")
+        #     # treat all required dependencies!?!?!
+        # except IOError as e:
+        #     print 'IOError'
+        # else:
+        #     os.remove(path)
+        # finally:
+        #     os.umask(saved_umask)
+        #     os.rmdir(tmpdir)
 
         fd, path = tempfile.mkstemp()
         try:
