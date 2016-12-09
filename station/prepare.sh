@@ -4,10 +4,6 @@
 
 SELFDIR=`dirname "$0"`
 SELFDIR=`cd "$SELFDIR" && pwd`
-
-## unset DISPLAY
-
-### set -e
 cd "${SELFDIR}/"
 
 #### TODO: needs some safety check to avoid multiple runs...

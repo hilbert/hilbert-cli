@@ -31,9 +31,9 @@ import pprint as PP
 from abc import *
 
 ###############################################################
-logging.basicConfig(format='%(levelname)s  [%(filename)s:%(lineno)d]: %(message)s', level=logging.DEBUG)
+# logging.basicConfig(format='%(levelname)s  [%(filename)s:%(lineno)d]: %(message)s', level=logging.DEBUG)
 log = logging.getLogger(__name__)
-log.setLevel(logging.DEBUG)
+# log.setLevel(logging.DEBUG)
 
 _pp = PP.PrettyPrinter(indent=4)
 
@@ -95,7 +95,8 @@ def pprint(cfg):
 
 
 ###############################################################
-def _execute(_cmd, timeout=None, shell=False, stdout=None, stderr=None):  # True??? Try several times? Overall timeout?
+# timeout=None,
+def _execute(_cmd, shell=False, stdout=None, stderr=None):  # True??? Try several times? Overall timeout?
     global PEDANTIC
     __cmd = ' '.join(_cmd)
     # stdout = tmp, stderr = open("/dev/null", 'w')
@@ -103,14 +104,13 @@ def _execute(_cmd, timeout=None, shell=False, stdout=None, stderr=None):  # True
     log.debug("Executing shell command: '{}'...".format(__cmd))
 
     retcode = None
-    with subprocess.Popen(_cmd, shell=shell, stdout=stdout, stderr=stderr) as p:
-        try:
-            retcode = p.wait(timeout=timeout)  # ?
-        except:
-            p.kill()
-            p.wait()
-            log.exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
-            raise
+    try:
+        #    with subprocess.Popen(_cmd, shell=shell, stdout=stdout, stderr=stderr) as p:
+        # timeout=timeout,
+        retcode = subprocess.call(_cmd, shell=shell, stdout=stdout, stderr=stderr)
+    except:
+        log.exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
+        raise
 
     assert retcode is not None
     log.debug("Exit code: '{}'".format(retcode))
@@ -1154,13 +1154,14 @@ class HostAddress(StringValidator):
     def check_ssh_alias(cls, _h, **kwargs):
         """Check for ssh alias"""
         global PEDANTIC
+        timeout = kwargs.pop('timeout', 2)
 
         log.debug("Checking ssh alias: '{0}'...".format(text_type(_h)))
         try:
 #            client = paramiko.SSHClient()
 #            client.load_system_host_keys()
 
-            _cmd = ["ssh", "-q", "-F", os.path.join(os.environ['HOME'], ".ssh", "config"), "-o", "ConnectTimeout=1", _h, "exit 0"]
+            _cmd = ["ssh", "-q", "-F", os.path.join(os.environ['HOME'], ".ssh", "config"), "-o", "ConnectTimeout={}".format(timeout), _h, "exit 0"]
             retcode = _execute(_cmd, **kwargs)  # , stdout=open("/dev/null", 'w'), stderr=open("/dev/null", 'w')
 
             if retcode:
@@ -1516,6 +1517,8 @@ class DockerComposeService(BaseRecordValidator):
     def check_service(self, _f, _n):
         global PEDANTIC
 
+        return True  # TODO: FIXME: takes TOOOOO long at HITS!?!?
+
         # TODO: Check the corresponding file for such a service -> Service in DockerService!
         fd, path = tempfile.mkstemp()
         try:
@@ -1766,7 +1769,21 @@ class Station(BaseRecordValidator):  # Wrapper?
         try:
             _ret = _a.ssh([self._HILBERT_STATION, "stop"], shell=False)
         except:
-            s = "Could not shutdown station {}".format(_a)
+            s = "Could not stop Hilbert on the station {}".format(_a)
+            if not PEDANTIC:
+                log.warning(s)
+                return False
+            else:
+                log.exception(s)
+                raise
+
+        if not _ret:
+            return _ret
+
+        try:
+            _ret = _a.ssh([self._HILBERT_STATION, "shutdown"], shell=False)
+        except:
+            s = "Could not schedule a shutdown on the station {}".format(_a)
             if not PEDANTIC:
                 log.warning(s)
                 return False
@@ -1775,6 +1792,7 @@ class Station(BaseRecordValidator):  # Wrapper?
                 raise
 
         return _ret
+
 
     def deploy(self):
         global PEDANTIC
@@ -1807,7 +1825,7 @@ class Station(BaseRecordValidator):  # Wrapper?
         assert _serviceIDs is not None
         assert isinstance(_serviceIDs, ServiceList)  # list of ServiceID
 
-        _serviceIDs = _serviceIDs.get_data()
+        _serviceIDs = _serviceIDs.get_data()  # Note: IDs from config file - NOT Service::ref!
         assert isinstance(_serviceIDs, list)  # list of strings (with ServiceIDs)?
 
         _a = self.get_address()
@@ -1824,10 +1842,14 @@ class Station(BaseRecordValidator):  # Wrapper?
                 # NOTE: ATM only compose && Application/ServiceIDs == refs to the same docker-compose.yml!
                 # TODO: NOTE: may differ depending on Station::type!
                 tmp.write("hilbert_station_profile_services=\"{}\"\n".format(' '.join(_serviceIDs)))
+
                 for k in _settings:
                     tmp.write("{0}=\"{1}\"\n".format(k, str(_settings.get(k, ''))))
+
                 tmp.write("background_services=\"${hilbert_station_profile_services}\"\n")
-                tmp.write("default_app=\"${hilbert_station_default_application}\"\n")
+
+                tmp.write("default_app=\"${hilbert_station_default_application}\"\n")  # ID!
+
                 # TODO: collect all compatible applications!
                 tmp.write("possible_apps=\"${default_app}\"\n")
 
@@ -1853,11 +1875,11 @@ class Station(BaseRecordValidator):  # Wrapper?
 #            log.debug("New Station Configuration: {}".format(s))
 #            os.remove(path)
 
-        _cmd = [self._HILBERT_STATION, "prepare", os.path.join("/tmp", os.path.basename(path))]
+        _cmd = [self._HILBERT_STATION, "init", os.path.join("/tmp", os.path.basename(path))]
         try:
             _a.ssh(_cmd, shell=False)
         except:
-            s = "Could not prepare the station using the new configuration file with {}".format(' '.join(_cmd))
+            s = "Could not initialize the station using the new configuration file with {}".format(' '.join(_cmd))
             if not PEDANTIC:
                 log.warning(s)
                 return False
@@ -1877,7 +1899,7 @@ class Station(BaseRecordValidator):  # Wrapper?
 #    def finish_service(self, action_args):
 #        raise NotImplementedError("Cannot finish a service/application on this station!")
 
-    def app_switch(self, app_id):
+    def app_change(self, app_id):
         global PEDANTIC
 
         _a = self.get_address()
@@ -1886,7 +1908,7 @@ class Station(BaseRecordValidator):  # Wrapper?
         assert isinstance(_a, HostAddress)
 
         try:
-            _ret = _a.ssh([self._HILBERT_STATION, "app_switch", app_id], shell=False)
+            _ret = _a.ssh([self._HILBERT_STATION, "app_change", app_id], shell=False)
         except:
             s = "Could not change top application on the station '{0}' to '{1}'".format(_a, app_id)
             if not PEDANTIC:
@@ -1938,7 +1960,7 @@ class Station(BaseRecordValidator):  # Wrapper?
         elif action == 'stop':
             self.shutdown()  # action_args
         elif action == 'app_change':
-            self.app_switch(action_args)  # ApplicationID
+            self.app_change(action_args)  # ApplicationID
 
 #        elif action == 'start':
 #            self.start_service(action_args)

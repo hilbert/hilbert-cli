@@ -4,6 +4,9 @@ SELFDIR=`dirname "$0"`
 SELFDIR=`cd "$SELFDIR" && pwd`
 cd "${SELFDIR}/"
 
+### set -e
+## unset DISPLAY
+
 #! NOTE: cleanup all previously started containers:
 # docker ps -aq | xargs --no-run-if-empty docker rm -fv
 # docker images -q -a | xargs --no-run-if-empty docker rmi
@@ -11,6 +14,11 @@ cd "${SELFDIR}/"
 if [ -r "./station.cfg" ]; then
     . "./station.cfg"
 fi
+
+#if [ -r "./startup.cfg" ]; then
+#    . "./startup.cfg"
+#fi
+
 
 station_default_app="${station_default_app:-$default_app}"
 
