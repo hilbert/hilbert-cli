@@ -22,9 +22,10 @@ import collections
 import sys
 import os
 import re, tokenize
-import subprocess, shlex
-# import paramiko
 import tempfile  # See also https://security.openstack.org/guidelines/dg_using-temporary-files-securely.html
+import subprocess  # See also https://pymotw.com/2/subprocess/
+import shlex
+# import paramiko  # TODO: use instead of simple .call('ssh ...') ? Check for Pros and Cons!
 
 
 import pprint as PP
@@ -1511,10 +1512,11 @@ class DockerComposeService(BaseRecordValidator):
         self._create_optional = True
 
     def check_service(self, _f, _n):
+        # TODO: Check the corresponding file for such a service -> Service in DockerService!
 
+        # TODO: FIXME: Read docker-compose.yml directly??? instead of using docker-compose config???
         return True  # TODO: FIXME: takes TOOOOO long at HITS!?!?
 
-        # TODO: Check the corresponding file for such a service -> Service in DockerService!
         fd, path = tempfile.mkstemp()
         try:
             with os.fdopen(fd, 'w') as tmp:
