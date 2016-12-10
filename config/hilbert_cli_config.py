@@ -47,9 +47,26 @@ INPUT_DIRNAME = './'  # NOTE: base location for external resources
 ###############################################################
 def start_pedantic_mode():
     global PEDANTIC
-    PEDANTIC = True
-    if PEDANTIC:
+
+    if not PEDANTIC:
+        PEDANTIC = True
         log.debug("PEDANTIC mode is ON!")
+
+
+def get_INPUT_DIRNAME():
+    return INPUT_DIRNAME
+
+
+def set_INPUT_DIRNAME(d):
+    global INPUT_DIRNAME
+
+    if INPUT_DIRNAME != d:
+        t = INPUT_DIRNAME
+        INPUT_DIRNAME = d
+        log.debug("INPUT_DIRNAME is '%s' now!", INPUT_DIRNAME)
+        return t
+
+    return INPUT_DIRNAME
 
 
 def get_PEDANTIC():
@@ -767,6 +784,7 @@ class ServiceType(BaseEnum):  # Q: Is 'Service::type' mandatory? default: 'compo
 
         compose = text_type('compose')
         self._enum_list = [compose]  # NOTE: 'docker' and others may be possible later on
+
         self._default_input_data = compose
 
 
@@ -777,6 +795,7 @@ class StationOMDTag(BaseEnum):  # Q: Is 'Station::omd_tag' mandatory? default: '
 
         _v = text_type('standalone')
         self._enum_list = [text_type('agent'), text_type('windows'), _v]  # NOTE: possible values of omd_tag
+
         self._default_input_data = _v
 
 
@@ -789,6 +808,7 @@ class StationPowerOnMethodType(BaseEnum):  # Enum: [WOL], AMTvPRO, DockerMachine
         wol = text_type('WOL')
         # NOTE: the list of possible values of PowerOnMethod::type (will depend on format version)
         self._enum_list = [wol, text_type('DockerMachine')]  # NOTE: 'AMTvPRO' and others may be possible later on
+
         self._default_input_data = wol
 
 
@@ -1663,8 +1683,9 @@ class StationType(BaseEnum):
     def __init__(self, *args, **kwargs):
         super(StationType, self).__init__(*args, **kwargs)
 
-        # NOTE: the list of possible values of Station::type (will depend on format version)
         self._default_input_data = text_type('hidden')  # NOTE: nothing is required. For extension only!
+
+        # NOTE: the list of possible values of Station::type (will depend on format version)
         self._enum_list = [self._default_input_data,
                            text_type('standalone'),  # No remote control via SSH & Hilbert client...
                            text_type('server'),  # Linux with Hilbert client part installed but no remote control!
@@ -2045,7 +2066,7 @@ class BaseIDMap(BaseValidator):
         self._default_type = None
         self._types = {}  # type -> (TypeID, Type)
 
-        self._default_input_data = {}
+        self._default_input_data = {}  # NOTE: bears no .lc with line & col data!
 
     def detect_type(self, d):
         """determine the type of variadic data for the format version"""
@@ -2056,6 +2077,8 @@ class BaseIDMap(BaseValidator):
         return self._default_type
 
     def validate(self, d):
+        _input_data = d
+
         if d is None:
             d = self._default_input_data
 
@@ -2071,7 +2094,8 @@ class BaseIDMap(BaseValidator):
         try:
             _lc = d.lc  # starting position?
         except:
-            log.warning("Input data bears no ruamel.yaml line/column data!")
+            if _input_data is not None:
+                log.warning("Input data bears no ruamel.yaml line/column data!")
             _lc = (0, 0)
 
         (s, c) = _get_line_col(_lc)
@@ -2191,11 +2215,12 @@ class GlobalStations(BaseIDMap):
     def validate(self, d):
         """Extension mechanism on top of the usual ID Mapping parsing"""
 
-        if d is None:
-            d = self._default_input_data
-
         if not BaseIDMap.validate(self, d):
             return False
+
+#        if d is None:
+#            d = self._default_input_data
+
 
         sts = self.get_data()  # NOTE: may be handy for postprocessing!
 
@@ -2427,6 +2452,8 @@ class Hilbert(BaseRecordValidator):
 
     def __init__(self, *args, **kwargs):
         kwargs['parsed_result_is_data'] = kwargs.pop('parsed_result_is_data', False)
+
+        # TODO: add an option like 'INPUT_DIRNAME'? E.g. here and to ::parse() method?
 
         super(Hilbert, self).__init__(*args, **kwargs)  # This is the Main Root of all Validators!
 

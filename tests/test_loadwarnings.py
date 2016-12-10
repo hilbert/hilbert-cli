@@ -7,6 +7,9 @@ from __future__ import absolute_import, print_function, unicode_literals  # NOQA
 import sys
 from os import path
 
+import logging
+logging.basicConfig(level=logging.WARNING, stream=sys.stderr)  # TODO: FIXME: no log output!?
+
 DIR=path.dirname( path.dirname( path.abspath(__file__) ) )
 sys.path.append(DIR)
 sys.path.append(path.join(DIR, 'config'))
@@ -18,13 +21,16 @@ from subcmdparser import *
 
 import pytest                        # NOQA
 
+
 def load(s):
     return load_yaml(s)
 
+
 class TestLoad:
+
     def test_1(self, capsys):
-        out, err = capsys.readouterr()        
-        load('{a, b, a}')       
+        out, err = capsys.readouterr()
+        load('{a, b, a}')
         out, err = capsys.readouterr()
         
 #        with capsys.disabled():
@@ -41,8 +47,6 @@ K[line: 1, column: 8]: New Value:
 ---
 ===
 """
-
-
 
     def test_2(self, capsys):
         out, err = capsys.readouterr()        
@@ -62,9 +66,3 @@ K[line: 1, column: 15]: New Value:
 ---
 ===
 """
-   
-        
-
-
-        
-        

@@ -6,6 +6,8 @@ from __future__ import absolute_import, print_function, unicode_literals  # NOQA
 
 import sys
 from os import path
+from ruamel.yaml.compat import PY2, PY3, text_type, string_types, ordereddict
+
 DIR=path.dirname( path.dirname( path.abspath(__file__) ) )
 sys.path.append(DIR)
 sys.path.append(path.join(DIR, 'config'))
@@ -26,15 +28,44 @@ from subcmdparser import *
 
 import pytest                        # NOQA
 import os                            # NOQA
-
+import logging
+logging.basicConfig(level=logging.WARNING, stream=sys.stderr)  # TODO: FIXME: no log output!?
 
 FIXTURE_DIR = os.path.abspath(os.path.join(
     os.path.dirname(os.path.realpath(__file__)),
         'data',
             ))
 
+def hilbert_invalidation(capsys, bad_input_yaml_file, test_output, test_err):
+    input_file = os.path.join(FIXTURE_DIR, bad_input_yaml_file)
+    assert os.path.exists(input_file)
+
+    yml = load_yaml_file(input_file)
+    assert yml is not None
+
+    out, err = capsys.readouterr()
+    try:
+        cwd = os.getcwd()
+        old = set_INPUT_DIRNAME(FIXTURE_DIR)
+        try:
+            os.chdir(get_INPUT_DIRNAME())
+            cfg = parse_hilbert(yml)
+        finally:
+            set_INPUT_DIRNAME(old)
+            os.chdir(cwd)
+        # must throw an exception!
+        assert False
+    except:
+        assert True
+        pass
+    out, err = capsys.readouterr()
+
+    assert out == test_output
+    assert err == test_err
+
+
+
 def hilbert_validation(input_yaml_file, data_file):
-    global INPUT_DIRNAME
 
     input_file = os.path.join(FIXTURE_DIR, input_yaml_file)
     data_file = os.path.join(FIXTURE_DIR, data_file)
@@ -52,11 +83,12 @@ def hilbert_validation(input_yaml_file, data_file):
     assert isinstance(d, dict)
 
     cwd = os.getcwd()
+    old = set_INPUT_DIRNAME(FIXTURE_DIR)
     try:
-        INPUT_DIRNAME = FIXTURE_DIR
         os.chdir(INPUT_DIRNAME)
         cfg = parse_hilbert(yml)
     finally:
+        set_INPUT_DIRNAME(old)
         os.chdir(cwd)
 
     assert cfg is not None
@@ -73,6 +105,8 @@ def hilbert_validation(input_yaml_file, data_file):
     assert data == d  # Compare dictionaries with simple data!
 
 
+
+
 class TestValidate:
     def test_minimal_sample(self, capsys):
         hilbert_validation('miniHilbert.yml', 'miniHilbert.yml.data.pickle')
@@ -82,3 +116,35 @@ class TestValidate:
 
     def test_single(self, capsys):
         hilbert_validation('singleHostHilbert.yml', 'singleHostHilbert.yml.data.pickle')
+
+    def test_non_unique_app_service_ids(selfs, capsys):
+        test_output = None
+        if PY2:
+            test_err = ''
+
+            test_output = """\
+K[line: 4, column: 3]: Service key: duplicating_id
+  duplicating_id: ordereddict([('type', 'compose'), ('ref', 'hb_test')])
+  ↑
+---
+K[line: 7, column: 3]: Application key: duplicating_id
+  duplicating_id: ordereddict([('type', 'compose'), ('ref', 'hb_test'), ('file', 'docker-compose.yml'), ('name', 'HB-Test'), ('description', 'Random HB testing'), ('compatibleStations', ordereddict([]))])
+  ↑
+---
+"""
+        elif PY3:
+            test_err = """\
+'duplicating_id' is both a ServiceID and an ApplicationID:
+"""
+            test_output = """\
+K[line: 4, column: 3]: Service key: duplicating_id
+  duplicating_id: CommentedMap([('type', 'compose'), ('ref', 'hb_test')])
+  ↑
+---
+K[line: 7, column: 3]: Application key: duplicating_id
+  duplicating_id: CommentedMap([('type', 'compose'), ('ref', 'hb_test'), ('file', 'docker-compose.yml'), ('name', 'HB-Test'), ('description', 'Random HB testing'), ('compatibleStations', CommentedMap())])
+  ↑
+---
+"""
+
+        hilbert_invalidation(capsys, 'non_unique_app_service_ids_Hilbert.yml', test_output, '')

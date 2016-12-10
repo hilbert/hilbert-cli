@@ -72,8 +72,6 @@ def cmd_verify(parser, context, args):
 
 
 def input_handler(parser, ctx, args):
-    global INPUT_DIRNAME
-
     fn = None
     df = None
 
@@ -108,10 +106,10 @@ def input_handler(parser, ctx, args):
         log.info("Input dump file: '{}'".format(df))
 
     if fn is not None:
-        INPUT_DIRNAME = os.path.abspath(os.path.dirname(fn))
+        set_INPUT_DIRNAME( os.path.abspath(os.path.dirname(fn)) )
     else:
         assert df is not None
-        INPUT_DIRNAME = os.path.abspath(os.path.dirname(df))
+        set_INPUT_DIRNAME( os.path.abspath(os.path.dirname(df)) )
 
     cfg = None
 
@@ -123,7 +121,7 @@ def input_handler(parser, ctx, args):
 
             log.info("Data Validation/Parsing: ")
 
-            os.chdir(INPUT_DIRNAME)  # NOTE: references relative to input file's location!
+            os.chdir(get_INPUT_DIRNAME())  # NOTE: references relative to input file's location!
             cfg = parse_hilbert(yml)  # NOTE: checks that this is a proper dictionary...
         except:
             log.exception("ERROR: wrong input file: '{}'!".format(fn))
@@ -631,6 +629,8 @@ def _version():
     print("Hilbert Configuration API:     {}".format(Hilbert(None).get_api_version()))
     print("Root Logging Level:            {}".format(logging.getLevelName(logging.getLogger().level)))
     print("PEDANTIC mode:                 {}".format(get_PEDANTIC()))
+    print("INPUT_DIRNAME:                 {}".format(get_INPUT_DIRNAME()))
+
 
     log.debug("Done")
 

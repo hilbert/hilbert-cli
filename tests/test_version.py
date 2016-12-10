@@ -6,6 +6,9 @@ from __future__ import absolute_import, print_function, unicode_literals  # NOQA
 
 import sys
 from os import path
+import logging
+logging.basicConfig(level=logging.WARNING, stream=sys.stderr)  # TODO: FIXME: no log output!?
+
 
 DIR=path.dirname( path.dirname( path.abspath(__file__) ) )
 sys.path.append(DIR)
