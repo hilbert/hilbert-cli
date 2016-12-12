@@ -1530,39 +1530,46 @@ class DockerComposeService(BaseRecordValidator):
 
         self._create_optional = True
 
-    def check_service(self, _f, _n):
+    @staticmethod
+    def check_service(_f, _n):
         # TODO: Check the corresponding file for such a service -> Service in DockerService!
 
         # TODO: FIXME: Read docker-compose.yml directly??? instead of using docker-compose config???
-        return True  # TODO: FIXME: takes TOOOOO long at HITS!?!?
 
-        fd, path = tempfile.mkstemp()
+        assert bool(_n)
+        assert os.path.exists(_f)
+
+        ## dc = load_yaml_file(_f)
+
         try:
-            with os.fdopen(fd, 'w') as tmp:
-               _cmd = [self._DC, "-f", _f, "config"]  # TODO: use '--services'?
-               try:
-                   retcode = _execute(_cmd, shell=False, stdout=tmp, stderr=open("/dev/null", 'w'))
-               except:
-                   log.exception("Exception while running '{}'!".format(' '.join(_cmd)))
-                   return False
-#                   _ret = not PEDANTIC  # TODO: add a special switch?
+            with open(_f, 'r') as fh:
+                # NOTE: loading external Docker-Compose's YML file using a standard loader!
+                dc = yaml.load(fh, Loader=yaml.RoundTripLoader, version=(1, 1), preserve_quotes=True)
+        except (IOError, yaml.YAMLError) as e:
+            error_name = getattr(e, '__module__', '') + '.' + e.__class__.__name__
+            log.exception(u"{0}: Could not parse yaml file: '{1}' due to {2}".format(error_name, _f, e))
+            return False
 
-            if retcode:
-                return False
+        assert dc is not None
+        ss = dc.get('services', None)
 
-            with open(path, 'r') as tmp:
-                dc = load_yaml(tmp)  # NOTE: loading external Docker-Compose's YML file using our validating loader!
-                ss = None
-                for k in dc['services']:
-                    if k == _n:
-                        ss = dc['services'][k]
-                        break
+        if ss is None:
+            if PEDANTIC:
+                log.error("Docker-Compose specification file '%s' contains no 'services'! Bad file format?", _f)
+            else:
+                log.warning("Docker-Compose specification file '%s' contains no 'services'! Bad file format?", _f)
 
-                if ss is None:
-                    log.error("missing service/application '{}' in file '{}' !".format(_n, _f))
-                    return False
-        finally:
-            os.remove(path)
+            return False
+
+        if _n in ss:
+            log.debug("Service/Application '%s' is available in '%s'", _n, _f)
+        else:
+            if PEDANTIC:
+                log.error("Missing service/application '%s' in file '%s'!", _n, _f)
+            else:
+                log.warning("Missing service/application '%s' in file '%s'!", _n, _f)
+
+            return False
 
         return True
 
@@ -1588,17 +1595,17 @@ class DockerComposeService(BaseRecordValidator):
 
         if not os.path.exists(_f):  # TODO: FIXME: use URI::check() instead??
             if PEDANTIC:
-                log.error("Missing file with docker-compose configuration: '%s'", _f)
+                log.error("Missing file with docker-compose configuration: '%s'. "
+                          "Cannot check the service '%s'!", _f, _n)
                 return False
-            log.warning("Missing file with docker-compose configuration: '{0}'. Cannot check the service reference id: '{1}'" .format(_f, _n))
+
+            log.warning("Missing file with docker-compose configuration: '%s'. "
+                        "Cannot check the service '%s'!", _f, _n)
             return True
 
         if not self.check_service(_f, _n):
             if PEDANTIC:
-                log.error("Bad service {0} in {1}".format(_n, _f))
                 return False
-            else:
-                log.warning("Bad service {0} in {1}".format(_n, _f))
 
         return True  # _ret
 
@@ -2557,10 +2564,11 @@ class Hilbert(BaseRecordValidator):
 
         return _ret
 
+
 ###############################################################
-def load_yaml(f, Loader=VerboseRoundTripLoader, version=(1, 2), preserve_quotes=True):
+def load_yaml(f, loader=VerboseRoundTripLoader, version=(1, 2), preserve_quotes=True):
     try:
-        return yaml.load(f, Loader=Loader, version=version, preserve_quotes=preserve_quotes)
+        return yaml.load(f, Loader=loader, version=version, preserve_quotes=preserve_quotes)
     except (IOError, yaml.YAMLError) as e:
         error_name = getattr(e, '__module__', '') + '.' + e.__class__.__name__
         raise ConfigurationError(u"{}: {}".format(error_name, e))
