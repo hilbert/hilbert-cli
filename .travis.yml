@@ -18,8 +18,8 @@ install:
   - pip install --upgrade tox
   - "TOX_ENV=${TRAVIS_PYTHON_VERSION/[0-9].[0-9]/py${TRAVIS_PYTHON_VERSION/.}}"
 
+#  - source ~/.venv/bin/activate
 script:
-  - source ~/.venv/bin/activate
   - tox -e $TOX_ENV
 
 notifications:
