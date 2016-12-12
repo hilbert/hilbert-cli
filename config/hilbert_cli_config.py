@@ -45,14 +45,6 @@ INPUT_DIRNAME = './'  # NOTE: base location for external resources
 
 
 ###############################################################
-def start_pedantic_mode():
-    global PEDANTIC
-
-    if not PEDANTIC:
-        PEDANTIC = True
-        log.debug("PEDANTIC mode is ON!")
-
-
 def get_INPUT_DIRNAME():
     return INPUT_DIRNAME
 
@@ -60,13 +52,21 @@ def get_INPUT_DIRNAME():
 def set_INPUT_DIRNAME(d):
     global INPUT_DIRNAME
 
-    if INPUT_DIRNAME != d:
-        t = INPUT_DIRNAME
+    t = INPUT_DIRNAME
+    if t != d:
         INPUT_DIRNAME = d
         log.debug("INPUT_DIRNAME is '%s' now!", INPUT_DIRNAME)
-        return t
 
-    return INPUT_DIRNAME
+    return t
+
+
+###############################################################
+def start_pedantic_mode():
+    global PEDANTIC
+
+    if not PEDANTIC:
+        PEDANTIC = True
+        log.debug("PEDANTIC mode is ON!")
 
 
 def get_PEDANTIC():

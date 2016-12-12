@@ -64,7 +64,6 @@ def hilbert_invalidation(capsys, bad_input_yaml_file, test_output, test_err):
     assert err == test_err
 
 
-
 def hilbert_validation(input_yaml_file, data_file):
 
     input_file = os.path.join(FIXTURE_DIR, input_yaml_file)
@@ -85,7 +84,7 @@ def hilbert_validation(input_yaml_file, data_file):
     cwd = os.getcwd()
     old = set_INPUT_DIRNAME(FIXTURE_DIR)
     try:
-        os.chdir(INPUT_DIRNAME)
+        os.chdir(get_INPUT_DIRNAME())
         cfg = parse_hilbert(yml)
     finally:
         set_INPUT_DIRNAME(old)

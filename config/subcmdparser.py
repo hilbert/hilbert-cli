@@ -254,8 +254,8 @@ class CountedVerboseAction(argparse._CountAction):
 
         if _log.level != level:
             log.debug("Changing logging level: %s -> %s",
-                logging.getLevelName(_log.level),
-                logging.getLevelName(level))
+                      logging.getLevelName(_log.level),
+                      logging.getLevelName(level))
             _log.setLevel(level)
             log.debug("New logging level: %s", logging.getLevelName(_log.level))
 
