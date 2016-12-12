@@ -688,7 +688,7 @@ class SemanticVersionValidator(BaseValidator):
 
 #        self._parsed_result_is_data = False
         self._partial = partial
-        self._default_input_data = '0.0.0'
+        self._default_input_data = '0.0.1'
 
     def validate(self, d):
         """check the string data to be a valid semantic version"""
@@ -723,7 +723,6 @@ class SemanticVersionValidator(BaseValidator):
 
     def data_dump(self):
         return str(self.get_data())
-
 
 ###############################################################
 class BaseUIString(StringValidator):
@@ -2490,7 +2489,7 @@ class Hilbert(BaseRecordValidator):
             raise ConfigurationError(u"{}: {}".format("ERROR:", "Missing version tag '{0}' in the input: '{1}'!".format(self._version_tag, d)))
 
         try:
-            _v = SemanticVersionValidator.parse(d[self._version_tag], parent=self, partial=True)
+            _v = SemanticVersionValidator.parse(d[self._version_tag], parent=self, partial=True, parsed_result_is_data=True)
         except:
             _value_error(self._version_tag, d, d.lc, "Wrong value of global '{}' specification!")
             raise
