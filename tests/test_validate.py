@@ -116,8 +116,9 @@ class TestValidate:
     def test_single(self, capsys):
         hilbert_validation('singleHostHilbert.yml', 'singleHostHilbert.yml.data.pickle')
 
-    def test_non_unique_app_service_ids(selfs, capsys):
+    def test_non_unique_app_service_ids(self, capsys):
         test_output = None
+
         if PY2:
             test_err = ''
 
@@ -127,23 +128,22 @@ K[line: 4, column: 3]: Service key: duplicating_id
   ↑
 ---
 K[line: 7, column: 3]: Application key: duplicating_id
-  duplicating_id: ordereddict([('type', 'compose'), ('ref', 'hb_test'), ('file', 'docker-compose.yml'), ('name', 'HB-Test'), ('description', 'Random HB testing'), ('compatibleStations', ordereddict([]))])
+  duplicating_id: ordereddict([('type', 'compose'), ('ref', 'hb_test'), ('file', 'docker-compose.yml'), ('name', 'HB-Test'), ('description', 'Random HB testing'), ('compatible_stations', ordereddict([]))])
   ↑
 ---
 """
         elif PY3:
-            test_err = """\
-'duplicating_id' is both a ServiceID and an ApplicationID:
-"""
+            test_err = ''
+# """'duplicating_id' is both a ServiceID and an ApplicationID:"""
+
             test_output = """\
 K[line: 4, column: 3]: Service key: duplicating_id
   duplicating_id: CommentedMap([('type', 'compose'), ('ref', 'hb_test')])
   ↑
 ---
 K[line: 7, column: 3]: Application key: duplicating_id
-  duplicating_id: CommentedMap([('type', 'compose'), ('ref', 'hb_test'), ('file', 'docker-compose.yml'), ('name', 'HB-Test'), ('description', 'Random HB testing'), ('compatibleStations', CommentedMap())])
+  duplicating_id: CommentedMap([('type', 'compose'), ('ref', 'hb_test'), ('file', 'docker-compose.yml'), ('name', 'HB-Test'), ('description', 'Random HB testing'), ('compatible_stations', CommentedMap())])
   ↑
 ---
 """
-
-        hilbert_invalidation(capsys, 'non_unique_app_service_ids_Hilbert.yml', test_output, '')
+        hilbert_invalidation(capsys, 'non_unique_app_service_ids_Hilbert.yml', test_output, test_err)

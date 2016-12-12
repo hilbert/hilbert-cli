@@ -1,4 +1,4 @@
-Version: 0.6.0 # 0.MAJOR.MINOR, later: MAJOR.MINOR
+Version: 0.7.0 # 0.MAJOR.MINOR, later: MAJOR.MINOR
 
 Services: # file: docker-compose.yml,
   omd_agent: { type: compose, ref: omd_agent, auto_detections: 'export HB_URL=${HILBERT_HEARTBEAT_URL}' }
@@ -94,4 +94,4 @@ Applications:
     auto_detections: 'export HB_URL=${HILBERT_HEARTBEAT_URL}'
     name: HB-Test
     description: Random HB testing
-    compatibleStations: { mygroup }
+    compatible_stations: { mygroup }

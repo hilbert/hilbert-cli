@@ -1619,11 +1619,17 @@ class DockerComposeApplication(DockerComposeService):
 
         _compose_rule = (self._types[self._default_type]).copy()
 
+        self._compatibleStations = text_type('compatibleStations')
+
+        _v = self.get_version(default=semantic_version.Version('0.7.0'))
+        if _v >= semantic_version.Version('0.7.0'):
+            self._compatibleStations = text_type('compatible_stations')
+
         _compose_rule.update({
             text_type('name'): (True, BaseUIString),  # NOTE: name for UI!
             text_type('description'): (True, BaseUIString),
             text_type('icon'): (False, Icon),
-            text_type('compatibleStations'): (True, Group)
+            self._compatibleStations: (True, Group)
         })
 
         self._types[self._default_type] = _compose_rule
@@ -1682,8 +1688,9 @@ class StationSSHOptions(BaseRecordValidator):  # optional: "Station::ssh_options
         # TODO: Check for ssh connection: Use some Python SSH Wrapper (2/3)
         return _ret
 
+
 ###############################################################
-class StationType(BaseEnum):
+class StationType(BaseEnum):  # NOTE: to be redesigned/removed later on together with Station::type!?
     """Type of station defines the set of required data fields!"""
 
     def __init__(self, *args, **kwargs):
@@ -1720,7 +1727,7 @@ class Station(BaseRecordValidator):  # Wrapper?
 
         self._default_type = "default_station"
         default_rule = {
-            Station._extends_tag: (False, StationID),
+            Station._extends_tag: (False, StationID),  # TODO: NOTE: to be redesigned later on: e.g. use Profile!?
             text_type('name'): (True, BaseUIString),
             text_type('description'): (True, BaseUIString),
             text_type('icon'): (False, Icon),
@@ -1731,7 +1738,7 @@ class Station(BaseRecordValidator):  # Wrapper?
             text_type('omd_tag'): (True, StationOMDTag),  # ! like ServiceType: e.g. agent. Q: Is this mandatory?
             self._ishidden_tag: (False, StationVisibility),  # Q: Is this mandatory?
             Station._client_settings_tag: (False, StationClientSettings),  # IDMap : (BaseID, BaseString)
-            Station._type_tag: (False, StationType)
+            Station._type_tag: (False, StringValidator)  # NOTE: to be redesigned later on!
         }  #
 
         self._types = {self._default_type: default_rule}
@@ -2377,7 +2384,11 @@ class Group(BaseRecordValidator):  # ? TODO: GroupSet & its .parent?
         self._exclude_tag = text_type('exclude')
         self._intersectWith_tag = text_type('intersectWith')
 
-        self._station_list = None  # TODO: FIXME!
+        _v = self.get_version(default=semantic_version.Version('0.7.0'))
+        if _v >= semantic_version.Version('0.7.0'):
+            self._intersectWith_tag = text_type('intersect_with')
+
+        self._station_list = None  # TODO: FIXME: implement this!
 
         default_rule = {
             self._include_tag: (False, GroupIDList),
