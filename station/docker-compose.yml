@@ -561,7 +561,6 @@ services:
      - "/dev/nvidiactl:/dev/nvidiactl"
      - "/dev/dri:/dev/dri"
      - "/dev/snd:/dev/snd"
-     - "/dev/shm:/dev/shm"
      - "/dev/input:/dev/input"
      - "/dev/shm:/dev/shm" # NOTE: linux runtime spec devices: error gathering device information while adding custom device "/dev/shm": not a device node
     network_mode: "host"
