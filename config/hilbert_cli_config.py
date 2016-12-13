@@ -1530,6 +1530,17 @@ class DockerComposeService(BaseRecordValidator):
 
         self._create_optional = True
 
+    def get_ref(self):
+        _d = self.get_data()
+        assert self._name_tag in _d
+        return _d[self._name_tag]
+
+    def to_bash_array(self, n):
+        _d = self.data_dump()
+        _min_compose = [self._type_tag, self._name_tag, self._file_tag, self._hook_tag]
+
+        return ' '.join(["['{2}:{0}']='{1}'".format(k, _d[k], n) for k in _min_compose])
+
     @staticmethod
     def check_service(_f, _n):
         # TODO: Check the corresponding file for such a service -> Service in DockerService!
@@ -1640,6 +1651,9 @@ class DockerComposeApplication(DockerComposeService):
 class Profile(BaseRecordValidator):
     """Profile"""
 
+    _services_tag = text_type('services')
+    _supported_types_tag = text_type('supported_types')
+
     def __init__(self, *args, **kwargs):
         super(Profile, self).__init__(*args, **kwargs)
 
@@ -1649,13 +1663,24 @@ class Profile(BaseRecordValidator):
             text_type('name'): (True, BaseUIString),
             text_type('description'): (True, BaseUIString),
             text_type('icon'): (False, Icon),
-            text_type('services'): (True, ServiceList),
-            text_type('supported_types'): (False, ServiceTypeList)
+            self._services_tag: (True, ServiceList),
+            self._supported_types_tag: (False, ServiceTypeList)  # Default value?
         }
 
         self._types = {self._default_type: default_rule}
 
         self._station_list = None  # TODO: FIXME!
+
+    def get_services(self):
+        _d = self.get_data()
+        assert _d is not None
+        assert self._services_tag in _d
+        return _d[self._services_tag]
+
+    def get_supported_types(self):
+        _d = self.get_data()
+        assert _d is not None
+        return _d.get(self._supported_types_tag, None)
 
 
 ###############################################################
@@ -1758,7 +1783,13 @@ class Station(BaseRecordValidator):  # Wrapper?
 
         return _h
 
-    def get_profile(self):
+    def get_hilbert(self):  # TODO: cache this!
+        _root = self.get_parent(cls=Hilbert)
+        assert _root is not None
+        assert isinstance(_root, Hilbert)
+        return _root
+
+    def get_profile_ref(self):
         _d = self.get_data()
         assert _d is not None
         _profile_id = _d.get(self._profile_tag, None)
@@ -1766,13 +1797,42 @@ class Station(BaseRecordValidator):  # Wrapper?
         assert _profile_id is not None
         assert _profile_id != ''
 
-        _parent = self.get_parent(cls=Hilbert)
-        assert isinstance(_parent, Hilbert)
+        log.debug("Station's profile ID: %s", _profile_id)
 
-        _profile = _parent.query('Profiles/{}/all' . format(_profile_id))
+        return _profile_id
+
+    def get_profile(self, ref):  # TODO: FIXME: move to Hilbert: _parent.get_all_*()
+        _parent = self.get_hilbert()
+
+        log.debug("Querying global profile: '%s'...", ref)
+
+        _profile = _parent.query('Profiles/{}/all' . format(ref))
         assert _profile is not None
         assert isinstance(_profile, Profile)
+
         return _profile
+
+    def get_all_services(self):  # TODO: FIXME: move to Hilbert: _parent.get_all_*()
+        _parent = self.get_hilbert()
+
+        _services = _parent.query('Services/all')
+
+        assert _services is not None
+        assert isinstance(_services, GlobalServices)
+
+        return _services
+
+
+    def get_all_applications(self):
+        _parent = self.get_hilbert()
+
+        _apps = _parent.query('Applications/all')
+
+        assert _apps is not None
+        assert isinstance(_apps, GlobalApplications)
+
+        return _apps
+
 
     def get_address(self):  # TODO: IP?
         _d = self.get_data()
@@ -1820,12 +1880,15 @@ class Station(BaseRecordValidator):  # Wrapper?
 
         return _ret
 
-
     def deploy(self):
         # TODO: get_client_settings()
         _d = self.get_data()
-        _settings = _d.get(self._client_settings_tag, None)
 
+        _a = self.get_address()
+        assert _a is not None
+        assert isinstance(_a, HostAddress)
+
+        _settings = _d.get(self._client_settings_tag, None)
         if _settings is None:
             if not PEDANTIC:
                 log.warning('Missing client settings for this station. Nothing to deploy!')
@@ -1840,70 +1903,87 @@ class Station(BaseRecordValidator):  # Wrapper?
         # TODO: check default_app_id!
         # TODO: all compatible applications!?
 
-        _profile = self.get_profile()
-        if isinstance(_profile, BaseValidator):
-            _profile = _profile.get_data()
+        _profile_ref = self.get_profile_ref()
+        _profile = self.get_profile(_profile_ref)
 
-        # All supported applications??!?
-        _serviceIDs = _profile.get(text_type('services'), [])  # TODO: profile.get_services()
+        # TODO: FIXME: add type checking! NOTE: compatibility should be verified beforehand!
+        # _supported_service_types = _profile.get_supported_types()  # no need here!
+
+        _serviceIDs = _profile.get_services()
+
         assert _serviceIDs is not None
         assert isinstance(_serviceIDs, ServiceList)  # list of ServiceID
 
         _serviceIDs = _serviceIDs.get_data()  # Note: IDs from config file - NOT Service::ref!
         assert isinstance(_serviceIDs, list)  # list of strings (with ServiceIDs)?
 
-        _a = self.get_address()
-
-        assert _a is not None
-        assert isinstance(_a, HostAddress)
+        # TODO: All supported applications??!?
+        all_apps     = self.get_all_applications().get_data()
+        all_services = self.get_all_services().get_data()
 
         # TODO: deployment should create a temporary directory + /station.cfg + /docker-compose.yml etc!?
-        # tmpdir = tempfile.mkdtemp()
-        # predictable_filename = 'station.cfg'
-        #
-        # # Ensure the file is read/write by the creator only
-        # saved_umask = os.umask(0077)
-        #
-        # path = os.path.join(tmpdir, predictable_filename)
-        # print path
-        # try:
-        #     with open(path, "w") as tmp:
-        #         tmp.write("station settings!")
-        #     # treat all required dependencies!?!?!
-        # except IOError as e:
-        #     print 'IOError'
-        # else:
-        #     os.remove(path)
-        # finally:
-        #     os.umask(saved_umask)
-        #     os.rmdir(tmpdir)
+        tmpdir = tempfile.mkdtemp()
+        predictable_filename = 'station.cfg'
+        remote_tmp_file = os.path.join("/tmp", "{0}_{1}_{2}".format(str(_a.get_address()), _profile_ref, os.path.basename(tmpdir)))
+        saved_umask = os.umask(7*8 + 7)  # Ensure the file is read/write by the creator only
 
-        fd, path = tempfile.mkstemp()
+        path = os.path.join(tmpdir, predictable_filename)
+#        print path
         try:
-            with os.fdopen(fd, 'w') as tmp:
+            with open(path, "w") as tmp:
                 # TODO: FIXME: list references into docker-compose.yml???
                 # TODO: use bash array to serialize all Services/Applications!
                 # NOTE: Only handles (IDs) are to be used below:
                 # NOTE: ATM only compose && Application/ServiceIDs == refs to the same docker-compose.yml!
                 # TODO: NOTE: may differ depending on Station::type!
-                tmp.write("hilbert_station_profile_services=\"{}\"\n".format(' '.join(_serviceIDs)))
+
+                tmp.write('declare -A services_and_applications=(\\\n')
+                ss = []
+                for k in _serviceIDs:
+                    s = all_services[k]  # TODO: check compatibility during verification!
+                    assert s is not None
+                    assert isinstance(s, DockerComposeService)
+                    ss.append(s.get_ref())
+                    tmp.write('  {} \\\n'.format(s.to_bash_array(k)))
+                    # TODO: copy referenced resource (s.get_file_ref()) -> tmpdir/!
+
+                # TODO: collect all **compatible** applications!
+                aa = []
+                for k in all_apps:
+                    a = all_apps[k]  # TODO: check compatibility during verification!
+                    assert a is not None
+                    assert isinstance(a, DockerComposeApplication)
+                    aa.append(a.get_ref())
+                    tmp.write('  {} \\\n'.format(a.to_bash_array(k)))
+                    # TODO: copy referenced resource (a.get_file_ref()) -> tmpdir/!
+
+                tmp.write(')\n')
+
+                tmp.write("declare -a hilbert_station_profile_services=({})\n".format(' '.join(_serviceIDs)))
+                tmp.write("declare -a hilbert_station_compatible_applications=({})\n".format(' '.join(all_apps.keys())))
 
                 for k in _settings:
-                    tmp.write("{0}=\"{1}\"\n".format(k, str(_settings.get(k, ''))))
+                    tmp.write("declare -r {0}='{1}'\n".format(k, str(_settings.get(k, ''))))
 
-                tmp.write("background_services=\"${hilbert_station_profile_services}\"\n")
+                app = _settings.get('hilbert_station_default_application', '')  # NOTE: ApplicationID!
+                if app != '':
+                    if app in all_apps:
+                        app = all_apps[app].get_ref()  # DC Reference!
+                    else:
+                        log.warning('Default application %s is not in the list of compatible apps!', app)
+                        app = ''
 
-                tmp.write("default_app=\"${hilbert_station_default_application}\"\n")  # ID!
-
-                # TODO: collect all compatible applications!
-                tmp.write("possible_apps=\"${default_app}\"\n")
+                # for legacy code:
+                tmp.write("declare -r default_app=\"{}\"\n".format(app))
+                tmp.write("declare -r background_services=\"{}\"\n".format(' '.join(ss)))
+                tmp.write("declare -r possible_apps=\"{}\"\n".format(' '.join(aa)))
 
             # TODO: add also all further necessary resources (docker-compose.yml etc) and tar.gz it for deployment?!
-            #            _cmd = ["scp", path, "{0}:/tmp/{1}".format(_a, os.path.basename(path))]  # self._HILBERT_STATION, 'deploy'
-
+            # treat all required dependencies!?!?!
 
             try:
-                _a.scp(path, "/tmp/{}".format(os.path.basename(path)), shell=False)
+                #            _cmd = ["scp", path, "{0}:/tmp/{1}".format(_a, os.path.basename(path))]  # self._HILBERT_STATION, 'deploy'
+                _a.scp(path, remote_tmp_file, shell=False)
             except:
                 s = "Could not deploy new local settings to {}".format(_a)
                 if not PEDANTIC:
@@ -1912,15 +1992,17 @@ class Station(BaseRecordValidator):  # Wrapper?
                 else:
                     log.exception(s)
                     raise
+
+#        except: # IOError as e:
+#            print 'IOError'
+#        else:
+#            os.remove(path)
         finally:
             log.debug("Temporary Station Configuration File: {}".format(path))
-#            s = ''
-#            with os.open(path, 'r') as tmp:
-#                s += tmp.readline() + '\n'
-#            log.debug("New Station Configuration: {}".format(s))
-#            os.remove(path)
+            os.umask(saved_umask)
+            # os.rmdir(tmpdir)
 
-        _cmd = [self._HILBERT_STATION, "init", os.path.join("/tmp", os.path.basename(path))]
+        _cmd = [self._HILBERT_STATION, "init", remote_tmp_file]
         try:
             _a.ssh(_cmd, shell=False)
         except:
