@@ -1,16 +1,16 @@
 Version: 0.6.0 # 0.MAJOR.MINOR, later: MAJOR.MINOR
 
 Services: # file: docker-compose.yml,
-  omd_agent: { type: compose, file: docker-compose.yml, ref: omd_agent, auto_detections: 'export HB_URL=${HILBERT_HEARTBEAT_URL}' }
-  omd_anew:  { type: compose, file: docker-compose.yml, ref: omd_anew, auto_detections: '' }
-  omd_persistent: { type: compose, file: docker-compose.yml, ref: omd_persistent, auto_detections: 'export OMD=${HILBERT_OMD_PATH}' }
-  ptmx:      { type: compose, file: docker-compose.yml, ref: ptmx, auto_detections: '' }
-  registry:  { type: compose, file: docker-compose.yml, ref: registry, auto_detections: '' }
-  mng:       { type: compose, file: docker-compose.yml, ref: mng, auto_detections: '' }
-  qrhandler: { type: compose, file: docker-compose.yml, ref: qrhandler, auto_detections: '' }
+  s_omd_agent: { type: compose, file: docker-compose.yml, ref: omd_agent, auto_detections: 'export HB_URL=${HILBERT_HEARTBEAT_URL}' }
+  s_omd_anew:  { type: compose, file: docker-compose.yml, ref: omd_anew, auto_detections: '' }
+  s_omd_persistent: { type: compose, file: docker-compose.yml, ref: omd_persistent, auto_detections: 'export OMD=${HILBERT_OMD_PATH}' }
+  s_ptmx:      { type: compose, file: docker-compose.yml, ref: ptmx, auto_detections: '' }
+  s_registry:  { type: compose, file: docker-compose.yml, ref: registry, auto_detections: '' }
+  s_mng:       { type: compose, file: docker-compose.yml, ref: mng, auto_detections: '' }
+  s_qrhandler: { type: compose, file: docker-compose.yml, ref: qrhandler, auto_detections: '' }
 
 Applications:
-  hb_test:
+  a_hb_test:
     type: compose
     ref: hb_test
     file: docker-compose.yml
@@ -19,7 +19,7 @@ Applications:
     description: Random HB testing
     compatibleStations: { server, simple }
 
-  kiosk:
+  a_kiosk:
     type: compose
     ref: kiosk
     file: docker-compose.yml
@@ -36,19 +36,19 @@ Profiles:
     supported_types: []
 
   server:
-    services: [ ptmx, omd_agent, omd, registry ]  # , mng
+    services: [ s_ptmx, s_omd_agent, s_omd, s_registry ]  # , mng
     description: Only for Server System
     name: server
     supported_types: [ compose ]
 
   simple:
-    services: [ ptmx, omd_agent ]
+    services: [ s_ptmx, s_omd_agent ]
     description: Any Linux station without QR Scanner
     name: simple
     supported_types: [ compose ]
 
   std:
-    services: [ ptmx, omd_agent, qrhandler ]
+    services: [ s_ptmx, s_omd_agent, s_qrhandler ]
     description: Linux station with QR Scanner and Display
     name: standard
     supported_types: [ compose ]
@@ -93,12 +93,12 @@ Stations:
     extends: station_defaults
     hidden: false  # to be removed due to station.type
     address: localhost
-    description: 'Testing Virtual Station: A'
-    name: 'Virtual Station: Test A'
+    description: 'Testing Station'
+    name: 'Station: Test Standard'
     omd_tag: agent
     profile: simple
     poweron_settings: { type: WOL, mac: '3c:18:a0:04:e6:c2', auto_turnon: true }
     client_settings:
       hilbert_autostart_delay: 10 # 10 sec. delay before starting here Hilbert-CLI-Station
-      hilbert_station_default_application: hb_test_a
+      hilbert_station_default_application: a_hb_test
 
