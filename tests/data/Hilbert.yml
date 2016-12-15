@@ -44,9 +44,9 @@ Stations:
       HILBERT_PREFERRED_LANGUAGE: de
       HILBERT_HEARTBEAT_URL: http://127.0.0.1:8888
       HILBERT_CUPS_SERVER: printer1.public.supernova:631
-      HILBERT_HIDE_MOUSE_CURSOR: 1
+      HILBERT_HIDE_MOUSE_CURSOR: off
       HILBERT_ALSA_CARD: 1
-      HILBERT_CUSTOMIZATIONS: nv,alsa
+      HILBERT_CUSTOMIZATIONS: "nv alsa"
 
   testhost1:
     profile: standalone

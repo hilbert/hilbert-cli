@@ -1,9 +1,9 @@
 Version: 0.6.0 # 0.MAJOR.MINOR, later: MAJOR.MINOR
 
 Services: # file: docker-compose.yml,
-  s_omd_agent: { type: compose, file: docker-compose.yml, ref: omd_agent, auto_detections: 'export HB_URL=${HILBERT_HEARTBEAT_URL}' }
+  s_omd_agent: { type: compose, file: docker-compose.yml, ref: omd_agent, auto_detections: '' }
   s_omd_anew:  { type: compose, file: docker-compose.yml, ref: omd_anew, auto_detections: '' }
-  s_omd_persistent: { type: compose, file: docker-compose.yml, ref: omd_persistent, auto_detections: 'export OMD=${HILBERT_OMD_PATH}' }
+  s_omd_persistent: { type: compose, file: docker-compose.yml, ref: omd_persistent, auto_detections: '' }
   s_ptmx:      { type: compose, file: docker-compose.yml, ref: ptmx, auto_detections: '' }
   s_registry:  { type: compose, file: docker-compose.yml, ref: registry, auto_detections: '' }
   s_mng:       { type: compose, file: docker-compose.yml, ref: mng, auto_detections: '' }
@@ -14,7 +14,7 @@ Applications:
     type: compose
     ref: hb_test
     file: docker-compose.yml
-    auto_detections: 'export HB_URL=${HILBERT_HEARTBEAT_URL}'
+    auto_detections: ''
     name: HB-Test
     description: Random HB testing
     compatibleStations: { server, simple }
@@ -23,7 +23,7 @@ Applications:
     type: compose
     ref: kiosk
     file: docker-compose.yml
-    auto_detections: 'export HB_URL=${HILBERT_HEARTBEAT_URL}'
+    auto_detections: ''
     name: Kiosk with HB
     description: Kiosk Web Browser GUI app
     compatibleStations: { server, simple }
@@ -69,9 +69,9 @@ Stations:
       HILBERT_PREFERRED_LANGUAGE: de
       HILBERT_HEARTBEAT_URL: http://127.0.0.1:8888
       HILBERT_CUPS_SERVER: printer1.public.supernova:631
-      HILBERT_HIDE_MOUSE_CURSOR: 1
+      HILBERT_HIDE_MOUSE_CURSOR: off
       HILBERT_ALSA_CARD: 1
-      HILBERT_CUSTOMIZATIONS: nv,alsa
+      HILBERT_CUSTOMIZATIONS: 'nv alsa'
 
   server:
     type: server
@@ -86,7 +86,7 @@ Stations:
       hilbert_autostart_delay: 0 # no delay before starting Hilbert here
       HILBERT_SERVER_CONFIG_PATH: '${HOME}/.config/hilbert-server/' # where to keep sync'ed content
       HILBERT_OMD_PATH: '${HOME}/.config/hilbert-omd/' # persistent storage for OMD
-      HILBERT_REGISTRY_DATA_PATH: '${HOME}/.config/hilbert-registry-data/' # persistent storage for docker registry
+      HILBERT_REGISTRY_BASEDIR: '${HOME}/.config/hilbert-registry-data/' # persistent storage for docker registry
 
   station:
     type: standard

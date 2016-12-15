@@ -81,7 +81,7 @@ services:
     extends:
       service: consul_base
     volumes:
-     - "${PWD}/KV:/data"
+     - "${HILBERT_CONSUL_DATA}:/data"
     command: 
      - "-server"
      - "-bootstrap"
@@ -269,7 +269,7 @@ services:
     tty: false
     restart: "on-failure:5"
     volumes:
-     - "omd_data:/OMD"
+     - "${HILBERT_OMD_PATH}:/OMD"
     entrypoint: 
      - /sbin/my_init
      - --skip-runit
@@ -282,7 +282,7 @@ services:
     extends: 
       service: omd_anew
     volumes:
-     - "omd_data:/omd/sites"
+     - "${HILBERT_OMD_PATH}:/omd/sites"
 
   pa:
     extends: 
@@ -306,6 +306,11 @@ services:
      - XLIB_SKIP_ARGB_VISUALS=1
      - XAUTHORITY="${XAUTH}"
      - DISPLAY
+    stdin_open: false
+    tty: false
+    ipc: host
+    privileged: false
+    network_mode: "host"
     stdin_open: false
     tty: false
     entrypoint: 
@@ -352,7 +357,6 @@ services:
     command:
      - /usr/local/bin/x11vnc.sh
 
-
   xeyes:
     extends: 
       service: gui
@@ -376,6 +380,7 @@ services:
      - HB_HOST
      - HB_URL
      - HB_INIT_TIMEOUT=9
+    privileged: true
     entrypoint: 
      - /sbin/my_init 
      - --skip-runit 
@@ -387,7 +392,7 @@ services:
      - -l
     command: 
      - "${WEBGL_APPS}/"
-     
+
   IB_kiosk:
     extends: 
       service: kiosk
@@ -397,7 +402,6 @@ services:
      - APP_ID=light_pollution
     command: 
      - "${WEBGL_APPS}/WebGL_ImageBlend_New/fade_08_new_05b_hb.html?HB_APP_ID=light_pollution&HB_URL=${HB_URL}"
-
 
   HZ_kiosk:
     extends: 
@@ -528,13 +532,13 @@ services:
      - "8055:5000"
     restart: "on-failure:5"
     volumes:
-     - "${PWD}/REG/DATA:/var/lib/registry"
+     - "${HILBERT_REGISTRY_BASEDIR}/DATA:/var/lib/registry"
      
   registry_tls:
     extends:
       service: registry
     volumes:
-     - "${PWD}/REG/CERT:/certs"
+     - "${HILBERT_REGISTRY_BASEDIR}/CERT:/certs"
     labels:
      - "description=Docker Private Registry (with TLS)"
     environment:
@@ -546,7 +550,7 @@ services:
     extends: 
       service: gui
     volumes:
-     - .:/DOCKAPP
+     - ${PWD}:/DOCKAPP
     working_dir: /DOCKAPP/
     labels:
      - "is_top_app=1"
@@ -559,6 +563,8 @@ services:
      - "/dev/bus/usb:/dev/bus/usb:rwm"
      - "/dev/nvidia0:/dev/nvidia0"
      - "/dev/nvidiactl:/dev/nvidiactl"
+     - "/dev/nvidia-modeset:/dev/nvidia-modeset"
+     - "/dev/nvram:/dev/nvram"
      - "/dev/dri:/dev/dri"
      - "/dev/snd:/dev/snd"
      - "/dev/input:/dev/input"
@@ -584,7 +590,5 @@ services:
 
 volumes:
   supernova:
-    driver: local
-  omd_data:
     driver: local
   

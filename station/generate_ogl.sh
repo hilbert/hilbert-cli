@@ -28,10 +28,10 @@ if [ -z "$ID" ]; then
 
 fi
 
-shift
+#shift
 
-G="$1"
-shift
+G="/tmp/OGL.tgz"  # "$1"
+#shift
 
 #D=$1
 D=dummyx11
