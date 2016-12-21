@@ -1963,7 +1963,13 @@ class Station(BaseRecordValidator):  # Wrapper?
                 tmp.write("declare -a hilbert_station_compatible_applications=({})\n".format(' '.join(all_apps.keys())))
 
                 for k in _settings:
-                    tmp.write("declare -r {0}='{1}'\n".format(k, str(_settings.get(k, ''))))
+                    if k.startswith('HILBERT_'):
+                        # NOTE: HILBERT_* are exports for services/applications (docker-compose.yml)
+                        tmp.write("declare -x {0}='{1}'\n".format(k, str(_settings.get(k, ''))))
+                    else:
+                        # NOTE: hilbert_* are exports for client-side tool: `hilbert-station`
+                        assert k.startswith('hilbert_')
+                        tmp.write("declare -r {0}='{1}'\n".format(k, str(_settings.get(k, ''))))
 
                 app = _settings.get('hilbert_station_default_application', '')  # NOTE: ApplicationID!
                 if app != '':
