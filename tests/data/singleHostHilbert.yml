@@ -1,13 +1,13 @@
 Version: 0.6.0 # 0.MAJOR.MINOR, later: MAJOR.MINOR
 
-Services: # file: docker-compose.yml,
+Services:
   s_omd_agent: { type: compose, file: docker-compose.yml, ref: omd_agent, auto_detections: '' }
   s_omd_anew:  { type: compose, file: docker-compose.yml, ref: omd_anew, auto_detections: '' }
   s_omd_persistent: { type: compose, file: docker-compose.yml, ref: omd_persistent, auto_detections: '' }
   s_ptmx:      { type: compose, file: docker-compose.yml, ref: ptmx, auto_detections: '' }
   s_registry:  { type: compose, file: docker-compose.yml, ref: registry, auto_detections: '' }
-  s_mng:       { type: compose, file: docker-compose.yml, ref: mng, auto_detections: '' }
   s_qrhandler: { type: compose, file: docker-compose.yml, ref: qrhandler, auto_detections: '' }
+  # s_mng:       { type: compose, file: docker-compose.yml, ref: mng, auto_detections: '' }
 
 Applications:
   a_hb_test:
@@ -36,7 +36,7 @@ Profiles:
     supported_types: []
 
   server:
-    services: [ s_ptmx, s_omd_agent, s_omd, s_registry ]  # , mng
+    services: [ s_ptmx, s_omd_agent, s_omd_anew, s_registry ]  # , mng
     description: Only for Server System
     name: server
     supported_types: [ compose ]
@@ -84,9 +84,9 @@ Stations:
     omd_tag: agent
     client_settings:
       hilbert_autostart_delay: 0 # no delay before starting Hilbert here
-      HILBERT_SERVER_CONFIG_PATH: '${HOME}/.config/hilbert-server/' # where to keep sync'ed content
-      HILBERT_OMD_PATH: '${HOME}/.config/hilbert-omd/' # persistent storage for OMD
-      HILBERT_REGISTRY_BASEDIR: '${HOME}/.config/hilbert-registry-data/' # persistent storage for docker registry
+      HILBERT_SERVER_CONFIG_PATH: '~/.config/hilbert-server/' # where to keep sync'ed content
+      HILBERT_OMD_PATH: '~/.config/hilbert-omd/' # persistent storage for OMD
+      HILBERT_REGISTRY_BASEDIR: '~/.config/hilbert-registry-data/' # persistent storage for docker registry
 
   station:
     type: standard
