@@ -1,0 +1,82 @@
+digraph deps{ graph []; node [color=white]; rankdir = LR;
+app_change
+app_change -> detect_top_application [color=green]
+app_change -> docker_stop
+app_change -> native_autodetect [color=blue]
+app_change -> read_configuration [color=red]
+app_change -> restart_service
+app_change -> start_service
+app_change -> stop_service
+app_change -> usage  [color=grey]
+compose_init
+compose_init -> docker_compose
+compose_restart
+compose_restart -> docker_compose
+compose_start
+compose_start -> docker_compose
+compose_stop
+compose_stop -> docker_compose
+detect_top_application [color=green]
+docker
+docker_compose
+docker_pause
+docker_pause -> docker
+docker_stop
+docker_stop -> docker
+init
+init -> init_service
+init -> install_station_config
+init -> native_autodetect [color=blue]
+init -> read_configuration [color=red]
+init_service
+init_service -> compose_init
+init_service -> usage  [color=grey]
+install_station_config
+install_station_config -> usage  [color=grey]
+list_applications
+list_applications -> detect_top_application [color=green]
+list_applications -> read_configuration [color=red]
+list_services
+list_services -> read_configuration [color=red]
+native_autodetect [color=blue]
+read_configuration [color=red]
+restart_service
+restart_service -> compose_restart
+restart_service -> usage  [color=grey]
+shutdown
+start
+start -> detect_top_application [color=green]
+start -> docker_pause
+start -> docker_stop
+start_locking
+start -> native_autodetect [color=blue]
+start -> read_configuration [color=red]
+start -> restart_service
+start_service
+start_service -> compose_start
+start_service -> usage  [color=grey]
+start -> start_service
+stop
+stop -> detect_top_application [color=green]
+stop -> docker_stop
+stop -> native_autodetect [color=blue]
+stop -> read_configuration [color=red]
+stop_service
+stop_service -> compose_stop
+stop_service -> usage  [color=grey]
+stop -> stop_service
+subcommand_handle
+subcommand_handle -> app_change
+subcommand_handle -> init
+subcommand_handle -> list_applications
+subcommand_handle -> list_services
+subcommand_handle -> native_autodetect [color=blue]
+subcommand_handle -> shutdown
+subcommand_handle -> start
+subcommand_handle -> start_locking
+subcommand_handle -> stop
+subcommand_handle -> usage  [color=grey]
+usage  [color=grey]
+version
+version -> native_autodetect [color=blue]
+} # dot -Tpng -o hilbert-station.call-graph.png hilbert-station.call-graph.dot
