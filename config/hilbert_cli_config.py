@@ -21,10 +21,12 @@ import logging
 import collections
 import sys
 import os
+import time
 import re, tokenize
 import tempfile  # See also https://security.openstack.org/guidelines/dg_using-temporary-files-securely.html
 import subprocess  # See also https://pymotw.com/2/subprocess/
 import shlex
+import shutil
 # import paramiko  # TODO: use instead of simple .call('ssh ...') ? Check for Pros and Cons!
 
 
@@ -1036,7 +1038,7 @@ class DockerComposeServiceName(StringValidator):  # TODO: any special checks her
         super(DockerComposeServiceName, self).__init__(*args, **kwargs)
 
     def validate(self, d):
-        """check whether data is a valid service name in file due to DockerComposeRef"""
+        """check whether data is a valid service name in file due to DockerComposeYAMLFile"""
         if d is None:
             d = self._default_input_data
 
@@ -1049,10 +1051,10 @@ class DockerComposeServiceName(StringValidator):  # TODO: any special checks her
             return False
 
 ###############################################################
-class DockerComposeRef(URI):
+class DockerComposeYAMLFile(URI):
 
     def __init__(self, *args, **kwargs):
-        super(DockerComposeRef, self).__init__(*args, **kwargs)
+        super(DockerComposeYAMLFile, self).__init__(*args, **kwargs)
 
         self._default_input_data = text_type('docker-compose.yml')
 
@@ -1063,7 +1065,7 @@ class DockerComposeRef(URI):
 
         # TODO: call docker-compose on the referenced file! Currently in DockerService!?
 
-        return super(DockerComposeRef, self).validate(d)
+        return super(DockerComposeYAMLFile, self).validate(d)
 
 
 ###############################################################
@@ -1116,6 +1118,42 @@ class HostAddress(StringValidator):
 
     def recheck(self):
         return self.check_ssh_alias(self.get_address())
+
+    def rsync(self, source, target, **kwargs):
+        log.debug("About to rsync/ssh %s -> %s:%s...", source, str(self.get_address()), target)
+        log.debug("rsync(%s, %s, %s [%s])", self, source, target, str(kwargs))
+
+        assert self.recheck()
+        _h = str(self.get_address())
+
+        ssh_config = os.path.join(os.environ['HOME'], ".ssh", "config")
+        __cmd = "rsync -crtbviuzpP -e \"ssh -q -F {3}\" \"{0}/\" \"{1}:{2}/\"".format(source, _h, target, ssh_config)
+        _cmd = shlex.split(__cmd)
+ #        = ' '.join(_cmd)
+
+        #        "scp -q -F {3} {0} {1}:{2}"
+
+        #            client = paramiko.SSHClient()
+        #            client.load_system_host_keys()
+#        log.debug("Rsync/SSH: [%s]...", _cmd)
+        log.debug("Rsync/SSH: [%s]...", str(_cmd))
+        try:
+            retcode = _execute(_cmd, **kwargs)
+        except:
+            log.exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
+            if not PEDANTIC:
+                return
+            raise
+
+        assert retcode is not None
+        if not retcode:
+            log.debug("Command ({}) execution success!".format(__cmd))
+            return
+        else:
+            log.error("Could not run rsync.ssh command: '{0}'! Return code: {1}".format(__cmd, retcode))
+            if PEDANTIC:
+                raise Exception("Could not run rsync/ssh command: '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
+
 
     # TODO: check/use SSH/SCP calls!
     def scp(self, source, target, **kwargs):
@@ -1478,14 +1516,34 @@ class WOL(BaseRecordValidator):
 
         _MAC = self.get_MAC()
 
+        _cmd = [self._WOL, _MAC]  # NOTE: avoid IP for now? {"-i", _address, }
+        __cmd = ' '.join(_cmd)
+        try:
+            retcode = _execute(_cmd, shell=False)
+            assert retcode is not None
+            if not retcode:
+                log.debug("Command ({}) execution success!".format(__cmd))
+#                return
+            else:
+                log.error("Could not wakeup via '{0}'! Return code: {1}".format(__cmd, retcode))
+                if PEDANTIC:
+                    raise Exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
+        except:
+            log.exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
+            if not PEDANTIC:
+                return
+            raise
+
         if (_address is None) or (_address == ''):
             log.warning("Sorry: could not get station's address for this WOL MethodObject!")
-            _cmd = [self._WOL, _MAC]
-            if PEDANTIC:
-                raise Exception("Sorry: could not get station's address for this WOL MethodObject!")
-        else:
-            _cmd = [self._WOL, "-i", _address, _MAC]  # IP?
+            return
 
+#            if PEDANTIC:  # NOTE: address should be present for other reasons anyway...
+#                raise Exception("Sorry: could not get station's address for this WOL MethodObject!")
+
+        # NOTE: also try with the station address (just in case):
+        # Q: any problems with this?
+        _cmd = [self._WOL, "-i", _address, _MAC]
         __cmd = ' '.join(_cmd)
         try:
             retcode = _execute(_cmd, shell=False)
@@ -1494,14 +1552,18 @@ class WOL(BaseRecordValidator):
                 log.debug("Command ({}) execution success!".format(__cmd))
                 return
             else:
-                log.error("Could not poweron via '{0}'! Return code: {1}".format(__cmd, retcode))
-                if PEDANTIC:
-                    raise Exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
+                log.error("Could not wakeup via '{0}'! Return code: {1}".format(__cmd, retcode))
+                # if PEDANTIC:
+                #    raise Exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
         except:
             log.exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
-            if not PEDANTIC:
-                return
-            raise
+            #if not PEDANTIC:
+            #    return
+            #raise
+            pass
+
+
+
 
 
 ###############################################################
@@ -1515,14 +1577,14 @@ class DockerComposeService(BaseRecordValidator):
 
         self._type_tag = text_type('type')
         self._hook_tag = text_type('auto_detections')
-        self._name_tag = text_type('ref')
+        self._ref_tag = text_type('ref')
         self._file_tag = text_type('file')
 
         _compose_rule = {
             self._type_tag: (True, ServiceType),  # Mandatory
             self._hook_tag: (False, AutoDetectionScript),
-            self._name_tag: (True, DockerComposeServiceName),
-            self._file_tag: (False, DockerComposeRef)
+            self._ref_tag: (True, DockerComposeServiceName),
+            self._file_tag: (False, DockerComposeYAMLFile)
         }
 
         self._default_type = "default_dc_service"
@@ -1532,12 +1594,30 @@ class DockerComposeService(BaseRecordValidator):
 
     def get_ref(self):
         _d = self.get_data()
-        assert self._name_tag in _d
-        return _d[self._name_tag]
+        assert self._ref_tag in _d
+        return _d[self._ref_tag]
+
+    def get_file(self):
+        _d = self.get_data()
+        assert self._file_tag in _d
+        return _d[self._file_tag]
+
+    def copy(self, tmpdir):
+        f = self.get_file()
+        t = os.path.join(tmpdir, f)
+
+        log.info("Copying resource file: '%s' -> '%s'...", f, t)
+        if not os.path.exists(t):
+            d = os.path.dirname(t)
+            if not os.path.exists(d):
+                os.mkdir(d, 7 * 8 + 7)
+            shutil.copy(f, t)
+        else:
+            log.debug("Target resource '%s' already exists!", t)
 
     def to_bash_array(self, n):
         _d = self.data_dump()
-        _min_compose = [self._type_tag, self._name_tag, self._file_tag, self._hook_tag]
+        _min_compose = [self._type_tag, self._ref_tag, self._file_tag, self._hook_tag]
 
         return ' '.join(["['{2}:{0}']='{1}'".format(k, _d[k], n) for k in _min_compose])
 
@@ -1584,6 +1664,12 @@ class DockerComposeService(BaseRecordValidator):
 
         return True
 
+    def check(self):
+
+        if not self.check_service(_f, _n):
+            if PEDANTIC:
+                return False
+
     def validate(self, d):
         if d is None:
             d = self._default_input_data
@@ -1600,7 +1686,7 @@ class DockerComposeService(BaseRecordValidator):
         while isinstance(_f, BaseValidator):
             _f = _f.get_data()
 
-        _n = _d[self._name_tag]
+        _n = _d[self._ref_tag]
         while isinstance(_n, BaseValidator):
             _n = _n.get_data()
 
@@ -1614,9 +1700,9 @@ class DockerComposeService(BaseRecordValidator):
                         "Cannot check the service '%s'!", _f, _n)
             return True
 
-        if not self.check_service(_f, _n):
-            if PEDANTIC:
-                return False
+#        if not self.check_service(_f, _n):
+#            if PEDANTIC:
+#                return False
 
         return True  # _ret
 
@@ -1729,7 +1815,6 @@ class StationType(BaseEnum):  # NOTE: to be redesigned/removed later on together
                            text_type('server'),  # Linux with Hilbert client part installed but no remote control!
                            text_type('standard')  # Linux with Hilbert client part installed!
                            ]  # ,text_type('special')
-
 
 ###############################################################
 class Station(BaseRecordValidator):  # Wrapper?
@@ -1868,9 +1953,22 @@ class Station(BaseRecordValidator):  # Wrapper?
             return _ret
 
         try:
+            _ret = _a.ssh([self._HILBERT_STATION, "shutdown", "now"], shell=False)
+        except:
+            s = "Could not schedule immediate shutdown on the station {}".format(_a)
+            if not PEDANTIC:
+                log.warning(s)
+                return False
+            else:
+                log.exception(s)
+                raise
+        if not _ret:
+            return _ret
+
+        try:
             _ret = _a.ssh([self._HILBERT_STATION, "shutdown"], shell=False)
         except:
-            s = "Could not schedule a shutdown on the station {}".format(_a)
+            s = "Could not schedule delayed shutdown on the station {}".format(_a)
             if not PEDANTIC:
                 log.warning(s)
                 return False
@@ -1917,14 +2015,16 @@ class Station(BaseRecordValidator):  # Wrapper?
         _serviceIDs = _serviceIDs.get_data()  # Note: IDs from config file - NOT Service::ref!
         assert isinstance(_serviceIDs, list)  # list of strings (with ServiceIDs)?
 
-        # TODO: All supported applications??!?
+        # TODO: FIXME: All supported/compatible applications??!?
+
         all_apps     = self.get_all_applications().get_data()
         all_services = self.get_all_services().get_data()
 
         # TODO: deployment should create a temporary directory + /station.cfg + /docker-compose.yml etc!?
         tmpdir = tempfile.mkdtemp()
         predictable_filename = 'station.cfg'
-        remote_tmp_file = os.path.join("/tmp", "{0}_{1}_{2}".format(str(_a.get_address()), _profile_ref, os.path.basename(tmpdir)))
+
+        remote_tmpdir = os.path.join("/tmp", "{0}_{1}_{2}_{3}".format(str(_a.get_address()), _profile_ref, os.path.basename(tmpdir), "%.20f" % time.time()))
         saved_umask = os.umask(7*8 + 7)  # Ensure the file is read/write by the creator only
 
         path = os.path.join(tmpdir, predictable_filename)
@@ -1937,60 +2037,70 @@ class Station(BaseRecordValidator):  # Wrapper?
                 # NOTE: ATM only compose && Application/ServiceIDs == refs to the same docker-compose.yml!
                 # TODO: NOTE: may differ depending on Station::type!
 
-                tmp.write('declare -A services_and_applications=(\\\n')
-                ss = []
+                tmp.write('declare -Agr services_and_applications=(\\\n')
+ #               ss = []
                 for k in _serviceIDs:
-                    s = all_services[k]  # TODO: check compatibility during verification!
-                    assert s is not None
-                    assert isinstance(s, DockerComposeService)
-                    ss.append(s.get_ref())
-                    tmp.write('  {} \\\n'.format(s.to_bash_array(k)))
-                    # TODO: copy referenced resource (s.get_file_ref()) -> tmpdir/!
+                    s = all_services.get(k, None)  # TODO: check compatibility during verification!
+                    if s is None:
+                        log.error("Wrong Service ID '%s' is not known globally!", k)
+                    else:
+                        assert s is not None
+                        assert isinstance(s, DockerComposeService)
+                        # TODO: s.check()
+
+#                        ss.append(s.get_ref())
+                        tmp.write('  {} \\\n'.format(s.to_bash_array(k)))
+
+                        s.copy(tmpdir)
 
                 # TODO: collect all **compatible** applications!
-                aa = []
+#                aa = []
                 for k in all_apps:
                     a = all_apps[k]  # TODO: check compatibility during verification!
                     assert a is not None
                     assert isinstance(a, DockerComposeApplication)
-                    aa.append(a.get_ref())
+                    # TODO: a.check()
+
+#                    aa.append(a.get_ref())
                     tmp.write('  {} \\\n'.format(a.to_bash_array(k)))
-                    # TODO: copy referenced resource (a.get_file_ref()) -> tmpdir/!
+
+                    a.copy(tmpdir)
 
                 tmp.write(')\n')
 
-                tmp.write("declare -a hilbert_station_profile_services=({})\n".format(' '.join(_serviceIDs)))
-                tmp.write("declare -a hilbert_station_compatible_applications=({})\n".format(' '.join(all_apps.keys())))
-
-                for k in _settings:
-                    if k.startswith('HILBERT_'):
-                        # NOTE: HILBERT_* are exports for services/applications (docker-compose.yml)
-                        tmp.write("declare -x {0}='{1}'\n".format(k, str(_settings.get(k, ''))))
-                    else:
-                        # NOTE: hilbert_* are exports for client-side tool: `hilbert-station`
-                        assert k.startswith('hilbert_')
-                        tmp.write("declare -r {0}='{1}'\n".format(k, str(_settings.get(k, ''))))
+                tmp.write("declare -agr hilbert_station_profile_services=({})\n".format(' '.join(_serviceIDs)))
+                tmp.write("declare -agr hilbert_station_compatible_applications=({})\n".format(' '.join(all_apps.keys())))
 
                 app = _settings.get('hilbert_station_default_application', '')  # NOTE: ApplicationID!
                 if app != '':
                     if app in all_apps:
-                        app = all_apps[app].get_ref()  # DC Reference!
+                        app = all_apps[app]  # DC Reference!
+                        assert app is not None
+                        assert isinstance(app, DockerComposeApplication)
+                        # TODO: app.check()
+
+                        app.copy(tmpdir)
+
                     else:
                         log.warning('Default application %s is not in the list of compatible apps!', app)
-                        app = ''
 
-                # for legacy code:
-                tmp.write("declare -r default_app=\"{}\"\n".format(app))
-                tmp.write("declare -r background_services=\"{}\"\n".format(' '.join(ss)))
-                tmp.write("declare -r possible_apps=\"{}\"\n".format(' '.join(aa)))
-
-            # TODO: add also all further necessary resources (docker-compose.yml etc) and tar.gz it for deployment?!
-            # treat all required dependencies!?!?!
+                for k in sorted(_settings.keys(), reverse=True):
+                    if k.startswith('HILBERT_'):
+                        # NOTE: HILBERT_* are exports for services/applications (docker-compose.yml)
+                        tmp.write("declare -xg {0}='{1}'\n".format(k, str(_settings.get(k, ''))))
+                    else:
+                        # NOTE: hilbert_* are exports for client-side tool: `hilbert-station`
+                        assert k.startswith('hilbert_')
+                        tmp.write("declare -rg {0}='{1}'\n".format(k, str(_settings.get(k, ''))))
+            # NOTE: tmp is now generated!
 
             try:
                 #            _cmd = ["scp", path, "{0}:/tmp/{1}".format(_a, os.path.basename(path))]  # self._HILBERT_STATION, 'deploy'
-                _a.scp(path, remote_tmp_file, shell=False)
+                # _a.scp(path, remote_tmpdir, shell=False)
+                log.debug("About to deploy %s -> %s... (%s)", tmpdir, remote_tmpdir, str(_a.get_address()))
+                _a.rsync(tmpdir, remote_tmpdir, shell=False)
             except:
+                log.debug("Exception during deployment!")
                 s = "Could not deploy new local settings to {}".format(_a)
                 if not PEDANTIC:
                     log.warning(s)
@@ -2006,9 +2116,9 @@ class Station(BaseRecordValidator):  # Wrapper?
         finally:
             log.debug("Temporary Station Configuration File: {}".format(path))
             os.umask(saved_umask)
-            # os.rmdir(tmpdir)
+            os.rmdir(tmpdir)
 
-        _cmd = [self._HILBERT_STATION, "init", remote_tmp_file]
+        _cmd = [self._HILBERT_STATION, "init", remote_tmpdir]
         try:
             _a.ssh(_cmd, shell=False)
         except:
