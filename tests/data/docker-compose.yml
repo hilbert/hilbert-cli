@@ -327,7 +327,7 @@ services:
     environment:
      - "HB_INIT_TIMEOUT=9"
      - "APP_ID=${HILBERT_APPLICATION_ID:-kiosk}"
-    privileged: true
+    privileged: false
     entrypoint: 
      - /sbin/my_init 
      - --skip-runit 

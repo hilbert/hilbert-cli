@@ -251,15 +251,21 @@ function cmd_native_autodetect() {
 
 function cmd_version() {
   cat << EOF
-This tool:   [${TOOL}: ${TOOL_SH} => $(ls -l "$(readlink -f "${TOOL_SH}")")]
+${TOOL} Version ID: [${HILBERT_STATION_VERSION_ID}]
+EOF
+
+  # INFO: ...
+  if [[ $LOGLEVEL -le 1 ]];
+  then
+    cat << EOF
+This tool:   [${TOOL}: ${TOOL_SH} => $(ls -l "$(readlink -f "${TOOL_SH}")" 2>&1)]
 PID:         [$$]
-Version:     [${HILBERT_STATION_VERSION_ID}]
-Lockfile:    [${LOCKFILE}]
+Lockfile:    [${LOCKFILE}: $(ls -l "$(readlink -f "${LOCKFILE}")" 2>&1)]
 
 Config Base: [${HILBERT_CONFIG_BASEDIR}]
-Config Dir:  [$(readlink -f "${HILBERT_CONFIG_DIR}")]
-Config File: [$(readlink -f "${HILBERT_CONFIG_FILE}")]
-All Configs: [$(sh -c "cd ${HILBERT_CONFIG_DIR}/ && ls *.cfg | xargs")]
+Config Dir:  [${HILBERT_CONFIG_DIR}: $(readlink -f "${HILBERT_CONFIG_DIR}" 2>&1)]
+Config File: [${HILBERT_CONFIG_FILE}: $(readlink -f "${HILBERT_CONFIG_FILE}" 2>&1)]
+All Configs: [$(sh -c "cd ${HILBERT_CONFIG_DIR}/ && ls * | xargs" 2>&1)]
 
 Homedir:     [${HOME}]
 DateTime:    [$(date)]
@@ -272,20 +278,17 @@ System:      [$(uname -a)]
 DRY_RUN:     [${DRY_RUN}]
 LOGLEVEL:    [${LOGLEVEL}]
 
-DOCKER:               [${DOCKER}: $(${DOCKER} --version)]
-DOCKER_GC:            [${DOCKER_GC}: $(ls -l "${DOCKER_GC}")]
+DOCKER:               [${DOCKER}: $(${DOCKER} --version 2>&1)]
+DOCKER_GC:            [${DOCKER_GC}: $(ls -l "${DOCKER_GC}" 2>&1)]
 
-DOCKER_COMPOSE:       [${DOCKER_COMPOSE}: $(${DOCKER_COMPOSE} --version)]
+DOCKER_COMPOSE:       [${DOCKER_COMPOSE}: $(${DOCKER_COMPOSE} --version 2>&1)]
 COMPOSE_PROJECT_NAME: [${COMPOSE_PROJECT_NAME}]
 
-PTMX:                 [$(ls -l /dev/pts/ptmx)]
-OGL:                  [$(ls -l "${HILBERT_CONFIG_BASEDIR}/${OGL}")]
-HILBERT_OGL:          [${HILBERT_OGL}]
+PTMX:                 [$(ls -l /dev/pts/ptmx 2>&1)]
+OGL:                  [${HILBERT_CONFIG_BASEDIR}/${OGL}: $(ls -l "${HILBERT_CONFIG_BASEDIR}/${OGL}" 2>&1)]
+HILBERT_OGL:          [${HILBERT_OGL}: $(ls -l "$(readlink -f "${HILBERT_OGL}")" 2>&1)]
 EOF
 
-  # INFO: ...
-  if [[ $LOGLEVEL -le 1 ]];
-  then
       echo "Current Station Configuration [${HILBERT_CONFIG_FILE}]:
 "
       cat "${HILBERT_CONFIG_FILE}"  # TODO: indent the file contents for pretty-printing?

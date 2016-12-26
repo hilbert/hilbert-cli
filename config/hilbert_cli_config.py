@@ -2116,7 +2116,7 @@ class Station(BaseRecordValidator):  # Wrapper?
         finally:
             log.debug("Temporary Station Configuration File: {}".format(path))
             os.umask(saved_umask)
-            os.rmdir(tmpdir)
+            shutil.rmtree(tmpdir)  # NOTE: tmpdir is not empty!
 
         _cmd = [self._HILBERT_STATION, "init", remote_tmpdir]
         try:
