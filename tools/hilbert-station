@@ -1285,8 +1285,7 @@ function cmd_stop() {
 
 function cmd_shutdown() {
     local arg=$@
-
-    DEBUG "Shutting this system down... Arguments: [${arg}]" # -h now? / now?
+    DEBUG "Shutting this system down... Arguments: [${arg}]"
     shutdown ${arg} || sudo -n -P shutdown ${arg}
 }
 
@@ -1331,7 +1330,11 @@ function cmd_subcommand_handle() {
 
       shutdown)
         cmd_start_locking
-        cmd_shutdown "$*"
+        if [[ "$*" = "now" ]]; then
+            cmd_shutdown "$*"
+        else
+            cmd_shutdown
+        fi
         exit $?
         ;;
 

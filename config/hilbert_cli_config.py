@@ -1142,18 +1142,19 @@ class HostAddress(StringValidator):
         except:
             log.exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
             if not PEDANTIC:
-                return
+                return 1
             raise
 
         assert retcode is not None
         if not retcode:
             log.debug("Command ({}) execution success!".format(__cmd))
-            return
+            return retcode
         else:
             log.error("Could not run rsync.ssh command: '{0}'! Return code: {1}".format(__cmd, retcode))
             if PEDANTIC:
                 raise Exception("Could not run rsync/ssh command: '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
 
+        return retcode
 
     # TODO: check/use SSH/SCP calls!
     def scp(self, source, target, **kwargs):
@@ -1170,17 +1171,19 @@ class HostAddress(StringValidator):
         except:
             log.exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
             if not PEDANTIC:
-                return
+                return 1
             raise
 
         assert retcode is not None
         if not retcode:
             log.debug("Command ({}) execution success!".format(__cmd))
-            return
+            return retcode
         else:
             log.error("Could not run scp command: '{0}'! Return code: {1}".format(__cmd, retcode))
             if PEDANTIC:
                 raise Exception("Could not run scp command: '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
+
+        return retcode
 
     def ssh(self, cmd, **kwargs):
         assert self.recheck()
@@ -1202,12 +1205,12 @@ class HostAddress(StringValidator):
         assert retcode is not None
         if not retcode:
             log.debug("Command ({}) execution success!".format(__cmd))
-            return
+            return retcode
         else:
             log.error("Could not run remote ssh command: '{0}'! Return code: {1}".format(__cmd, retcode))
 #            if PEDANTIC:
             raise Exception("Could not run remote ssh command: '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
-
+        return retcode
 
     @classmethod
     def check_ssh_alias(cls, _h, **kwargs):
@@ -1467,7 +1470,7 @@ class DockerMachine(BaseRecordValidator):
                 log.exception(s)
                 raise
 
-        return _ret
+        return (_ret==0)
 
         # process call: ssh to vm_host + docker-machione start vm_id
 #        raise NotImplementedError("Running 'docker-machine start' action is not supported yet... Sorry!")
@@ -1949,8 +1952,8 @@ class Station(BaseRecordValidator):  # Wrapper?
                 log.exception(s)
                 raise
 
-        if not _ret:
-            return _ret
+        if _ret != 0:
+            return False
 
         try:
             _ret = _a.ssh([self._HILBERT_STATION, "shutdown", "now"], shell=False)
@@ -1962,8 +1965,10 @@ class Station(BaseRecordValidator):  # Wrapper?
             else:
                 log.exception(s)
                 raise
-        if not _ret:
-            return _ret
+
+        if _ret != 0:
+            log.error("Bad attempt to immediately shutdown the station {} ".format(_a))
+            return False
 
         try:
             _ret = _a.ssh([self._HILBERT_STATION, "shutdown"], shell=False)
@@ -1976,7 +1981,8 @@ class Station(BaseRecordValidator):  # Wrapper?
                 log.exception(s)
                 raise
 
-        return _ret
+        return (_ret == 0)
+
 
     def deploy(self):
         # TODO: get_client_settings()
@@ -2120,7 +2126,7 @@ class Station(BaseRecordValidator):  # Wrapper?
 
         _cmd = [self._HILBERT_STATION, "init", remote_tmpdir]
         try:
-            _a.ssh(_cmd, shell=False)
+            _ret = _a.ssh(_cmd, shell=False)
         except:
             s = "Could not initialize the station using the new configuration file with {}".format(' '.join(_cmd))
             if not PEDANTIC:
@@ -2130,17 +2136,16 @@ class Station(BaseRecordValidator):  # Wrapper?
                 log.exception(s)
                 raise
 
+        if _ret != 0:
+            log.error("Could not initialize the station!")
+            return False
+
         #        ### see existing deploy.sh!?
         # TODO: what about other external resources? docker-compose*.yml etc...?
         # TODO: restart hilbert-station?
 
 #        raise NotImplementedError("Cannot deploy local configuration to this station!")
-
-#    def start_service(self, action_args):
-#        raise NotImplementedError("Cannot start a service/application on this station!")
-
-#    def finish_service(self, action_args):
-#        raise NotImplementedError("Cannot finish a service/application on this station!")
+        return True
 
     def app_change(self, app_id):
         _a = self.get_address()
@@ -2159,7 +2164,7 @@ class Station(BaseRecordValidator):  # Wrapper?
                 log.exception(s)
                 raise
 
-        return _ret
+        return (_ret == 0)
 
 #        raise NotImplementedError("Cannot switch to a different application on this station!")
 
@@ -2172,7 +2177,7 @@ class Station(BaseRecordValidator):  # Wrapper?
             log.error("Missing/wrong Power-On Method configuration for this station!")
             raise Exception("Missing/wrong Power-On Method configuration for this station!")
 
-        poweron.start()  # , action_args????
+        return poweron.start()  # , action_args????
 
     def run_action(self, action, action_args):
         """
@@ -2195,18 +2200,19 @@ class Station(BaseRecordValidator):  # Wrapper?
 
         # Run 'ssh address hilbert-station action action_args'?!
         if action == 'start':
-            self.poweron()  # action_args
+            _ret = self.poweron()  # action_args
         elif action == 'cfg_deploy':
-            self.deploy()  # action_args
+            _ret = self.deploy()  # action_args
         elif action == 'stop':
-            self.shutdown()  # action_args
+            _ret = self.shutdown()  # action_args
         elif action == 'app_change':
-            self.app_change(action_args)  # ApplicationID
+            _ret = self.app_change(action_args)  # ApplicationID
 
 #        elif action == 'start':
 #            self.start_service(action_args)
 #        elif action == 'finish':
 #            self.finish_service(action_args)
+        return _ret
 
 
     def get_base(self):
