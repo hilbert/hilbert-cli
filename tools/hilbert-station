@@ -134,6 +134,17 @@ export DOCKER="$(readlink -f "${DOCKER:-$(which docker)}")"
 export DOCKER_GC="$(readlink -f "${DOCKER_GC:-$(which docker-gc)}")"
 export DOCKER_COMPOSE="$(readlink -f "${HILBERT_CONFIG_BASEDIR}/compose")"
 
+for d in /usr/sbin/shutdown /sbin/shutdown;
+do
+  if [[ -f "${d}" ]] && [[ -x "${d}" ]]; then
+     declare -rg SHUTDOWN="${d}"
+     break
+  fi
+done
+
+if [[ ! -v SHUTDOWN ]]; then
+     declare -rg SHUTDOWN=$(which shutdown 2>&1)
+fi
 
 function cmd_usage() {
  cat << EOF
@@ -278,15 +289,18 @@ System:      [$(uname -a)]
 DRY_RUN:     [${DRY_RUN}]
 LOGLEVEL:    [${LOGLEVEL}]
 
-DOCKER:               [${DOCKER}: $(${DOCKER} --version 2>&1)]
-DOCKER_GC:            [${DOCKER_GC}: $(ls -l "${DOCKER_GC}" 2>&1)]
+SHUTDOWN:    [${SHUTDOWN}: $(ls -l "${SHUTDOWN}")]
+PTMX:        [$(ls -l /dev/pts/ptmx 2>&1)]
+
+OGL:         [${HILBERT_CONFIG_BASEDIR}/${OGL}: $(ls -l "${HILBERT_CONFIG_BASEDIR}/${OGL}" 2>&1)]
+HILBERT_OGL: [${HILBERT_OGL}: $(ls -l "$(readlink -f "${HILBERT_OGL}")" 2>&1)]
+
+DOCKER:      [${DOCKER}: $(${DOCKER} --version 2>&1)]
+DOCKER_GC:   [${DOCKER_GC}: $(ls -l "${DOCKER_GC}" 2>&1)]
 
 DOCKER_COMPOSE:       [${DOCKER_COMPOSE}: $(${DOCKER_COMPOSE} --version 2>&1)]
 COMPOSE_PROJECT_NAME: [${COMPOSE_PROJECT_NAME}]
 
-PTMX:                 [$(ls -l /dev/pts/ptmx 2>&1)]
-OGL:                  [${HILBERT_CONFIG_BASEDIR}/${OGL}: $(ls -l "${HILBERT_CONFIG_BASEDIR}/${OGL}" 2>&1)]
-HILBERT_OGL:          [${HILBERT_OGL}: $(ls -l "$(readlink -f "${HILBERT_OGL}")" 2>&1)]
 EOF
 
       echo "Current Station Configuration [${HILBERT_CONFIG_FILE}]:
@@ -1286,7 +1300,7 @@ function cmd_stop() {
 function cmd_shutdown() {
     local arg=$@
     DEBUG "Shutting this system down... Arguments: [${arg}]"
-    shutdown ${arg} || sudo -n -P shutdown ${arg}
+    ${SHUTDOWN} ${arg} || sudo -n -P ${SHUTDOWN} ${arg}
 }
 
 function cmd_subcommand_handle() {
