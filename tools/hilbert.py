@@ -7,22 +7,23 @@
 # PYTHON_ARGCOMPLETE_OK           # NOQA
 
 from __future__ import absolute_import, print_function, unicode_literals
-import sys
-from os import path
 import argparse                        # NOQA
 import logging
+import sys
+import os
+from os import path
 
-DIR=path.dirname(path.dirname(path.abspath(__file__)))
-
-sys.path.append(DIR)
-sys.path.append(path.join(DIR, 'config'))
-
-from helpers import *
-from hilbert_cli_config import *
-from subcmdparser import *
-#from config.hilbert_cli_config import *
-#from config.helpers import *
-#from config.subcmdparser import *
+DIR = path.dirname(path.dirname(path.abspath(__file__)))
+if path.exists(path.join(DIR, 'hilbert_config', 'hilbert_cli_config.py')):
+    sys.path.append(DIR)
+    sys.path.append(path.join(DIR, 'hilbert_config'))
+    from helpers import *
+    from hilbert_cli_config import *
+    from subcmdparser import *
+else:
+    from hilbert_config.hilbert_cli_config import *
+    from hilbert_config.helpers import *
+    from hilbert_config.subcmdparser import *
 
 # datefmt='%Y.%m.%d %I:%M:%S %p'
 logging.basicConfig(format='%(levelname)s  [%(filename)s:%(lineno)d]: %(message)s')
@@ -91,25 +92,25 @@ def input_handler(parser, ctx, args):
 
     if (fn is not None) and (df is not None):
         log.error("Input file specification clashes with the input dump specification: specify a single input source!")
-        exit(1)
+        sys.exit(1)
 
     if fn is not None:
         if not URI(None).validate(fn):
             log.error("Wrong file specification: '{}'".format(fn))
-            exit(1)
+            sys.exit(1)
         log.info("Input file: '{}'".format(fn))
 
     if df is not None:
         if not URI(None).validate(fn):
             log.error("Wrong dump file specification: '{}'".format(df))
-            exit(1)
+            sys.exit(1)
         log.info("Input dump file: '{}'".format(df))
 
     if fn is not None:
-        set_INPUT_DIRNAME( os.path.abspath(os.path.dirname(fn)) )
+        set_INPUT_DIRNAME( path.abspath(path.dirname(fn)) )
     else:
         assert df is not None
-        set_INPUT_DIRNAME( os.path.abspath(os.path.dirname(df)) )
+        set_INPUT_DIRNAME( path.abspath(path.dirname(df)) )
 
     cfg = None
 
@@ -125,7 +126,7 @@ def input_handler(parser, ctx, args):
             cfg = parse_hilbert(yml)  # NOTE: checks that this is a proper dictionary...
         except:
             log.exception("ERROR: wrong input file: '{}'!".format(fn))
-            exit(1)
+            sys.exit(1)
     else:
         log.info("Loading dump '{}'...".format(df))
         try:
@@ -133,11 +134,11 @@ def input_handler(parser, ctx, args):
             log.info("Input dump file is valid!")
         except:
             log.exception("Wrong input dump file: '{}'!".format(df))
-            exit(1)
+            sys.exit(1)
 
     if cfg is None:
         log.error("Could not get the configuration!")
-        exit(1)
+        sys.exit(1)
 
     assert isinstance(cfg, Hilbert)
     log.info("Configuration is OK!")
@@ -203,7 +204,7 @@ def cmd_query(parser, context, args):
         obj = cmd_list(parser, context, args, obj)
     except:
         log.exception("Sorry cannot query '{}' yet!" . format(obj))
-        exit(1)
+        sys.exit(1)
 
     assert obj is not None
 
@@ -243,7 +244,7 @@ def cmd_list_applications(parser, context, args):
         obj = cmd_list(parser, context, args, 'Applications/keys')
     except:
         log.exception("Sorry could not get the list of '{}' from the input file!".format('applications'))
-        exit(1)
+        sys.exit(1)
 
     assert obj is not None
 
@@ -268,23 +269,98 @@ def cmd_list_stations(parser, context, args):
     group.add_argument('--configdump', required=False,
                          help="specify input dump file")
 
+    parser.add_argument('-f', '--format', choices=['list', 'dashboard'],
+                      default='list', required=False,
+                      help="output format")
+
     args = parser.parse_args(args)
 
-    log.debug("Listing all Station ID...")
+    _args = vars(args)
 
-    obj = None
-    try:
-        obj = cmd_list(parser, context, args, 'Stations/keys')
-    except:
-        log.exception("Sorry could not get the list of '{}' from the input file!".format('stations'))
-        exit(1)
+    mode = _args.get('format', 'list')
 
-    assert obj is not None
+    if mode == "list":
+        log.debug("Listing all Station ID...")
 
-    if isinstance(obj, BaseValidator):
-        print(yaml_dump(obj.data_dump()))
+        obj = None
+        try:
+            obj = cmd_list(parser, context, args, 'Stations/keys')
+        except:
+            log.exception("Sorry could not get the list of '{}' from the input file!".format('stations'))
+            sys.exit(1)
+
+        assert obj is not None
+
+        if isinstance(obj, BaseValidator):
+            print(yaml_dump(obj.data_dump()))
+        else:
+            print(yaml_dump(obj))
     else:
-        print(yaml_dump(obj))
+        assert mode == 'dashboard'
+
+        log.debug("Loading/parsing configuration...")
+        cfg = input_handler(parser, vars(context), args)
+        assert cfg is not None
+        assert isinstance(cfg, Hilbert)
+
+
+        obj = None
+        log.debug("Listing all Stations for Dashboard...")
+        try:
+            obj = cfg.query('Stations/data')
+        except:
+            log.exception("Sorry could not query Stations's details from the given configuration!")
+            sys.exit(1)
+
+        assert obj is not None
+        if isinstance(obj, BaseValidator):
+            obj = obj.data_dump()
+
+        apps = None
+        try:
+            apps = cfg.query('Applications/keys')
+        except:
+            log.exception("Sorry could not query ApplicationId-s from the given configuration!")
+            sys.exit(1)
+
+        # TODO: FIXME: actually compute compatible_stations => Groups!
+        if isinstance(apps, BaseValidator):
+            apps = apps.data_dump()
+
+        apps = '\n"' + '",\n"'.join(apps) + '"\n'
+
+        first = True
+        print('[')
+        for k in obj:
+            o = obj.get(k, None)
+            assert o is not None
+
+            if (o.get('hidden', '') == 'true') or (o.get('hidden', False) == True):
+                continue
+
+            assert 'name' in o
+            assert 'profile' in o
+
+            s = o.get('client_settings', None)
+            d = ''
+            if s is not None:
+                assert isinstance(s, dict)
+                d = s.get('hilbert_station_default_application', '')
+            a = apps  # TODO: FIXME: actually compute them!!!
+
+
+            if not first:
+                print(',')
+            print('{')
+            print('"{0}": "{1}",'.format('id', k))
+            print('"{0}": "{1}",'.format('name', o['name']))
+            print('"{0}": "{1}",'.format('type', o['profile']))
+            print('"{0}": "{1}",'.format('default_app', d))
+            print('"{0}": [{1}]'.format('possible_apps', a))
+            print('}')
+            first = False
+
+        print(']')
 
     log.debug("Done")
     return args
@@ -311,7 +387,7 @@ def cmd_list_profiles(parser, context, args):
         obj = cmd_list(parser, context, args, 'Profiles/keys')
     except:
         log.exception("Sorry could not get the list of '{}' from the input file!".format('profiles'))
-        exit(1)
+        sys.exit(1)
 
     assert obj is not None
 
@@ -344,7 +420,7 @@ def cmd_list_groups(parser, context, args):
         obj = cmd_list(parser, context, args, 'Groups/keys')
     except:
         log.exception("Sorry could not get the list of '{}' from the input file!".format('groups'))
-        exit(1)
+        sys.exit(1)
 
     assert obj is not None
 
@@ -377,7 +453,7 @@ def cmd_list_services(parser, context, args):
         obj = cmd_list(parser, context, args, 'Services/keys')
     except:
         log.exception("Sorry could not get the list of '{}' from the input file!".format('services'))
-        exit(1)
+        sys.exit(1)
 
     assert obj is not None
 
@@ -434,13 +510,13 @@ def cmd_action(parser, context, args, Action=None, appIdRequired=False):
         stations = cmd_list(parser, context, args, 'Stations/all')
     except:
         log.exception("Sorry could not get the list of '{}' from the input file!".format('stations'))
-        exit(1)
+        sys.exit(1)
 
     assert stations is not None
 
     if stationId not in stations.get_data():
         log.error("Invalid StationID (%s)!", stationId)
-        exit(1)
+        sys.exit(1)
 
     station = stations.get_data()[stationId]
     assert station is not None
@@ -451,7 +527,7 @@ def cmd_action(parser, context, args, Action=None, appIdRequired=False):
         station.run_action(action, action_args)  # NOTE: temporary API for now
     except:
         log.exception("Could not run '{0} {1}' on station '{2}'" . format(action, str(action_args), stationId))
-        exit(1)
+        sys.exit(1)
     return args
 
 @subcmd('start', help='poweron a station')

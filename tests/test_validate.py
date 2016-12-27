@@ -10,7 +10,7 @@ from ruamel.yaml.compat import PY2, PY3, text_type, string_types, ordereddict
 
 DIR=path.dirname( path.dirname( path.abspath(__file__) ) )
 sys.path.append(DIR)
-sys.path.append(path.join(DIR, 'config'))
+sys.path.append(path.join(DIR, 'hilbert_config'))
 
 from helpers import *
 from hilbert_cli_config import *

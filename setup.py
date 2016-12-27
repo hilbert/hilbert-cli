@@ -1,15 +1,15 @@
 from distutils.core import setup
 
-setup(name='Hilbert',
-      version='0.2.2',
-      description='Hilbert tool (server part)',
+setup(name='hilbert_config',
+      version='0.3.0',
+      description='Hilbert Configuration tool (server part)',
       url='https://github.com/hilbert/hilbert-cli',
       author='Oleksandr Motsak',
       author_email='http://goo.gl/mcpzY',
-      packages=['config'],
-      package_dir={'config': 'config'},  # package_data={'...': ['data/*.dat']},
+      packages=['hilbert_config'],
+      package_dir={'hilbert_config': 'hilbert_config'},  # package_data={'...': ['data/*.dat']},
       # py_modules=['tools/hilbert.py'],
-      scripts=['tools/hilbert', 'tools/hilbert.py'],
+      scripts=['tools/hilbert', 'tools/hilbert.py', 'server/list_stations.sh', 'server/stop_station.sh', 'server/start_station.sh', 'server/appchange_station.sh'],
       license='',
       classifiers=[''],
       platforms=[''],  # data_files=[('config/templates', ['docker-compose.yml'])],
@@ -28,3 +28,4 @@ setup(name='Hilbert',
       )  # TODO: add testing!?
 # glob.glob(os.path.join('mydir', 'subdir', '*.html'))
 # os.listdir(os.path.join('mydir', 'subdir'))
+

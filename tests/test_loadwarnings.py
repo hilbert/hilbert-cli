@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.WARNING, stream=sys.stderr)  # TODO: FIXME: no
 
 DIR=path.dirname( path.dirname( path.abspath(__file__) ) )
 sys.path.append(DIR)
-sys.path.append(path.join(DIR, 'config'))
+sys.path.append(path.join(DIR, 'hilbert_config'))
 
 from helpers import *
 from hilbert_cli_config import *

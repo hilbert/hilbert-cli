@@ -1,4 +1,4 @@
-config/hilbert_cli_config.py ident
+hilbert_config/hilbert_cli_config.py ident
 tools/hilbert.py ident
 tools/hilbert-station ident
 
