@@ -919,14 +919,28 @@ function cmd_compose_stop() {
 
     DEBUG "Stopping/Killing/Removing service '$d' using docker-compose..."
 
-    cmd_docker_compose stop -t 3 "$d" >/dev/null
-    cmd_docker_compose kill -s SIGTERM "$d" > /dev/null 2>&1
-    cmd_docker_compose kill -s SIGKILL "$d" > /dev/null 2>&1
-    cmd_docker_compose rm -f "$d" > /dev/null 2>&1
+    cmd_docker_compose stop -t 10 "$d"
+    cmd_docker_compose kill -s SIGTERM "$d"
+    cmd_docker_compose kill -s SIGKILL "$d"
+    cmd_docker_compose rm -vf "$d"
+#    (cmd_docker_compose rm "$d" || cmd_docker_compose rm -vf "$d")
 
     unset -v HILBERT_APPLICATION_ID COMPOSE_FILE
 
     return 0
+}
+
+function cmd_docker_stop() {
+    local d=$*
+    DEBUG "Stopping/Killing/Removing service '$d' using '${DOCKER}'..."
+
+    cmd_docker stop -t 3 $d
+    cmd_docker kill -s SIGTERM $d
+    cmd_docker kill -s SIGKILL $d
+    cmd_docker rm -vf $d
+#    (cmd_docker rm $d || cmd_docker rm -vf $d)
+
+    return $?
 }
 
 function cmd_docker_compose() {
@@ -984,18 +998,6 @@ function cmd_docker_pause() {
     DEBUG "Pause service/application '$d' using '${DOCKER}'..."
 
     cmd_docker pause $d
-    return $?
-}
-
-function cmd_docker_stop() {
-    local d=$*
-    DEBUG "Stopping/Killing/Removing service '$d' using '${DOCKER}'..."
-
-    cmd_docker stop -t 3 $d  >/dev/null
-    cmd_docker kill -s SIGTERM $d > /dev/null 2>&1
-    cmd_docker kill -s SIGKILL $d > /dev/null 2>&1
-    cmd_docker rm -f $d > /dev/null 2>&1
-
     return $?
 }
 
