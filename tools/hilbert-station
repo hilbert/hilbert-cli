@@ -13,8 +13,10 @@
 ## NOTE: see also http://tldp.org/LDP/abs/html/exitcodes.html
 declare -rg TOOL_SH="$0"
 declare -rg TOOL="$(basename "${TOOL_SH}")" # script_name=`basename "$0"` # script_name="${script_name%.*}"
-declare -g LOGLEVEL=2
-declare -g DRY_RUN=""
+
+declare -g LOGLEVEL=2  # WARNING-LEVEL
+declare -g DRY_RUN=""  # NOTE: turn on dry mode (not actual service-runtime action execution) if non-empty
+declare -g hibert_station_process_kill_timeout=8
 
 ## NOTE: locking following: http://stackoverflow.com/a/1985512 by Przemyslaw Pawelczyk <przemoc@gmail.com>
 ## NOTE: uses flock from util-linux[-ng]
@@ -919,10 +921,12 @@ function cmd_compose_stop() {
 
     DEBUG "Stopping/Killing/Removing service '$d' using docker-compose..."
 
-    cmd_docker_compose stop -t 10 "$d"
-    cmd_docker_compose kill -s SIGTERM "$d"
-    cmd_docker_compose kill -s SIGKILL "$d"
+    cmd_docker_compose kill -s SIGINT "$d" && sleep "${hibert_station_process_kill_timeout}"
+#    cmd_docker_compose kill -s SIGTERM "$d"
+#    cmd_docker_compose kill -s SIGKILL "$d"
+    cmd_docker_compose stop -t "${hibert_station_process_kill_timeout}" "$d"
     cmd_docker_compose rm -vf "$d"
+    cmd_docker_compose rm -vf "$d"  # NOTE: to remove "dead" left-over containers!
 #    (cmd_docker_compose rm "$d" || cmd_docker_compose rm -vf "$d")
 
     unset -v HILBERT_APPLICATION_ID COMPOSE_FILE
@@ -934,10 +938,12 @@ function cmd_docker_stop() {
     local d=$*
     DEBUG "Stopping/Killing/Removing service '$d' using '${DOCKER}'..."
 
-    cmd_docker stop -t 3 $d
-    cmd_docker kill -s SIGTERM $d
-    cmd_docker kill -s SIGKILL $d
+    cmd_docker kill -s SIGINT $d && sleep "${hibert_station_process_kill_timeout}"
+#    cmd_docker kill -s SIGTERM $d
+#    cmd_docker kill -s SIGKILL $d
+    cmd_docker stop -t "${hibert_station_process_kill_timeout}" $d
     cmd_docker rm -vf $d
+    cmd_docker rm -vf $d  # NOTE: to remove "dead" left-over containers!
 #    (cmd_docker rm $d || cmd_docker rm -vf $d)
 
     return $?
@@ -1262,9 +1268,14 @@ function cmd_stop() {
 
     cmd_detect_top_application
     if [[ -n "${current_top_application_id}" ]]; then
-         INFO "Previously started Hilbert's application(s) detected: [${current_top_application_id}]"
-         # ${DOCKER} ps -a --filter "label=is_top_app=1" --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}"
-         cmd_docker_stop ${current_top_application_id}
+         INFO "Previously started Hilbert's application(s) detected: [${current_top_application_id}, APP_ID: ${APP_ID}]"
+
+         if [[ -z "${APP_ID}" ]]; then
+             # ${DOCKER} ps -a --filter "label=is_top_app=1" --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}"
+             cmd_docker_stop ${current_top_application_id}
+         else
+             cmd_stop_service "${APP_ID}"
+         fi
     else
          INFO "No previously started applications are currently detected"
     fi
