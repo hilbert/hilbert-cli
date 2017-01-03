@@ -148,6 +148,7 @@ if [[ ! -v SHUTDOWN ]]; then
      declare -rg SHUTDOWN=$(which shutdown 2>&1)
 fi
 
+## @fn cmd_usage Show CLI usage help
 function cmd_usage() {
  cat << EOF
 usage: ${TOOL} [-h] [-p] [-V] [-v | -q] subcommand
@@ -157,7 +158,8 @@ Hilbert - client part for Linux systems
 positional arguments:
  subcommand:
    init [<cfg>]            init station based on given or installed configuration
-   list_applications       list of supported applications
+   list_applications       list of (supported) applications
+   list_services           list of background services
    app_change <app_id>     change the currently running top application to specified
    start                   start Hilbert on the system
    stop                    stop Hilbert on the system
@@ -178,7 +180,7 @@ respected environment variables:
 EOF
 }
 
-## NOTE: Native Auto-detections:
+## @fn cmd_native_autodetect Native Auto-detections
 function cmd_native_autodetect() {
     ## Docker Engine
     export DOCKER_SOCKET=${DOCKER_SOCKET:-/var/run/docker.sock}
@@ -573,7 +575,7 @@ function cmd_read_configuration() {
     fi
 
     # NOTE: read station configuration:
-    source "${HILBERT_CONFIG_FILE}"  # only: declare ... key="...value..."!
+    source "${HILBERT_CONFIG_FILE}"  # TODO: FIXME: only pass declare ... key="...value..."!?
 
     if [[ -v services_and_applications ]]; then
       ERROR "Configuration file '${HILBERT_CONFIG_FILE}' does not set 'services_and_applications'!"
@@ -600,16 +602,10 @@ function cmd_init() {
     fi
 
     cmd_native_autodetect
-
-    if [[ -n "${arg}" ]]; then
-#      DEBUG "cmd_install_station_config [${arg}]"
-      cmd_install_station_config "${arg}"
-    fi
+    [[ -n "${arg}" ]] && cmd_install_station_config "${arg}"
 
     local s
-
     cmd_read_configuration
-
     if [[ ${#hilbert_station_profile_services[@]} -ne 0 ]]; then
       for s in "${hilbert_station_profile_services[@]}"; do
           DEBUG "Init [$s]"
@@ -643,6 +639,7 @@ function cmd_init() {
     return $?
 }
 
+## @fn cmd_app_change
 function cmd_app_change() {
     ## NOTE: Application ID:
     local arg="$*"
@@ -1008,13 +1005,6 @@ function cmd_docker_pause() {
 }
 
 function cmd_detect_top_application() {
-  if [[ -r "/tmp/lastapp.cfg" ]]; then
-     source "/tmp/lastapp.cfg"
-     WARNING "Found '/tmp/lastapp.cfg'! With current_app: '${current_app}'. Removing..."
-     unset -v current_app
-     rm -f '/tmp/lastapp.cfg'
-  fi
-
   # TODO: FIXME: can only detect the DC's service name - not Application ID!!!
   # NOTE: cannot attach a label in runtime to docker-compose service :-(
   current_bg_servce_ids=$(${DOCKER} ps -a -q --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" 2>/dev/null | xargs --no-run-if-empty) # TODO: FIXME: no spaces in between?!??
@@ -1060,6 +1050,7 @@ function cmd_detect_top_application() {
   return 0
 }
 
+## @fn cmd_list_applications List Applications
 function cmd_list_applications() {
     local data
 
@@ -1107,7 +1098,7 @@ function cmd_list_applications() {
     return 0
 }
 
-## @fn cmd_list_services
+## @fn cmd_list_services List Services
 function cmd_list_services() {
     cmd_read_configuration
 
@@ -1138,11 +1129,10 @@ function cmd_list_services() {
     return 0
 }
 
+## @fn cmd_start (re)start services and top application
 function cmd_start() {
     cmd_native_autodetect
-
     cmd_read_configuration
-
     cmd_detect_top_application
     if [[ -z "${current_top_application_id}" ]] && [[ -z "${current_bg_servce_ids}" ]]; then
       DEBUG "OK: no applications or services are currently running. Clean reboot!"
@@ -1174,13 +1164,15 @@ function cmd_start() {
       exit 0
     fi
 
+    local start_application="${hilbert_station_default_application}"
+
     ## TODO: FIXME: check restart/crash policy!!!!!
     ## hilbert_restart_policy = "cleanup"?
     ## Cleanup any other containers: e.g. docker ps -aq | xargs --no-run-if-empty docker rm -f
     if [[ -n "${current_top_application_id}" ]]; then
       ## NOTE: restart policy: continue??
       if [[ -n "${APP_ID}" ]]; then
-         hilbert_station_default_application="${APP_ID}"
+         start_application="${APP_ID}"
          cmd_docker_pause ${current_top_application_id}
       else
          WARNING "Trying to kill (all) found Hilbert's TOP applications: ${current_top_application_id}..."
@@ -1235,37 +1227,32 @@ function cmd_start() {
     fi
 
     ## NOTE: start default application!
-    if [[ -n "${hilbert_station_default_application}" ]]; then
-      ## NOTE: check whether ${hilbert_station_default_application} is a valid ID:
-      data="$(_service_get_info "${hilbert_station_default_application}")"
+    if [[ -n "${start_application}" ]]; then
+      ## NOTE: check whether ${start_application} is a valid ID:
+      data="$(_service_get_info "${start_application}")"
       if [[ $? -ne 0 ]]; then
-        ERROR "Trying to start a bad application: '${hilbert_station_default_application}'"
+        ERROR "Trying to start a bad application: '${start_application}'"
       else
-        DEBUG "Starting Default application: ${hilbert_station_default_application} [$data]"
+        DEBUG "Starting Default application: ${start_application} [$data]"
       fi
 
-      if [[ -n "${APP_ID}" ]] && [[ "${hilbert_station_default_application}" = "${APP_ID}" ]]; then
+      if [[ -n "${APP_ID}" ]] && [[ "${start_application}" = "${APP_ID}" ]]; then
           cmd_restart_service "${APP_ID}"
       else
-          cmd_start_service "${hilbert_station_default_application}"
+          cmd_start_service "${start_application}"
       fi
 
-      if [[ $? -ne 0 ]]; then
-          ERROR "Could not start application: '${hilbert_station_default_application}' ($data)"
-      fi
+      [[ $? -ne 0 ]] && ERROR "Could not start application: '${start_application}' ($data)"
 
     else
       INFO "No default application: is this a server?!"
     fi
 }
 
-## NOTE: no arguments?
-## @fn cmd_stop
+## @fn cmd_stop stop current top application and background services
 function cmd_stop() {
     cmd_native_autodetect
-
     cmd_read_configuration
-
     cmd_detect_top_application
     if [[ -n "${current_top_application_id}" ]]; then
          INFO "Previously started Hilbert's application(s) detected: [${current_top_application_id}, APP_ID: ${APP_ID}]"
@@ -1310,12 +1297,14 @@ function cmd_stop() {
 
 }
 
+## @fn cmd_shutdown
 function cmd_shutdown() {
     local arg=$@
     DEBUG "Shutting this system down... Arguments: [${arg}]"
     ${SHUTDOWN} ${arg} || sudo -n -P ${SHUTDOWN} ${arg}
 }
 
+## @fn cmd_subcommand_handle Main CLI parser/handler
 function cmd_subcommand_handle() {
     subcommand=$1; shift
 
@@ -1372,7 +1361,7 @@ function cmd_subcommand_handle() {
         exit $?
         ;;
 
-      ## NOTE: hidden subcommand-s
+      ## NOTE: hidden subcommand-s (for testing)
       cmd_*)
         ## NOTE: lock to be sure...
         cmd_start_locking
