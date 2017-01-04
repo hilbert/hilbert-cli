@@ -665,8 +665,9 @@ function cmd_app_change() {
       if [[ "${APP_ID}" != "$arg" ]]; then
         cmd_stop_service "${APP_ID}"
       else
-        cmd_restart_service "${APP_ID}"
-        return 0
+        cmd_stop_service "${APP_ID}"
+#        cmd_restart_service "${APP_ID}"  # Same Application ID => Same Env.Vars??? :-(
+#        return 0
       fi
     fi
 
@@ -739,7 +740,7 @@ function cmd_init_service() {
 
 
 
-## @fn cmd_restart_service
+## @fn cmd_restart_service  Deprecated!!!! TO BE REMOVED!?
 ## @param arg ApplicationID
 function cmd_restart_service() {
     ## NOTE: Application ID
@@ -793,7 +794,7 @@ function cmd_stop_service() {
       exit 1
     fi
 
-    DEBUG "Starting/restarting service/application via docker-compose: ${arg}..."
+    DEBUG "Stopping service/application via docker-compose: ${arg}..."
     cmd_compose_stop "${arg}"
 
     return 0
@@ -1010,13 +1011,13 @@ function cmd_docker() {
 }
 
 
-function cmd_docker_pause() {
-    local d=$*
-    DEBUG "Pause service/application '$d' using '${DOCKER}'..."
-
-    cmd_docker pause $d
-    return $?
-}
+#function cmd_docker_pause() {
+#    local d=$*
+#    DEBUG "Pause service/application '$d' using '${DOCKER}'..."
+#
+#    cmd_docker pause $d
+#    return $?
+#}
 
 ## NOTE: side effects:
 ##    Container IDs: current_bg_servce_ids, current_top_application_id
@@ -1190,15 +1191,16 @@ function cmd_start() {
       ## NOTE: restart policy: continue??
       if [[ -n "${APP_ID}" ]]; then
          start_application="${APP_ID}"
-         cmd_docker_pause ${current_top_application_id}
-      else
-         WARNING "Trying to kill (all) found Hilbert's TOP applications: ${current_top_application_id}..."
-         cmd_docker_stop ${current_top_application_id}
+#         cmd_docker_pause ${current_top_application_id}
+#      else
       fi
+
+      INFO "Trying to kill (all) found Hilbert's TOP applications: ${current_top_application_id}..."
+      cmd_docker_stop ${current_top_application_id}
     fi
 
     if [[ -n "${current_bg_servce_ids}" ]]; then
-        WARNING "Trying to kill (all) found Hilbert's BG services: ${current_bg_servce_ids}..."
+        INFO "Trying to kill (all) found Hilbert's BG services: ${current_bg_servce_ids}..."
         cmd_docker_stop ${current_bg_servce_ids}
     fi
 
@@ -1254,7 +1256,9 @@ function cmd_start() {
       fi
 
       if [[ -n "${APP_ID}" ]] && [[ "${start_application}" = "${APP_ID}" ]]; then
-          cmd_restart_service "${APP_ID}"
+          # TODO: FIXME: same Application ID => same app!?? (same docker-compose.yml? same env.vars?) :-(
+#          cmd_restart_service "${APP_ID}"
+          cmd_start_service "${start_application}"
       else
           cmd_start_service "${start_application}"
       fi
