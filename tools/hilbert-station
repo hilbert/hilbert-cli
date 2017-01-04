@@ -953,7 +953,7 @@ function cmd_docker_compose() {
 
     if [[ ! -r "${COMPOSE_FILE:-docker-compose.yml}" ]]; then
        ERROR "COMPOSE_FILE ('${PWD}: ${COMPOSE_FILE:-docker-compose.yml}') is missing or unreadable!"
-       cd -
+       cd "${S}"
        exit 2
     fi
 
@@ -970,29 +970,43 @@ function cmd_docker_compose() {
     if [[ -z "${DRY_RUN}" ]]; then
       # --debug / --verbose?
       ${DOCKER_COMPOSE} --skip-hostname-check $@
+      local ret=$?
+
+      [[ $LOGLEVEL -le "-1" ]] && ${DOCKER} ps -a
+
+      if [[ $ret -ne 0 ]]; then
+        ERROR "Could not run '${DOCKER_COMPOSE} --skip-hostname-check $*' in '${PWD}' with '${COMPOSE_FILE:-docker-compose.yml}'!"
+        exit 1
+      fi
     else
       echo "Running: [${DOCKER_COMPOSE} --skip-hostname-check $*]"
     fi
-    ret=$?
-
-    if [[ $? -ne 0 ]]; then
-        ERROR "Could not run '${DOCKER_COMPOSE} --skip-hostname-check $*' in '${PWD}' with '${COMPOSE_FILE:-docker-compose.yml}'!"
-        exit 1
-    fi
 
     cd "${S}"
-
-    return $ret
+    return 0
 }
 
 function cmd_docker() {
-    if [[ -z "${DRY_RUN}" ]]; then
-      # --debug / --verbose?
-      ${DOCKER} $@
-    else
-      echo "Running: [${DOCKER} $*]"
+    if [[ -n "${DRY_RUN}" ]]; then
+        echo "Running: [${DOCKER} $*]"
+        return 0
     fi
-    return $?
+
+    if [[ $LOGLEVEL -le "0" ]]; then
+        ${DOCKER} --debug --log-level=debug $@
+    else
+        ${DOCKER} $@
+    fi
+    local ret=$?
+
+    [[ $LOGLEVEL -le "-1" ]] && ${DOCKER} ps -a
+
+    if [[ $ret -ne 0 ]]; then
+        WARNING "Could not run '${DOCKER} [?--debug --log-level=debug?] $*' in '${PWD}'!"
+        ## exit 1
+    fi
+
+    return $ret
 }
 
 
@@ -1004,12 +1018,15 @@ function cmd_docker_pause() {
     return $?
 }
 
+## NOTE: side effects:
+##    Container IDs: current_bg_servce_ids, current_top_application_id
+##    Hilbert Application ID: APP_ID, DC reference: current_top_application (unknown docker-compose.yml!)
 function cmd_detect_top_application() {
   # TODO: FIXME: can only detect the DC's service name - not Application ID!!!
   # NOTE: cannot attach a label in runtime to docker-compose service :-(
-  current_bg_servce_ids=$(${DOCKER} ps -a -q --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" 2>/dev/null | xargs --no-run-if-empty) # TODO: FIXME: no spaces in between?!??
+  declare -rg current_bg_servce_ids=$(${DOCKER} ps -a -q --filter "label=is_top_app=0" --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" 2>/dev/null | xargs --no-run-if-empty)
 
-  TOP=($(${DOCKER} ps -a -q --filter "label=is_top_app=1" \
+  local TOP=($(${DOCKER} ps -a -q --filter "label=is_top_app=1" \
   --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" 2>/dev/null ))
 
   if [[ $? -ne 0 ]]; then
@@ -1018,7 +1035,7 @@ function cmd_detect_top_application() {
   fi
 
   local N=${#TOP[@]}
-  current_top_application_id="${TOP[@]}"
+  declare -rg current_top_application_id="${TOP[@]}"
 
   if [[ $N -eq 0 ]]; then
     WARNING "Found no top application(s)!"
@@ -1039,14 +1056,14 @@ function cmd_detect_top_application() {
   fi
 
   # NOTE: set "Env APP_ID=' to Application ID!
-  APP_ID=$(${DOCKER} inspect --format='{{index .Config.Env }}' "${current_top_application_id}" 2>/dev/null | sed -e 's@^.*APP_ID=@@g' -e 's@ .*$@@g')
+  declare -gr APP_ID=$(${DOCKER} inspect --format='{{index .Config.Env }}' "${current_top_application_id}" 2>/dev/null | sed -e 's@^.*APP_ID=@@g' -e 's@ .*$@@g')
   if [[ $? -ne 0 ]]; then
     ERROR "Could not inspect container '${current_top_application_id}' using ${DOCKER}"
     exit 1
   fi
 
   DEBUG "Found $N top application '${current_top_application_id}': ${SV} / APP_ID: ${APP_ID}"
-  current_top_application="${SV}"
+  declare -gr current_top_application="${SV}"
   return 0
 }
 
