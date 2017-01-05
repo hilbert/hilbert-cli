@@ -32,7 +32,7 @@ function Status() {
 
 function HilbertStop() {
     echo "[[[[[[[[[[[[[[[[[[[[[ Stopping Hilbert: ]]]]]]]]]]]]]]]]]]]]]]"
-    hilbert-station -vvvvt stop 2>&1
+    "${HILBERT_STATION}" -vvvvt stop 2>&1
     return $?
 }
 

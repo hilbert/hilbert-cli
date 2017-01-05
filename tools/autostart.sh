@@ -59,13 +59,13 @@ function StartHttpd() {
 
 function HilbertInit() {
     echo "[[[[[[[[[[[[[[[[[[[[[ Preparing/Initializing Hilbert: ]]]]]]]]"
-    hilbert-station -vv init  2>&1
+    "${HILBERT_STATION}" -vv init  2>&1
     return $?
 }
 
 function HilbertStart() {
     echo "[[[[[[[[[[[[[[[[[[[[[ Starting Hilbert: ]]]]]]]]]]]]]]]]]]]]]]"
-    hilbert-station -vvvvt start  2>&1
+    "${HILBERT_STATION}" -vvvvt start  2>&1
     return $?
 }
 
