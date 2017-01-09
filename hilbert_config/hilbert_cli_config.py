@@ -74,6 +74,7 @@ def start_pedantic_mode():
 def get_PEDANTIC():
     return PEDANTIC
 
+
 ###############################################################
 if PY3 and (sys.version_info[1] >= 4):
     class AbstractValidator(ABC):
@@ -159,7 +160,6 @@ def _execute(_cmd, shell=False, stdout=None, stderr=None):  # True??? Try severa
 
 ###############################################################
 def _get_line_col(lc):
-
     if isinstance(lc, (list, tuple)):
         l = lc[0]
         c = lc[1]
@@ -228,6 +228,7 @@ def _value_error(key, value, lc, error, e='E'):
     print('{}{}'.format(' ' * val_col, _up_arrow))
     print('---')
 
+
 # Unused???
 # def value_warning(key, value, lc, error):
 #    _value_error(key, value, lc, error, e='W')
@@ -284,9 +285,9 @@ class VerboseRoundTripLoader(Reader, RoundTripScanner, RoundTripParser, Composer
 class BaseValidator(AbstractValidator):
     """Abstract Base Class for the Config entities"""
 
-    __version = [None]    # NOTE: shared version among all Validator Classes!
-    _parent   = None      # NOTE: (for later) parent Validator
-    _data     = None      # NOTE: result of valid validation
+    __version = [None]  # NOTE: shared version among all Validator Classes!
+    _parent = None  # NOTE: (for later) parent Validator
+    _data = None  # NOTE: result of valid validation
     _default_input_data = None  # NOTE: Default input to the parser instead of None
 
     def __init__(self, *args, **kwargs):
@@ -330,7 +331,6 @@ class BaseValidator(AbstractValidator):
                   "Found top is of type: {1}".format(cls, type(_p)))
         return None
 
-
     def get_api_version(self):
         return self.__API_VERSION_ID
 
@@ -341,14 +341,14 @@ class BaseValidator(AbstractValidator):
 
     def get_data(self):
         _d = self._data
-#        assert _d is not None
+        #        assert _d is not None
         return _d
 
     @classmethod
     def set_version(cls, v):
         """To be set once only for any Validator class!"""
         assert len(cls.__version) == 1
-#        assert cls.__version[0] is None  # NOTE: bad for testing!
+        #        assert cls.__version[0] is None  # NOTE: bad for testing!
         cls.__version[0] = v
 
     @classmethod
@@ -384,7 +384,7 @@ class BaseValidator(AbstractValidator):
             return self
 
         # NOTE: .parse should throw exceptions in case of invalid input data!
-        raise ConfigurationError(u"{}: {}".format("ERROR:", "Invalid data: '{0}' in {1}!" .format(d, type(self))))
+        raise ConfigurationError(u"{}: {}".format("ERROR:", "Invalid data: '{0}' in {1}!".format(d, type(self))))
 
     def __repr__(self):
         """Print using pretty formatter"""
@@ -392,11 +392,11 @@ class BaseValidator(AbstractValidator):
         d = self.get_data()  # vars(self) # ???
         return PP.pformat(d, indent=4, width=100)
 
-#    def __str__(self):
-#        """Convert to string"""
-#
-#        d = self.get_data()  # vars(self) # ???
-#        return str(d)
+    #    def __str__(self):
+    #        """Convert to string"""
+    #
+    #        d = self.get_data()  # vars(self) # ???
+    #        return str(d)
 
     def __eq__(self, other):
         assert isinstance(self, BaseValidator)
@@ -406,7 +406,7 @@ class BaseValidator(AbstractValidator):
 
         assert isinstance(other, BaseValidator)
 
-#        assert self.get_api_version() == other.get_api_version()
+        #        assert self.get_api_version() == other.get_api_version()
         return self.get_data() == other.get_data()
 
     def __ne__(self, other):
@@ -435,10 +435,10 @@ class BaseValidator(AbstractValidator):
                 v = i
                 if isinstance(v, BaseValidator):
                     v = v.data_dump()
-                _dd.insert(idx,  v)
+                _dd.insert(idx, v)
             return _dd
 
-#        if isinstance(_d, string_types):
+        # if isinstance(_d, string_types):
         return _d
 
     def query(self, what):
@@ -645,7 +645,7 @@ class ScalarValidator(BaseValidator):
 
         if d is not None:
             if isinstance(d, (list, dict, tuple, set)):  # ! Check if data is not a container?
-                log.error("value: '{}' is not a scalar value!!" . format(d))
+                log.error("value: '{}' is not a scalar value!!".format(d))
                 return False
 
             if isinstance(d, string_types):
@@ -655,9 +655,11 @@ class ScalarValidator(BaseValidator):
         self.set_data(d)
         return True
 
+
 ###############################################################
 class StringValidator(ScalarValidator):
     """YAML String"""
+
     def __init__(self, *args, **kwargs):
         super(StringValidator, self).__init__(*args, **kwargs)
 
@@ -674,7 +676,7 @@ class StringValidator(ScalarValidator):
         s = ScalarValidator.parse(d, parent=self)
 
         if not isinstance(s, string_types):
-            log.error("value: '{}' is not a string!!" . format(d))
+            log.error("value: '{}' is not a string!!".format(d))
             return False
 
         self.set_data(text_type(d))
@@ -685,10 +687,10 @@ class StringValidator(ScalarValidator):
 class SemanticVersionValidator(BaseValidator):
     def __init__(self, *args, **kwargs):
         partial = kwargs.pop('partial', True)
-#        kwargs['parsed_result_is_data'] = kwargs.pop('parsed_result_is_data', False)
+        #        kwargs['parsed_result_is_data'] = kwargs.pop('parsed_result_is_data', False)
         super(SemanticVersionValidator, self).__init__(*args, **kwargs)
 
-#        self._parsed_result_is_data = False
+        #        self._parsed_result_is_data = False
         self._partial = partial
         self._default_input_data = '0.0.1'
 
@@ -699,7 +701,7 @@ class SemanticVersionValidator(BaseValidator):
             d = self._default_input_data
 
         log.debug("{1}::validate( input type: {0} )".format(type(d), type(self)))
-#        log.debug("SemanticVersionValidator::validate( input data: {0} )".format(str(d)))
+        #        log.debug("SemanticVersionValidator::validate( input data: {0} )".format(str(d)))
 
         try:
             _t = StringValidator.parse(d, parent=self, parsed_result_is_data=True)
@@ -711,13 +713,12 @@ class SemanticVersionValidator(BaseValidator):
                 log.error("Input cannot be converted into a version string: {}".format(d))
                 return False
 
-
         # self.get_version(None) # ???
         _v = None
         try:
             _v = semantic_version.Version(_t, partial=self._partial)
         except:
-            log.exception("Wrong version data: '{0}' (see: '{1}')" . format(d, sys.exc_info()))
+            log.exception("Wrong version data: '{0}' (see: '{1}')".format(d, sys.exc_info()))
             return False
 
         self.set_data(_v)
@@ -725,6 +726,7 @@ class SemanticVersionValidator(BaseValidator):
 
     def data_dump(self):
         return str(self.get_data())
+
 
 ###############################################################
 class BaseUIString(StringValidator):
@@ -770,7 +772,7 @@ class BaseEnum(BaseValidator):  # TODO: Generalize to not only strings...?
 
         t = StringValidator.parse(d, parent=self, parsed_result_is_data=True)
 
-        if not (t in self._enum_list): # check withing a list of possible string values
+        if not (t in self._enum_list):  # check withing a list of possible string values
             log.error("string value: '{}' is not among known enum items!!".format(d))
             return False
 
@@ -841,9 +843,9 @@ class URI(BaseValidator):
                 log.warning("URL: '{}' is not accessible!".format(v))
                 _ret = not PEDANTIC
 
-        # TODO: FIXME: base location should be the input file's dirname???
-#        elif not os.path.isabs(v):
-#            v = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), v))
+                # TODO: FIXME: base location should be the input file's dirname???
+                #        elif not os.path.isabs(v):
+                #            v = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), v))
 
         elif os.path.isfile(v):  # Check whether file exists
             self._type = text_type('file')
@@ -876,11 +878,12 @@ class BaseID(BaseValidator):
         v = StringValidator.parse(d, parent=self, parsed_result_is_data=True)
 
         if not is_valid_id(v):
-            log.error("not a valid variable identifier! Input: '{}'" . format(d))
+            log.error("not a valid variable identifier! Input: '{}'".format(d))
             return False
 
         self.set_data(v)
         return True
+
 
 ###############################################################
 class ClientVariable(BaseID):  #
@@ -898,13 +901,13 @@ class ClientVariable(BaseID):  #
         _ret = True
 
         if not (v == v.lower() or v == v.upper()):  # ! Variables are all lower or upper case!
-            log.error("a variable must be either in lower or upper case! Input: '{}'" . format(d))
+            log.error("a variable must be either in lower or upper case! Input: '{}'".format(d))
             _ret = False
 
         # NOTE: starting with hilbert_ or HILBERT_ with letters, digits and '_'??
         if not re.match('^hilbert(_[a-z0-9]+)+$', v.lower()):
             log.error("variable must start with HILBERT/hilbert and contain words separated by underscores!"
-                  " Input: '{}" .format(d))
+                      " Input: '{}".format(d))
             _ret = False
 
         if _ret:
@@ -955,7 +958,6 @@ class AutoDetectionScript(StringValidator):
         super(AutoDetectionScript, self).__init__(*args, **kwargs)
         self._default_input_data = ''
 
-
     def check_script(self, script):
         assert script is not None
 
@@ -974,10 +976,11 @@ class AutoDetectionScript(StringValidator):
                 retcode = _execute(_cmd)
             except:
                 log.exception("Error while running '{}' to check auto-detection script!".format(' '.join(_cmd)))
-                return False  #                if PEDANTIC:  # TODO: add a special switch?
+                return False  # if PEDANTIC:  # TODO: add a special switch?
 
             if retcode != 0:
-                log.error("Error while running '{0}' to check auto-detection script: {1}!".format(' '.join(_cmd), retcode))
+                log.error(
+                    "Error while running '{0}' to check auto-detection script: {1}!".format(' '.join(_cmd), retcode))
                 return False
 
             # NOTE: additionall tool: shellcheck (haskell!)
@@ -991,7 +994,8 @@ class AutoDetectionScript(StringValidator):
                 return False
 
             if retcode != 0:
-                log.error("Error while running '{0}' to check auto-detection script: {1}!".format(' '.join(_cmd), retcode))
+                log.error(
+                    "Error while running '{0}' to check auto-detection script: {1}!".format(' '.join(_cmd), retcode))
                 return False
 
         finally:
@@ -1016,9 +1020,8 @@ class AutoDetectionScript(StringValidator):
                 self.set_data(script)
                 return True
         except:
-            log.exception("Wrong input to AutoDetectionScript::validate: {}". format(d))
+            log.exception("Wrong input to AutoDetectionScript::validate: {}".format(d))
             return False
-
 
         if not self.check_script(script):
             if PEDANTIC:
@@ -1047,12 +1050,12 @@ class DockerComposeServiceName(StringValidator):  # TODO: any special checks her
             self.set_data(n)
             return True
         except:
-            log.error("Wrong input to DockerComposeServiceName::validate: '{}'". format(d))
+            log.error("Wrong input to DockerComposeServiceName::validate: '{}'".format(d))
             return False
+
 
 ###############################################################
 class DockerComposeYAMLFile(URI):
-
     def __init__(self, *args, **kwargs):
         super(DockerComposeYAMLFile, self).__init__(*args, **kwargs)
 
@@ -1129,13 +1132,13 @@ class HostAddress(StringValidator):
         ssh_config = os.path.join(os.environ['HOME'], ".ssh", "config")
         __cmd = "rsync -crtbviuzpP -e \"ssh -q -F {3}\" \"{0}/\" \"{1}:{2}/\"".format(source, _h, target, ssh_config)
         _cmd = shlex.split(__cmd)
- #        = ' '.join(_cmd)
+        #        = ' '.join(_cmd)
 
         #        "scp -q -F {3} {0} {1}:{2}"
 
         #            client = paramiko.SSHClient()
         #            client.load_system_host_keys()
-#        log.debug("Rsync/SSH: [%s]...", _cmd)
+        #        log.debug("Rsync/SSH: [%s]...", _cmd)
         log.debug("Rsync/SSH: [%s]...", str(_cmd))
         try:
             retcode = _execute(_cmd, **kwargs)
@@ -1161,7 +1164,8 @@ class HostAddress(StringValidator):
         assert self.recheck()
         _h = self.get_address()  # 'jabberwocky' #
 
-        _cmd = shlex.split("scp -q -F {3} {0} {1}:{2}".format(source, _h, target, os.path.join(os.environ['HOME'], ".ssh", "config")))
+        _cmd = shlex.split(
+            "scp -q -F {3} {0} {1}:{2}".format(source, _h, target, os.path.join(os.environ['HOME'], ".ssh", "config")))
         __cmd = ' '.join(_cmd)
 
         #            client = paramiko.SSHClient()
@@ -1191,7 +1195,8 @@ class HostAddress(StringValidator):
 
         # TODO: maybe respect SSH Settings for the parent station!?
 
-        _cmd = shlex.split("ssh -q -F {2} {0} {1}".format(_h, ' '.join(cmd), os.path.join(os.environ['HOME'], ".ssh", "config")))
+        _cmd = shlex.split(
+            "ssh -q -F {2} {0} {1}".format(_h, ' '.join(cmd), os.path.join(os.environ['HOME'], ".ssh", "config")))
         __cmd = ' '.join(_cmd)
 
         #            client = paramiko.SSHClient()
@@ -1208,7 +1213,7 @@ class HostAddress(StringValidator):
             return retcode
         else:
             log.error("Could not run remote ssh command: '{0}'! Return code: {1}".format(__cmd, retcode))
-#            if PEDANTIC:
+            #            if PEDANTIC:
             raise Exception("Could not run remote ssh command: '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
         return retcode
 
@@ -1219,20 +1224,22 @@ class HostAddress(StringValidator):
 
         log.debug("Checking ssh alias: '{0}'...".format(text_type(_h)))
         try:
-#            client = paramiko.SSHClient()
-#            client.load_system_host_keys()
+            #            client = paramiko.SSHClient()
+            #            client.load_system_host_keys()
 
-            _cmd = ["ssh", "-q", "-F", os.path.join(os.environ['HOME'], ".ssh", "config"), "-o", "ConnectTimeout={}".format(timeout), _h, "exit 0"]
+            _cmd = ["ssh", "-q", "-F", os.path.join(os.environ['HOME'], ".ssh", "config"), "-o",
+                    "ConnectTimeout={}".format(timeout), _h, "exit 0"]
             retcode = _execute(_cmd, **kwargs)  # , stdout=open("/dev/null", 'w'), stderr=open("/dev/null", 'w')
 
             if retcode:
                 log.warning("Non-functional ssh alias: '{0}' => exit code: {1}!".format(text_type(_h), retcode))
             else:
-                log.debug("Ssh alias '{0}' is functional!" . format(text_type(_h)))
+                log.debug("Ssh alias '{0}' is functional!".format(text_type(_h)))
 
             return retcode == 0
         except:
-            log.exception("Non-functional ssh alias: '{0}'. Moreover: Unexpected error: {1}" . format(text_type(_h), sys.exc_info()))
+            log.exception("Non-functional ssh alias: '{0}'. Moreover: Unexpected error: {1}".format(text_type(_h),
+                                                                                                    sys.exc_info()))
             if PEDANTIC:
                 raise
 
@@ -1262,6 +1269,7 @@ class HostMACAddress(StringValidator):
         self.set_data(v)
         return True
 
+
 ###############################################################
 class BoolValidator(ScalarValidator):
     def __init__(self, *args, **kwargs):
@@ -1274,7 +1282,7 @@ class BoolValidator(ScalarValidator):
             d = self._default_input_data
 
         if not isinstance(d, bool):
-            log.error("not a boolean value: '{}'" . format(d))
+            log.error("not a boolean value: '{}'".format(d))
             return False
 
         self.set_data(d)
@@ -1363,7 +1371,8 @@ class StationPowerOnMethodWrapper(VariadicRecordWrapper):
         T = StationPowerOnMethodType
 
         self._type_cls = T
-        _wol_dm = {T.parse("WOL", parsed_result_is_data=True): WOL, T.parse("DockerMachine", parsed_result_is_data=True): DockerMachine}
+        _wol_dm = {T.parse("WOL", parsed_result_is_data=True): WOL,
+                   T.parse("DockerMachine", parsed_result_is_data=True): DockerMachine}
 
         self._default_type = "default_poweron_wrapper"
         self._types[self._default_type] = _wol_dm
@@ -1439,7 +1448,6 @@ class DockerMachine(BaseRecordValidator):
 
         return _a
 
-
     def get_vm_host_address(self):
         _d = self.get_data()
         assert _d is not None
@@ -1470,10 +1478,12 @@ class DockerMachine(BaseRecordValidator):
                 log.exception(s)
                 raise
 
-        return (_ret==0)
+        return (_ret == 0)
 
         # process call: ssh to vm_host + docker-machione start vm_id
-#        raise NotImplementedError("Running 'docker-machine start' action is not supported yet... Sorry!")
+
+
+# raise NotImplementedError("Running 'docker-machine start' action is not supported yet... Sorry!")
 
 
 class WOL(BaseRecordValidator):
@@ -1504,8 +1514,6 @@ class WOL(BaseRecordValidator):
         assert _MAC != ''
         return _MAC
 
-
-
     def start(self):  # , action, action_args):
         _address = None
         _parent = self.get_parent(cls=Station)
@@ -1526,7 +1534,7 @@ class WOL(BaseRecordValidator):
             assert retcode is not None
             if not retcode:
                 log.debug("Command ({}) execution success!".format(__cmd))
-#                return
+            # return
             else:
                 log.error("Could not wakeup via '{0}'! Return code: {1}".format(__cmd, retcode))
                 if PEDANTIC:
@@ -1541,8 +1549,8 @@ class WOL(BaseRecordValidator):
             log.warning("Sorry: could not get station's address for this WOL MethodObject!")
             return
 
-#            if PEDANTIC:  # NOTE: address should be present for other reasons anyway...
-#                raise Exception("Sorry: could not get station's address for this WOL MethodObject!")
+        # if PEDANTIC:  # NOTE: address should be present for other reasons anyway...
+        #                raise Exception("Sorry: could not get station's address for this WOL MethodObject!")
 
         # NOTE: also try with the station address (just in case):
         # Q: any problems with this?
@@ -1560,13 +1568,10 @@ class WOL(BaseRecordValidator):
                 #    raise Exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
         except:
             log.exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
-            #if not PEDANTIC:
+            # if not PEDANTIC:
             #    return
-            #raise
+            # raise
             pass
-
-
-
 
 
 ###############################################################
@@ -1703,9 +1708,9 @@ class DockerComposeService(BaseRecordValidator):
                         "Cannot check the service '%s'!", _f, _n)
             return True
 
-#        if not self.check_service(_f, _n):
-#            if PEDANTIC:
-#                return False
+        # if not self.check_service(_f, _n):
+        #            if PEDANTIC:
+        #                return False
 
         return True  # _ret
 
@@ -1735,6 +1740,7 @@ class DockerComposeApplication(DockerComposeService):
         self._types[self._default_type] = _compose_rule
 
         # TODO: FIXME: add application to compatibleStations!
+
 
 ###############################################################
 class Profile(BaseRecordValidator):
@@ -1784,8 +1790,8 @@ class StationSSHOptions(BaseRecordValidator):  # optional: "Station::ssh_options
         default_rule = {
             text_type('user'): (False, StringValidator),
             text_type('key'): (False, StringValidator),
-                text_type('port'): (False, StringValidator),
-        # TODO: BaseInt??  http://stackoverflow.com/questions/4187185/how-can-i-check-if-my-python-object-is-a-number
+            text_type('port'): (False, StringValidator),
+            # TODO: BaseInt??  http://stackoverflow.com/questions/4187185/how-can-i-check-if-my-python-object-is-a-number
             text_type('key_ref'): (False, URI),
         }
 
@@ -1818,6 +1824,7 @@ class StationType(BaseEnum):  # NOTE: to be redesigned/removed later on together
                            text_type('server'),  # Linux with Hilbert client part installed but no remote control!
                            text_type('standard')  # Linux with Hilbert client part installed!
                            ]  # ,text_type('special')
+
 
 ###############################################################
 class Station(BaseRecordValidator):  # Wrapper?
@@ -1894,7 +1901,7 @@ class Station(BaseRecordValidator):  # Wrapper?
 
         log.debug("Querying global profile: '%s'...", ref)
 
-        _profile = _parent.query('Profiles/{}/all' . format(ref))
+        _profile = _parent.query('Profiles/{}/all'.format(ref))
         assert _profile is not None
         assert isinstance(_profile, Profile)
 
@@ -1910,7 +1917,6 @@ class Station(BaseRecordValidator):  # Wrapper?
 
         return _services
 
-
     def get_all_applications(self):
         _parent = self.get_hilbert()
 
@@ -1920,7 +1926,6 @@ class Station(BaseRecordValidator):  # Wrapper?
         assert isinstance(_apps, GlobalApplications)
 
         return _apps
-
 
     def get_address(self):  # TODO: IP?
         _d = self.get_data()
@@ -1983,7 +1988,6 @@ class Station(BaseRecordValidator):  # Wrapper?
 
         return (_ret == 0)
 
-
     def deploy(self):
         # TODO: get_client_settings()
         _d = self.get_data()
@@ -2023,18 +2027,19 @@ class Station(BaseRecordValidator):  # Wrapper?
 
         # TODO: FIXME: All supported/compatible applications??!?
 
-        all_apps     = self.get_all_applications().get_data()
+        all_apps = self.get_all_applications().get_data()
         all_services = self.get_all_services().get_data()
 
         # TODO: deployment should create a temporary directory + /station.cfg + /docker-compose.yml etc!?
         tmpdir = tempfile.mkdtemp()
         predictable_filename = 'station.cfg'
 
-        remote_tmpdir = os.path.join("/tmp", "{0}_{1}_{2}_{3}".format(str(_a.get_address()), _profile_ref, os.path.basename(tmpdir), "%.20f" % time.time()))
-        saved_umask = os.umask(7*8 + 7)  # Ensure the file is read/write by the creator only
+        remote_tmpdir = os.path.join("/tmp", "{0}_{1}_{2}_{3}".format(str(_a.get_address()), _profile_ref,
+                                                                      os.path.basename(tmpdir), "%.20f" % time.time()))
+        saved_umask = os.umask(7 * 8 + 7)  # Ensure the file is read/write by the creator only
 
         path = os.path.join(tmpdir, predictable_filename)
-#        print path
+        #        print path
         try:
             with open(path, "w") as tmp:
                 # TODO: FIXME: list references into docker-compose.yml???
@@ -2044,7 +2049,7 @@ class Station(BaseRecordValidator):  # Wrapper?
                 # TODO: NOTE: may differ depending on Station::type!
 
                 tmp.write('declare -Agr services_and_applications=(\\\n')
- #               ss = []
+                #               ss = []
                 for k in _serviceIDs:
                     s = all_services.get(k, None)  # TODO: check compatibility during verification!
                     if s is None:
@@ -2054,20 +2059,20 @@ class Station(BaseRecordValidator):  # Wrapper?
                         assert isinstance(s, DockerComposeService)
                         # TODO: s.check()
 
-#                        ss.append(s.get_ref())
+                        #                        ss.append(s.get_ref())
                         tmp.write('  {} \\\n'.format(s.to_bash_array(k)))
 
                         s.copy(tmpdir)
 
-                # TODO: collect all **compatible** applications!
-#                aa = []
+                        # TODO: collect all **compatible** applications!
+                        #                aa = []
                 for k in all_apps:
                     a = all_apps[k]  # TODO: check compatibility during verification!
                     assert a is not None
                     assert isinstance(a, DockerComposeApplication)
                     # TODO: a.check()
 
-#                    aa.append(a.get_ref())
+                    #                    aa.append(a.get_ref())
                     tmp.write('  {} \\\n'.format(a.to_bash_array(k)))
 
                     a.copy(tmpdir)
@@ -2075,7 +2080,8 @@ class Station(BaseRecordValidator):  # Wrapper?
                 tmp.write(')\n')
 
                 tmp.write("declare -agr hilbert_station_profile_services=({})\n".format(' '.join(_serviceIDs)))
-                tmp.write("declare -agr hilbert_station_compatible_applications=({})\n".format(' '.join(all_apps.keys())))
+                tmp.write(
+                    "declare -agr hilbert_station_compatible_applications=({})\n".format(' '.join(all_apps.keys())))
 
                 app = _settings.get('hilbert_station_default_application', '')  # NOTE: ApplicationID!
                 if app != '':
@@ -2115,10 +2121,10 @@ class Station(BaseRecordValidator):  # Wrapper?
                     log.exception(s)
                     raise
 
-#        except: # IOError as e:
-#            print 'IOError'
-#        else:
-#            os.remove(path)
+                    #        except: # IOError as e:
+                    #            print 'IOError'
+                    #        else:
+                    #            os.remove(path)
         finally:
             log.debug("Temporary Station Configuration File: {}".format(path))
             os.umask(saved_umask)
@@ -2140,11 +2146,11 @@ class Station(BaseRecordValidator):  # Wrapper?
             log.error("Could not initialize the station!")
             return False
 
-        #        ### see existing deploy.sh!?
-        # TODO: what about other external resources? docker-compose*.yml etc...?
-        # TODO: restart hilbert-station?
+            #        ### see existing deploy.sh!?
+            # TODO: what about other external resources? docker-compose*.yml etc...?
+            # TODO: restart hilbert-station?
 
-#        raise NotImplementedError("Cannot deploy local configuration to this station!")
+        #        raise NotImplementedError("Cannot deploy local configuration to this station!")
         return True
 
     def app_change(self, app_id):
@@ -2166,7 +2172,7 @@ class Station(BaseRecordValidator):  # Wrapper?
 
         return (_ret == 0)
 
-#        raise NotImplementedError("Cannot switch to a different application on this station!")
+    #        raise NotImplementedError("Cannot switch to a different application on this station!")
 
     def poweron(self):
         _d = self.get_data()
@@ -2196,7 +2202,7 @@ class Station(BaseRecordValidator):  # Wrapper?
         """
 
         if action not in ['start', 'stop', 'cfg_deploy', 'app_change']:
-            raise Exception("Running action '{0}({1})' is not supported!" . format(action, action_args))
+            raise Exception("Running action '{0}({1})' is not supported!".format(action, action_args))
 
         # Run 'ssh address hilbert-station action action_args'?!
         if action == 'start':
@@ -2208,21 +2214,20 @@ class Station(BaseRecordValidator):  # Wrapper?
         elif action == 'app_change':
             _ret = self.app_change(action_args)  # ApplicationID
 
-#        elif action == 'start':
-#            self.start_service(action_args)
-#        elif action == 'finish':
-#            self.finish_service(action_args)
+        # elif action == 'start':
+        #            self.start_service(action_args)
+        #        elif action == 'finish':
+        #            self.finish_service(action_args)
         return _ret
-
 
     def get_base(self):
         _d = self.get_data()
         assert _d is not None
         _b = _d.get(self._extends_tag, None)  # StationID (validated...)
 
-#        if _b is not None:
-#            if isinstance(_b, BaseValidator):
-#                _b = _b.get_data()
+        #        if _b is not None:
+        #            if isinstance(_b, BaseValidator):
+        #                _b = _b.get_data()
 
         return _b
 
@@ -2405,6 +2410,7 @@ class GlobalApplications(BaseIDMap):
         self._default_type = "default_global_applications"
         self._types = {self._default_type: (ApplicationID, ApplicationWrapper)}
 
+
 ###############################################################
 class GlobalProfiles(BaseIDMap):
     def __init__(self, *args, **kwargs):
@@ -2435,9 +2441,8 @@ class GlobalStations(BaseIDMap):
         if not BaseIDMap.validate(self, d):
             return False
 
-#        if d is None:
-#            d = self._default_input_data
-
+        # if d is None:
+        #            d = self._default_input_data
 
         sts = self.get_data()  # NOTE: may be handy for postprocessing!
 
@@ -2480,11 +2485,11 @@ class GlobalStations(BaseIDMap):
             _todo = _rest
 
         if bool(_todo):
-            log.error('Cyclic dependencies between stations: {}' .format(_todo))
+            log.error('Cyclic dependencies between stations: {}'.format(_todo))
             _ret = False
 
-#        if _ret:
-#            self.set_data(_processed)
+        # if _ret:
+        #            self.set_data(_processed)
 
         # TODO: FIXME: check for required fields after extension only!!!
 
@@ -2623,7 +2628,6 @@ class Group(BaseRecordValidator):  # ? TODO: GroupSet & its .parent?
         return _ret
 
 
-
 ###############################################################
 class GlobalGroups(BaseIDMap):
     def __init__(self, *args, **kwargs):
@@ -2667,6 +2671,7 @@ class GlobalPresets(BaseIDMap):  # Dummy for now!
         #        raise NotImplementedError("Presets are not supported yet!")
         return True
 
+
 ###############################################################
 class Hilbert(BaseRecordValidator):
     """General Hilbert Configuration format"""
@@ -2689,7 +2694,8 @@ class Hilbert(BaseRecordValidator):
 
         ### explicit (optional) Type?
         default_rule = {
-            self._version_tag: (True, SemanticVersionValidator),  # Mandatory, specifies supported Types of Config's Entity
+            self._version_tag: (True, SemanticVersionValidator),
+            # Mandatory, specifies supported Types of Config's Entity
             self._services_tag: (True, GlobalServices),
             self._applications_tag: (True, GlobalApplications),
             self._profiles_tag: (True, GlobalProfiles),
@@ -2708,10 +2714,12 @@ class Hilbert(BaseRecordValidator):
 
         if self._version_tag not in d:
             _key_note(self._version_tag, d.lc, "ERROR: Missing mandatory '{}' key field!")
-            raise ConfigurationError(u"{}: {}".format("ERROR:", "Missing version tag '{0}' in the input: '{1}'!".format(self._version_tag, d)))
+            raise ConfigurationError(u"{}: {}".format("ERROR:", "Missing version tag '{0}' in the input: '{1}'!".format(
+                self._version_tag, d)))
 
         try:
-            _v = SemanticVersionValidator.parse(d[self._version_tag], parent=self, partial=True, parsed_result_is_data=True)
+            _v = SemanticVersionValidator.parse(d[self._version_tag], parent=self, partial=True,
+                                                parsed_result_is_data=True)
         except:
             _value_error(self._version_tag, d, d.lc, "Wrong value of global '{}' specification!")
             raise
@@ -2740,10 +2748,10 @@ class Hilbert(BaseRecordValidator):
                 if offset != 0:
                     if not PEDANTIC:
                         log.warning("'{}' specified correctly but not ahead of everything else (offset: {})!"
-                            .format(self._version_tag, offset))
+                                    .format(self._version_tag, offset))
                     else:
                         log.error("'{}' specified correctly but not ahead of everything else (offset: {})!"
-                            .format(self._version_tag, offset))
+                                  .format(self._version_tag, offset))
                         _ret = False
                 break
 
@@ -2787,7 +2795,7 @@ def load_yaml(f, loader=VerboseRoundTripLoader, version=(1, 2), preserve_quotes=
     except (IOError, yaml.YAMLError) as e:
         error_name = getattr(e, '__module__', '') + '.' + e.__class__.__name__
         raise ConfigurationError(u"{}: {}".format(error_name, e))
-        
+
 
 def load_yaml_file(filename):
     with open(filename, 'r') as fh:

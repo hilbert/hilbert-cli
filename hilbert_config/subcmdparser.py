@@ -1,8 +1,8 @@
 # import arghandler                      # NOQA
 
-import argparse                        # NOQA
-import inspect                         # NOQA
-import logging                         # NOQA
+import argparse  # NOQA
+import inspect  # NOQA
+import logging  # NOQA
 from operator import attrgetter
 
 log = logging.getLogger(__name__)  #
@@ -12,6 +12,7 @@ log = logging.getLogger(__name__)  #
 #################################
 registered_subcommands = {}
 registered_subcommands_help = {}
+
 
 def subcmd(arg=None, **kwargs):
     """
@@ -39,12 +40,14 @@ def subcmd_fxn(cmd_fxn, name, kwargs):
 
     return cmd_fxn
 
+
 #########################
 class SortingHelpFormatter(argparse.RawTextHelpFormatter):
     def __init__(self, *args, **kwargs):
         kwargs['indent_increment'] = 1
         kwargs['max_help_position'] = 17
         super(SortingHelpFormatter, self).__init__(*args, **kwargs)
+
 
 #########################
 class SubCommandHandler(argparse.ArgumentParser):
@@ -69,7 +72,6 @@ class SubCommandHandler(argparse.ArgumentParser):
         self._use_subcommand_help = kwargs.pop('use_subcommand_help', False)
         self._enable_autocompletion = kwargs.pop('enable_autocompletion', False)
 
-
         self._ignore_remainder = False
         self._use_subcommands = True
         self._subcommand_lookup = dict()
@@ -79,7 +81,7 @@ class SubCommandHandler(argparse.ArgumentParser):
 
         # setup the class
         if self._use_subcommand_help:
-            kwargs['formatter_class']=SortingHelpFormatter
+            kwargs['formatter_class'] = SortingHelpFormatter
 
         super(SubCommandHandler, self).__init__(*args, **kwargs)
 
@@ -89,7 +91,7 @@ class SubCommandHandler(argparse.ArgumentParser):
         """
         # just watch for the REMAINDER nargs to see if subcommands are relevant
 
-        assert not(self._ignore_remainder and 'nargs' in kwargs and kwargs['nargs'] == argparse.REMAINDER)
+        assert not (self._ignore_remainder and 'nargs' in kwargs and kwargs['nargs'] == argparse.REMAINDER)
         #    self._use_subcommands = False
 
         return super(SubCommandHandler, self).add_argument(*args, **kwargs)
@@ -136,9 +138,8 @@ class SubCommandHandler(argparse.ArgumentParser):
         #    handler.set_logging_argument('-l', '--log_level', default_level=logging.INFO)
 
         self.add_argument('-H', '--helpall', action=HelpAllAction,
-                             nargs=0, default=argparse.SUPPRESS, required=False, type=None, metavar=None,
-                             help="show detailed help and exit")
-
+                          nargs=0, default=argparse.SUPPRESS, required=False, type=None, metavar=None,
+                          help="show detailed help and exit")
 
         global registered_subcommands, registered_subcommands_help
 
@@ -151,13 +152,13 @@ class SubCommandHandler(argparse.ArgumentParser):
             self._subcommand_help[cn] = registered_subcommands_help[cn]
 
         assert len(self._subcommand_lookup) > 0
-#            self._use_subcommands = False
+        #            self._use_subcommands = False
 
         # add in subcommands if appropriate
         assert self._use_subcommands
-#        if not self._use_subcommands:
-#            pass
-#        else:
+        #        if not self._use_subcommands:
+        #            pass
+        #        else:
         max_cmd_length = max([len(x) for x in self._subcommand_lookup.keys()])
         subcommands_help_text = 'the subcommand to run'
         if self._use_subcommand_help:
@@ -183,9 +184,8 @@ class SubCommandHandler(argparse.ArgumentParser):
 
         self._has_parse = True
 
-
-#        cargs_help_msg = 'arguments for the subcommand' if not self._use_subcommand_help else argparse.SUPPRESS
-#        self.add_argument('cargs', nargs=argparse.REMAINDER, help=cargs_help_msg)
+        #        cargs_help_msg = 'arguments for the subcommand' if not self._use_subcommand_help else argparse.SUPPRESS
+        #        self.add_argument('cargs', nargs=argparse.REMAINDER, help=cargs_help_msg)
 
         return args
 
@@ -219,8 +219,8 @@ class SubCommandHandler(argparse.ArgumentParser):
         #     # call the logging config fxn
         #     self._logging_config_fxn(level, args)
 
-#        self.logging_handler(args)
-#        pedantic_handler(self, vars(args))
+        #        self.logging_handler(args)
+        #        pedantic_handler(self, vars(args))
 
         # generate the context
         context = args
@@ -234,6 +234,7 @@ class SubCommandHandler(argparse.ArgumentParser):
         self._subcommand_lookup[args.cmd](scmd_parser, context, args.cargs)
 
         return args  # run()
+
 
 # logging.CRITICAL = 50
 # logging.ERROR = 40
@@ -273,10 +274,11 @@ class CountedQuietAction(argparse._CountAction):
 
         if _log.level != level:
             log.debug("Changing logging level: %s -> %s",
-                logging.getLevelName(_log.level),
-                logging.getLevelName(level))
+                      logging.getLevelName(_log.level),
+                      logging.getLevelName(level))
             _log.setLevel(level)
             log.debug("New logging level: %s", logging.getLevelName(_log.level))
+
 
 class MyHelpAction(argparse.Action):  ### _HelpAction??
     def __init__(self,

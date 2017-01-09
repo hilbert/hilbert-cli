@@ -47,7 +47,9 @@ function StartHttpd() {
             if [[ ${ret} -ne 0 ]]; then
                 echo "WARNING: Starting HTTPD on ${HTTPD_PORT} returned with code: ${ret}" 1>>"${WWW_LOG}"
             else
-                [[ -L "${BASE_WWW_LOG}" ]] && unlink "${BASE_WWW_LOG}"
+                if [[ -L "${BASE_WWW_LOG}" ]]; then
+                    unlink "${BASE_WWW_LOG}"
+                fi
                 ln -sf "${WWW_LOG}" "${BASE_WWW_LOG}"
             fi
         else
@@ -83,7 +85,9 @@ HilbertStart 1>>"${LOG_DIR}/start.log" 2>&1
 Status 1
 
 # NOTE: update the latest logging output directory
-[[ -L "${LOG_LATEST}" ]] && unlink "${LOG_LATEST}"
+if [[ -L "${LOG_LATEST}" ]]; then
+    unlink "${LOG_LATEST}"
+fi
 ln -sf "${LOG_DIR}" "${LOG_LATEST}"
 
 (echo "LOG_LATEST: ${LOG_LATEST}"; ls -l "${LOG_LATEST}"; ls -l "$(readlink -f "${LOG_LATEST}")") 1>>"${HILBERT_LOG}" 2>&1
