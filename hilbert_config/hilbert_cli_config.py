@@ -44,6 +44,73 @@ _pp = PP.PrettyPrinter(indent=4)
 # NOTE: Global variables
 PEDANTIC = False  # NOTE: to treat invalid values/keys as errors?
 INPUT_DIRNAME = './'  # NOTE: base location for external resources
+_SSH_CONFIG_PATH = None
+
+###############################################################
+def get_SSH_CONFIG():
+    """SSH_ACCESS_DB: 'config' file located in  $HILBERT_SERVER_CONFIG_SSH_PATH, default: [$HOME/.ssh/]"""
+    global _SSH_CONFIG_PATH
+
+    if _SSH_CONFIG_PATH is not None:
+        return _SSH_CONFIG_PATH
+
+    _SSH_ACCESS_DB = "config"
+
+    d = os.environ.get('HILBERT_SERVER_CONFIG_SSH_PATH', None)
+    if d is not None:
+        log.debug("HILBERT_SERVER_CONFIG_SSH_PATH is '%s'", d)
+        d = os.path.abspath(d)
+        if os.path.exists(d):
+            d = os.path.join(d, _SSH_ACCESS_DB)
+            if os.path.exists(d):
+                log.info("SSH_ACCESS_DB is expected under '%s'", d)
+                _SSH_CONFIG_PATH = d
+                return d
+            else:
+                if not PEDANTIC:
+                    log.warning('SSH_ACCESS_DB [%s] is wrong!', d)
+                else:
+                    d = 'SSH_ACCESS_DB [{}] is wrong!'.format(d)
+                    log.error(d)
+                    raise Exception(d)
+        else:
+            if not PEDANTIC:
+                log.warning('HILBERT_SERVER_CONFIG_SSH_PATH [%s] is wrong!', d)
+            else:
+                d = 'HILBERT_SERVER_CONFIG_SSH_PATH [{}] is wrong!'.format(d)
+                log.error(d)
+                raise Exception(d)
+
+    d = os.environ.get('HOME', None)
+    if d is None:
+        d = '[HOME] is not set! Cannot access SSH configuration file under default location ($HOME/.ssh/)!'
+        log.error(d)
+        raise Exception(d)
+
+    d = os.path.abspath(d)
+    if not os.path.exists(d):
+        d = "HOME: [{0}] is wrong! Cannot access SSH configuration file under default location ({0}/.ssh/)!".format(d)
+        log.error(d)
+        raise Exception(d)
+
+    d = os.path.join(d, ".ssh")  # default .ssh/ location
+
+    if not os.path.exists(d):
+        d = "$HOME/.ssh: [{0}] is wrong! Cannot access SSH configuration file under default location ({0}/.ssh/)!".format(d)
+        log.error(d)
+        raise Exception(d)
+
+    d = os.path.join(d, _SSH_ACCESS_DB)  # default .ssh/config location
+
+    if not os.path.exists(d):
+        d = "$HOME/.ssh/{1}: [{0}] is wrong! Cannot access SSH configuration file under default location ({0}/.ssh/{1})!".\
+            format(d, _SSH_ACCESS_DB)
+        log.error(d)
+        raise Exception(d)
+
+    log.info("SSH_ACCESS_DB is expected under '%s'", d)
+    _SSH_CONFIG_PATH = d
+    return d
 
 
 ###############################################################
@@ -1129,7 +1196,7 @@ class HostAddress(StringValidator):
         assert self.recheck()
         _h = str(self.get_address())
 
-        ssh_config = os.path.join(os.environ['HOME'], ".ssh", "config")
+        ssh_config = get_SSH_CONFIG()
         __cmd = "rsync -crtbviuzpP -e \"ssh -q -F {3}\" \"{0}/\" \"{1}:{2}/\"".format(source, _h, target, ssh_config)
         _cmd = shlex.split(__cmd)
         #        = ' '.join(_cmd)
@@ -1165,7 +1232,7 @@ class HostAddress(StringValidator):
         _h = self.get_address()  # 'jabberwocky' #
 
         _cmd = shlex.split(
-            "scp -q -F {3} {0} {1}:{2}".format(source, _h, target, os.path.join(os.environ['HOME'], ".ssh", "config")))
+            "scp -q -F {3} {0} {1}:{2}".format(source, _h, target, get_SSH_CONFIG()))
         __cmd = ' '.join(_cmd)
 
         #            client = paramiko.SSHClient()
@@ -1196,7 +1263,7 @@ class HostAddress(StringValidator):
         # TODO: maybe respect SSH Settings for the parent station!?
 
         _cmd = shlex.split(
-            "ssh -q -F {2} {0} {1}".format(_h, ' '.join(cmd), os.path.join(os.environ['HOME'], ".ssh", "config")))
+            "ssh -q -F {2} {0} {1}".format(_h, ' '.join(cmd), get_SSH_CONFIG()))
         __cmd = ' '.join(_cmd)
 
         #            client = paramiko.SSHClient()
@@ -1227,7 +1294,7 @@ class HostAddress(StringValidator):
             #            client = paramiko.SSHClient()
             #            client.load_system_host_keys()
 
-            _cmd = ["ssh", "-q", "-F", os.path.join(os.environ['HOME'], ".ssh", "config"), "-o",
+            _cmd = ["ssh", "-q", "-F", get_SSH_CONFIG(), "-o",
                     "ConnectTimeout={}".format(timeout), _h, "exit 0"]
             retcode = _execute(_cmd, **kwargs)  # , stdout=open("/dev/null", 'w'), stderr=open("/dev/null", 'w')
 

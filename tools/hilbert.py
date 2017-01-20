@@ -87,8 +87,16 @@ def input_handler(parser, ctx, args):
         log.debug("Input dump file specified: {}".format(df))
 
     if (fn is None) and (df is None):
-        fn = 'Hilbert.yml'
-        log.warning("Missing input file specification: using default '{}'!".format(fn))
+        fn = os.environ.get('HILBERT_SERVER_CONFIG_PATH', None)
+        if fn is not None:
+            if os.path.isdir(fn):
+                fn = os.path.join(fn, 'Hilbert.yml')
+            log.info("Missing input file specification: using $HILBERT_SERVER_CONFIG_PATH: '{}'!".format(fn))
+        else:
+            fn = os.path.join('.', 'Hilbert.yml')
+            log.info("Missing input file specification: using default: '{}'!".format(fn))
+
+
 
     if (fn is not None) and (df is not None):
         log.error("Input file specification clashes with the input dump specification: specify a single input source!")
@@ -698,11 +706,20 @@ def _version():
     log.debug("logging           version: {}".format(logging.__version__))
     log.debug("semantic_version  version: {}".format(semantic_version.__version__))
 
+
     print("Hilbert Configuration API:     {}".format(Hilbert(None).get_api_version()))
     print("Root Logging Level:            {}".format(logging.getLevelName(logging.getLogger().level)))
     print("PEDANTIC mode:                 {}".format(get_PEDANTIC()))
-    print("INPUT_DIRNAME:                 {}".format(get_INPUT_DIRNAME()))
 
+    d = os.environ.get('HILBERT_SERVER_CONFIG_PATH', None)
+    if d is not None:
+        print("HILBERT_SERVER_CONFIG_PATH:  {}".format(d))
+
+    d = os.environ.get('HILBERT_SERVER_CONFIG_SSH_PATH', None)
+    if d is not None:
+        print("HILBERT_SERVER_CONFIG_SSH_PATH:  {}".format(d))
+
+#    print("INPUT_DIRNAME:                 {}".format(get_INPUT_DIRNAME()))
     log.debug("Done")
 
 
@@ -741,7 +758,6 @@ def main():
 
     args = handler.run(_argv)
     handler.exit(status=0)
-
 
 if __name__ == "__main__":
     main()
