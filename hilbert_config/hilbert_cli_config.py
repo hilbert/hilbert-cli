@@ -892,6 +892,28 @@ class URI(BaseValidator):
 
         self._type = None
 
+    def check(self):
+        global PEDANTIC
+        v = self.get_data()
+
+        if v is None:
+            return False
+
+        _ret = True
+
+        if PEDANTIC and (self._type == text_type('url')):
+            try:
+                urlopen(v).close()
+            except:
+                log.warning("URL: '{}' is not accessible!".format(v))
+                _ret = not PEDANTIC
+
+                # TODO: FIXME: base location should be the input file's dirname???
+                #        elif not os.path.isabs(v):
+                #            v = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), v))
+
+        return _ret
+
     def validate(self, d):
         """check whether data is a valid URI"""
         if d is None:
@@ -904,19 +926,8 @@ class URI(BaseValidator):
         # TODO: @classmethod def check_uri(v)
         if urlparse(v).scheme != '':
             self._type = text_type('url')
-            try:
-                urlopen(v).close()
-            except:
-                log.warning("URL: '{}' is not accessible!".format(v))
-                _ret = not PEDANTIC
-
-                # TODO: FIXME: base location should be the input file's dirname???
-                #        elif not os.path.isabs(v):
-                #            v = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), v))
-
         elif os.path.isfile(v):  # Check whether file exists
             self._type = text_type('file')
-
         elif os.path.isdir(v):  # Check whether directory exists
             self._type = text_type('dir')
 
@@ -1070,6 +1081,24 @@ class AutoDetectionScript(StringValidator):
 
         return True
 
+
+    def check(self):
+        global PEDANTIC
+        script = self.get_data()
+
+        if script is None:
+            return False
+
+        if not self.check_script(script):
+            if PEDANTIC:
+                log.error("Bad script: {0}".format(script))
+                return False
+            else:
+                log.warning("Wrong script: {0}".format(script))
+
+        return True
+
+
     def validate(self, d):
         """check whether data is a valid script"""
         if d is None:
@@ -1089,13 +1118,6 @@ class AutoDetectionScript(StringValidator):
         except:
             log.exception("Wrong input to AutoDetectionScript::validate: {}".format(d))
             return False
-
-        if not self.check_script(script):
-            if PEDANTIC:
-                log.error("Bad script: {0}".format(script))
-                return False
-            else:
-                log.warning("Bad script: {0}".format(script))
 
         self.set_data(script)
         return True
@@ -1173,11 +1195,20 @@ class HostAddress(StringValidator):
         if _h.startswith('"') and _h.endswith('"'):
             _h = _h[1:-1]
 
+        self.set_data(_h)
+        return True
+
+    def check(self):
+        global PEDANTIC
+        _h = self.get_data()
+
+        if _h is None:
+            return False
+
         if PEDANTIC:
             if not self.check_ssh_alias(_h, shell=False, timeout=2):
                 return False
 
-        self.set_data(_h)
         return True
 
     def get_ip_address(self):
