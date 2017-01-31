@@ -1,32 +1,30 @@
-Version: 0.6.0 # 0.MAJOR.MINOR, later: MAJOR.MINOR
+Version: 0.8.0 # 0.MAJOR.MINOR, later: MAJOR.MINOR
 
 Services:
-  s_omd_agent: { type: compose, file: docker-compose.yml, ref: omd_agent, auto_detections: '' }
-  s_omd_anew:  { type: compose, file: docker-compose.yml, ref: omd_anew, auto_detections: '' }
-  s_omd_persistent: { type: compose, file: docker-compose.yml, ref: omd_persistent, auto_detections: '' }
-  s_ptmx:      { type: compose, file: docker-compose.yml, ref: ptmx, auto_detections: '' }
-  s_registry:  { type: compose, file: docker-compose.yml, ref: registry, auto_detections: '' }
-  s_qrhandler: { type: compose, file: docker-compose.yml, ref: qrhandler, auto_detections: '' }
-  # s_mng:       { type: compose, file: docker-compose.yml, ref: mng, auto_detections: '' }
+  s_omd_agent: { type: compose, file: docker-compose.yml, ref: omd_agent }
+  s_omd_anew:  { type: compose, file: docker-compose.yml, ref: omd_anew }
+  s_omd_persistent: { type: compose, file: docker-compose.yml, ref: omd_persistent }
+  s_ptmx:      { type: compose, file: docker-compose.yml, ref: ptmx }
+  s_registry:  { type: compose, file: docker-compose.yml, ref: registry }
+  s_qrhandler: { type: compose, file: docker-compose.yml, ref: qrhandler}
+  s_mng:       { type: compose, file: docker-compose.yml, ref: mng }
 
 Applications:
   a_hb_test:
     type: compose
     ref: hb_test
     file: docker-compose.yml
-    auto_detections: ''
     name: HB-Test
     description: Random HB testing
-    compatibleStations: { server, simple }
+    compatible_stations: { server, simple } # NOTE: compatibleStations is deprecated!
 
   a_kiosk:
     type: compose
     ref: kiosk
     file: docker-compose.yml
-    auto_detections: ''
     name: Kiosk with HB
     description: Kiosk Web Browser GUI app
-    compatibleStations: { server, simple }
+    compatible_stations: { simple }
 
 Profiles:
   standalone:  # TODO: FIXME: this should not be required!
@@ -36,7 +34,7 @@ Profiles:
     supported_types: []
 
   server:
-    services: [ s_ptmx, s_omd_agent, s_omd_anew, s_registry ]  # , mng
+    services: [ s_ptmx, s_omd_agent, s_omd_anew, s_registry, s_mng ]
     description: Only for Server System
     name: server
     supported_types: [ compose ]
@@ -61,7 +59,7 @@ Stations:
     description: Not a real station - Just hidden default settings
     profile: standalone  # TODO: FIXME: this should not be required!
     omd_tag: standalone
-    address: Problematic.SSH.Alias  # TODO: NOTE: should not be mandatory!
+    address: localhost  # TODO: NOTE: should not be mandatory!
     hidden: true # hide on Dashboard    # to be removed due to station.type
     client_settings:
       hilbert_autostart: true # Station starts Hilbert upon booting
@@ -73,11 +71,11 @@ Stations:
       HILBERT_ALSA_CARD: 1
       HILBERT_CUSTOMIZATIONS: 'nv alsa'
 
-  server:
+  main_server:
     type: server
     extends: station_defaults
     hidden: false  # to be removed due to station.type
-    description: 'Server Station: Supernova'
+    description: Supernova Server Station
     name: Supernova Server
     address: localhost
     profile: server
@@ -93,8 +91,8 @@ Stations:
     extends: station_defaults
     hidden: false  # to be removed due to station.type
     address: localhost
-    description: 'Testing Station'
-    name: 'Station: Test Standard'
+    description: Testing Station
+    name: Standard Test Station
     omd_tag: agent
     profile: simple
     poweron_settings: { type: WOL, mac: '3c:18:a0:04:e6:c2', auto_turnon: true }
@@ -102,3 +100,25 @@ Stations:
       hilbert_autostart_delay: 10 # 10 sec. delay before starting here Hilbert-CLI-Station
       hilbert_station_default_application: a_hb_test
 
+Groups:   # intersectWith is deprecated, use intersect_with instead
+  all5: { station_defaults, main_server, station }    # Note: all 3 stations!
+#  none1: { include: {} }
+#  none2: {include: {all0}, intersect_with: { all1}, exclude: {all5} }
+  test1: { include: { main_server, station } }
+  test2: { main_server, include: { station } }
+  test3: { include: { main_server}, station }
+  all0: { all1 }
+  all1: { standalone, include: {server, simple}, std }
+  all6: { all1, intersect_with: { all5 } }
+  sub1: { all0, exclude: { std } }
+  sub2: { test1, exclude: { std } }
+  sub3: { test2, exclude: { standalone } }
+  sub11: { exclude: { std }, all0 }
+  sub22: { exclude: { std }, test1 }
+  sub33: { exclude: { standalone }, all5 }
+  test4: {all6, exclude: {simple}, intersect_with: { server, simple } }
+#  a: {a, b, exclude: {a, b}, intersect_with: {a, b}, include: {a, b}}
+#  b: { a}
+#  c: { exclude: {none1} }
+#  d: { intersect_with: {none1}, include: {} }
+#  e: { exclude: {none1}, intersect_with: {none1}, include: {} }

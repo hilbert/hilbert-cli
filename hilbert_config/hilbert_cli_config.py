@@ -508,7 +508,7 @@ class BaseValidator(AbstractValidator):
         # if isinstance(_d, string_types):
         return _d
 
-    def query(self, what):
+    def query(self, what, _default=None):
         """
         Generic query for data subset about this object
 
@@ -536,6 +536,9 @@ class BaseValidator(AbstractValidator):
         _d = self.get_data()
 
         if what == 'keys':
+            if _d is None:
+                return _default
+
             assert isinstance(_d, dict)
             return [k for k in _d.keys()]
 
@@ -551,16 +554,20 @@ class BaseValidator(AbstractValidator):
         t = sep.join(ss[1:])  # tail
 
         if h in _d:
-            d = _d[ss[0]]
+            d = _d[h]
             if isinstance(d, BaseValidator):
-                return d.query(t)  # TODO: FIXME: avoid recursion...
+                return d.query(t, _default)  # TODO: FIXME: avoid recursion...
 
-            log.warning("Could not query an object. Ignoring the tail: %s", t)
-            return d
+            log.warning("Could not query an object. Ignoring the tail: %s. Returning default [%s]", t, _default)
+            return _default
 
-        raise ConfigurationError(u"{}: {}".format("ERROR:",
-                                                  "Sorry cannot show '{0}' of {1}!".format(what, type(self))))
-
+        if _default is None:
+            raise ConfigurationError(u"{}: {}".format("ERROR:",
+                                                  "Sorry cannot query '{0}' of {1}!".format(what, type(self))))
+        else:
+            log.warning(u"{}: {}".format("ERROR:",
+                                                  "Sorry cannot query '{0}' of {1}!".format(what, type(self))))
+            return _default
 
 ###############################################################
 class BaseRecordValidator(BaseValidator):
@@ -1822,23 +1829,41 @@ class DockerComposeApplication(DockerComposeService):
 
         _compose_rule = (self._types[self._default_type]).copy()
 
-        self._compatibleStations = text_type('compatibleStations')
+        self._compatibleStations_tag = text_type('compatibleStations')
 
         _v = self.get_version(default=semantic_version.Version('0.7.0'))
         if _v >= semantic_version.Version('0.7.0'):
-            self._compatibleStations = text_type('compatible_stations')
+            self._compatibleStations_tag = text_type('compatible_stations')
 
         _compose_rule.update({
             text_type('name'): (True, BaseUIString),  # NOTE: name for UI!
             text_type('description'): (True, BaseUIString),
             text_type('icon'): (False, Icon),
-            self._compatibleStations: (True, Group)
+            self._compatibleStations_tag: (True, Group)  # TODO: optional? default: all stations?
         })
 
         self._types[self._default_type] = _compose_rule
 
-        # TODO: FIXME: add application to compatibleStations!
+        self._station_list = []
 
+    def get_group(self):
+        """Group of stations compatible with this application"""
+        _d = self.get_data()
+
+        if _d is None:
+            return None
+
+        return _d.get(self._compatibleStations_tag, None)
+
+#    def get_stations(self):
+#        return self._station_list
+
+#    def data_dump(self):
+#        _d = super(DockerComposeApplication, self).data_dump()
+#        l = self.get_stations()
+#        if l is not None:
+#            _d['station_list'] = [k for k in l]
+#        return _d
 
 ###############################################################
 class Profile(BaseRecordValidator):
@@ -1862,7 +1887,7 @@ class Profile(BaseRecordValidator):
 
         self._types = {self._default_type: default_rule}
 
-        self._station_list = None  # TODO: FIXME!
+        self._station_list = set()
 
     def get_services(self):
         _d = self.get_data()
@@ -1874,6 +1899,24 @@ class Profile(BaseRecordValidator):
         _d = self.get_data()
         assert _d is not None
         return _d.get(self._supported_types_tag, None)
+
+    def add_station(self, sid, station):
+        assert isinstance(station, Station)
+
+#        if self._station_list is None:  # TODO: FIXME: Here? or somewhere else?
+#            self._station_list = [station]
+        if sid not in self._station_list:
+            self._station_list.add(sid)  # .append(station)
+
+    def get_stations(self):
+        return self._station_list
+
+    def data_dump(self):
+        _d = super(Profile, self).data_dump()
+        l = self.get_stations()
+        if l is not None:
+            _d['station_list'] = sorted(l)  # .get_name()?
+        return _d
 
 
 ###############################################################
@@ -1944,9 +1987,12 @@ class Station(BaseRecordValidator):  # Wrapper?
         self._profile_tag = text_type('profile')
 
         self._default_type = "default_station"
+
+        self._name_tag = text_type('name')
+
         default_rule = {
             Station._extends_tag: (False, StationID),  # TODO: NOTE: to be redesigned later on: e.g. use Profile!?
-            text_type('name'): (True, BaseUIString),
+            self._name_tag: (True, BaseUIString),
             text_type('description'): (True, BaseUIString),
             text_type('icon'): (False, Icon),
             self._profile_tag: (True, ProfileID),
@@ -1961,9 +2007,32 @@ class Station(BaseRecordValidator):  # Wrapper?
 
         self._types = {self._default_type: default_rule}
 
-        self._compatible_applications = None  # TODO: FIXME!
+        self._compatible_applications = {}
 
         self._HILBERT_STATION = '~/bin/hilbert-station'
+
+        self._profile = None
+
+    def add_application(self, app_id, app):
+        assert isinstance(app, DockerComposeApplication)
+        self._compatible_applications[app_id] = app
+
+    def get_compatible_applications(self):
+        return self._compatible_applications
+
+    def data_dump(self):
+        _d = super(Station, self).data_dump()
+        l = self.get_compatible_applications()
+        if l is not None:
+            _d['compatible_applications'] = sorted(l.keys())
+            # + ':' + self._compatible_applications[k].get_name()
+        return _d
+
+    def get_name(self, _default=None):
+        _d = self.get_data()
+        assert _d is not None
+
+        return _d.get(self._name_tag, _default)
 
     def is_hidden(self):
         _d = self.get_data()
@@ -1994,8 +2063,23 @@ class Station(BaseRecordValidator):  # Wrapper?
 
         return _profile_id
 
-    def get_profile(self, ref):  # TODO: FIXME: move to Hilbert: _parent.get_all_*()
-        _parent = self.get_hilbert()
+    def set_profile(self, _profile):
+        assert isinstance(_profile, Profile)
+
+        if self._profile is None:
+            self._profile = _profile
+        else:
+            assert _profile == self._profile
+
+
+    def get_profile(self):
+
+        if self._profile is not None:
+            return self._profile  # .query('all')   # check ref?!
+
+        ref = self.get_profile_ref()
+
+        _parent = self.get_hilbert() # TODO: FIXME: move to Hilbert: _parent.get_all_*() ??
 
         log.debug("Querying global profile: '%s'...", ref)
 
@@ -2003,7 +2087,9 @@ class Station(BaseRecordValidator):  # Wrapper?
         assert _profile is not None
         assert isinstance(_profile, Profile)
 
+        self.set_profile(_profile)
         return _profile
+
 
     def get_all_services(self):  # TODO: FIXME: move to Hilbert: _parent.get_all_*()
         _parent = self.get_hilbert()
@@ -2110,7 +2196,7 @@ class Station(BaseRecordValidator):  # Wrapper?
         # TODO: all compatible applications!?
 
         _profile_ref = self.get_profile_ref()
-        _profile = self.get_profile(_profile_ref)
+        _profile = self.get_profile()  # _profile_ref
 
         # TODO: FIXME: add type checking! NOTE: compatibility should be verified beforehand!
         # _supported_service_types = _profile.get_supported_types()  # no need here!
@@ -2125,7 +2211,7 @@ class Station(BaseRecordValidator):  # Wrapper?
 
         # TODO: FIXME: All supported/compatible applications??!?
 
-        all_apps = self.get_all_applications().get_data()
+        all_apps = self.get_compatible_applications()  # self.get_all_applications().get_data()
         all_services = self.get_all_services().get_data()
 
         # TODO: deployment should create a temporary directory + /station.cfg + /docker-compose.yml etc!?
@@ -2695,7 +2781,11 @@ class Group(BaseRecordValidator):  # ? TODO: GroupSet & its .parent?
         if _v >= semantic_version.Version('0.7.0'):
             self._intersectWith_tag = text_type('intersect_with')
 
-        self._station_list = None  # TODO: FIXME: implement this!
+        self._exclude_list = None
+        self._intersection_list = None
+        self._include_list = None
+
+        self._station_list = None
 
         default_rule = {
             self._include_tag: (False, GroupIDList),
@@ -2721,9 +2811,123 @@ class Group(BaseRecordValidator):  # ? TODO: GroupSet & its .parent?
 
         _ret = BaseRecordValidator.validate(self, d)
 
-        # TODO: FIXME: Add extra keys into include!
+        if not _ret:
+            return _ret
 
-        return _ret
+        ##############################################################
+        #  NOTE: pre-process group definitions & get rid of shortcut notation for unions
+
+        _d = self.get_data()
+
+        _include_list = _d.get(self._include_tag, None)
+        if _include_list is not None:
+            assert isinstance(_include_list, GroupIDList)
+            _include_list = _include_list.get_data()
+            assert isinstance(_include_list, list)
+#            _include_list = [k for k in _include_list.keys()]
+        else:
+            _include_list = []
+
+        assert _include_list is not None
+        assert isinstance(_include_list, list)
+
+        for k in _d:
+            assert k in _d
+            v = _d[k]
+            if v is not None:
+                continue
+            _include_list.append(k)
+
+        self._include_list = set(_include_list)
+#        log.debug('union: [%s]', str(self._include_list))
+
+        if not self._include_list:
+            log.debug('Group without union: [%s]', str(d))
+
+        _exclude_list = _d.get(self._exclude_tag, None)
+        if _exclude_list is not None:
+            assert isinstance(_exclude_list, GroupIDList)
+            _exclude_list = _exclude_list.get_data()
+            assert isinstance(_exclude_list, list)
+            _exclude_list = set(_exclude_list)
+
+        self._exclude_list = _exclude_list
+#        log.debug('exclusion: [%s]', str(self._exclude_list))
+
+        _intersection_list = _d.get(self._intersectWith_tag, None)
+        if _intersection_list is not None:
+            assert isinstance(_intersection_list, GroupIDList)
+            _intersection_list = _intersection_list.get_data()
+            assert isinstance(_intersection_list, list)
+            _intersection_list = set(_intersection_list)
+
+        self._intersection_list = _intersection_list
+#        log.debug('intersection: [%s]', str(self._intersection_list))
+
+        return True
+
+    def get_stations(self):
+        return self._station_list
+
+    def set_stations(self, l):
+        assert l is not None
+        assert isinstance(l, (set, frozenset))
+        self._station_list = l
+
+    def data_dump(self):
+        l = self.get_stations()
+        if l is not None:
+            assert isinstance(l, (set, frozenset))
+            return sorted(l)
+
+        assert self._include_list is not None
+        assert isinstance(self._include_list, (set, frozenset))
+        _d = {self._include_tag: sorted(self._include_list)}
+
+        if self._exclude_list is not None:
+            assert isinstance(self._exclude_list, (set, frozenset))
+            _d[self._exclude_tag] = sorted(self._exclude_list)
+
+        if self._intersection_list is not None:
+            assert isinstance(self._intersection_list, (set, frozenset))
+            _d[self._intersectWith_tag] = sorted(self._intersection_list)
+
+        return _d
+
+    def computable(self, known_groups):
+        """if computable => return computed station list otherwise None!"""
+
+        _station_list = set()
+
+        assert self._include_list is not None
+        assert isinstance(self._include_list, (set, frozenset))
+        for k in self._include_list:
+            if k not in known_groups:
+                return None
+            else:
+                _station_list = _station_list.union(known_groups[k])
+
+        if self._exclude_list is not None:
+            assert isinstance(self._exclude_list, (set, frozenset))
+            for k in self._exclude_list:
+                if k not in known_groups:
+                    return None
+                else:
+                    _station_list = _station_list.difference(known_groups[k])
+
+        if self._intersection_list is not None:
+            assert isinstance(self._intersection_list, (set, frozenset))
+            _intersection = set()
+
+            for k in self._intersection_list:
+                if k not in known_groups:
+                    return None
+                else:
+                    _intersection = _intersection.union(known_groups[k])
+
+            _station_list = _station_list.intersection(_intersection)
+
+        return _station_list
 
 
 ###############################################################
@@ -2733,6 +2937,8 @@ class GlobalGroups(BaseIDMap):
 
         self._default_type = "default_global_groups"
         self._types = {self._default_type: (GroupID, Group)}
+
+#        self._de
 
 
 ###############################################################
@@ -2834,6 +3040,8 @@ class Hilbert(BaseRecordValidator):
         raise ConfigurationError(u"{}: {}".format("ERROR:", "Invalid data: '{}'!".format(d)))
 
     def validate(self, d):
+        global PEDANTIC
+
         if d is None:
             d = self._default_input_data
 
@@ -2861,27 +3069,182 @@ class Hilbert(BaseRecordValidator):
         # NOTE: check uniqueness of keys among (Services/Applications):
 
         # TODO: add get_service(s) and get_application(s)?
-        _services = self.query("{0}/{1}".format(self._services_tag, 'data'))
-        _applications = self.query("{0}/{1}".format(self._applications_tag, 'data'))  # _d.get()
+#        _services = self.query("{0}/{1}".format(self._services_tag, 'keys'))
+#        _applications = self.query("{0}/{1}".format(self._applications_tag, 'keys'))  # _d.get()
 
-        assert _services is not None
-        assert _applications is not None
+        __services = d.get(self._services_tag, {})  # Rely on the above and use get_data?
+        __applications = d.get(self._applications_tag, {})
 
-        if (len(_services) > 0) and (len(_applications) > 0):
-            for p, k in enumerate(_services):
-                if k in _applications:
-                    log.error("'{}' is both a ServiceID and an ApplicationID:".format(k))
+        if (__services is not None) and (__applications is not None):
+            if (len(__services) > 0) and (len(__applications) > 0):
+                for k in __services:
+                    if k in __applications:
+                        log.error("'{}' is both a ServiceID and an ApplicationID:".format(k))
 
-                    __services = d.get(self._services_tag)  # Rely on the above and use get_data?
-                    __applications = d.get(self._applications_tag)
+                        _key_error(k, __services[k], __services.lc.key(k), "Service key: {}")
+                        _key_error(k, __applications[k], __applications.lc.key(k), "Application key: {}")
 
-                    _key_error(k, __services[k], __services.lc.key(k), "Service key: {}")
+                        _ret = False
+
+        if not _ret:
+            log.warning('duplicating service and application ID!')
+            return _ret
+
+        _stations = _d.get(self._stations_tag, {})
+        if isinstance(_stations, BaseValidator):
+            _stations = _stations.get_data()
+
+        _profiles = _d.get(self._profiles_tag, {})
+        if isinstance(_profiles, BaseValidator):
+            _profiles = _profiles.get_data()
+
+        _groups = _d.get(self._groups_tag, {})
+        if isinstance(_groups, BaseValidator):
+            _groups = _groups.get_data()
+
+        __profiles = d.get(self._profiles_tag, {})  # Rely on the above and use get_data?
+        __stations = d.get(self._stations_tag, {})
+        __groups = d.get(self._groups_tag, {})
+
+        _implicit_groups = {}
+
+        # ! NOTE: check for GroupID <-> ProfileID
+#        if __profiles is not None:
+#            if len(__profiles) > 0:
+        for k in _profiles:
+            assert k in __profiles
+            if k in __groups:
+                log.error("'{}' is both a ProfileID and a GroupID:".format(k))
+
+                _key_error(k, __profiles[k], __profiles.lc.key(k), "Profile key: {}")
+                _key_error(k, __groups[k], __groups.lc.key(k), "Groups key: {}")
+                _ret = False
+
+        if not _ret:
+            log.error('bad configuration: duplicating profile and group ID!')
+            return _ret
+
+        # NOTE: checking uniqueness of IDs among (Stations vs Profiles&Groups)
+#        if __stations is not None:
+#            if len(__stations) > 0:
+        for k in _stations:
+            assert k in __stations
+
+            if k in __groups:
+                log.error("'{}' is both a StationID and a GroupID:".format(k))
+
+                _key_error(k, __stations[k], __stations.lc.key(k), "Station key: {}")
+                _key_error(k, __groups[k], __groups.lc.key(k), "Groups key: {}")
+                _ret = False
+
+            if k in __profiles:
+                log.error("'{}' is both a StationID and a ProfileID:".format(k))
+
+                _key_error(k, __stations[k], __stations.lc.key(k), "Station key: {}")
+                _key_error(k, __profiles[k], __profiles.lc.key(k), "Profile key: {}")
+                _ret = False
+
+            s = _stations[k]
+            assert isinstance(s, Station)
+            p_ref = s.get_profile_ref()
+            assert p_ref in _profiles
+            p = _profiles[p_ref]
+            p.add_station(k, s)
+
+            s.set_profile(p)
+            _implicit_groups[k] = set([k])  # NOTE: -> {k} ???
+
+        if not _ret:
+            log.error("bad configuration: duplicating: station IDs same as group or profile!")
+            return _ret
+
+#        if __profiles is not None:
+#            if len(__profiles) > 0:
+        for k in _profiles:
+#            assert k in __profiles
+            assert k not in _implicit_groups
+            _implicit_groups[k] = _profiles[k].get_stations()
+            if not _implicit_groups[k]:
+                log.info('Profile [%s] corresponds to no stations!', k)
+
+
+#        for k in _implicit_groups:
+#            print('[[[{}]]]]'.format(k))
+#            pprint(len(_implicit_groups[k]))
+
+        _todo = [k for k in _groups.keys()]
+        n = len(_todo)
+        while n > 0:
+            n = 0
+            if len(_todo) > 0:
+                _rest = []
+                for k in _todo:  # TODO: FIXME: while/pop?
+                    assert k in _groups
+                    assert k not in _implicit_groups
+
+                    l = _groups[k].computable(_implicit_groups)
+                    if l is not None:
+                        assert isinstance(l, (set, frozenset))
+
+                        _groups[k].set_stations(l)
+                        _implicit_groups[k] = l
+                        if not l:
+                            log.info('Explicit Group [%s] is empty!', k)
+                        n = n + 1
+
+#                        print('Group [[[', k, ']]]: ')
+#                        pprint(_groups[k].data_dump())
+                    else:  # NOTE: not computable ATM - try later...
+                        _rest.append(k)
+                _todo = _rest
+
+#        for k in _implicit_groups:
+#            print('[[[{}]]]]'.format(k))
+#            pprint(len(_implicit_groups[k]))
+
+        if len(_todo) > 0:
+            if not PEDANTIC:
+                log.warning("Bad group definition(s) detected: %s", str(_todo))
+            else:
+                log.error("Bad group definition(s) detected: %s", str(_todo))
+                return False
+#                    pprint(_groups[k].data_dump())
+
+#            print('new groups: ', n)
+#            pprint(_implicit_groups.keys())
+
+        # ! NOTE: Process all applications:
+        _applications = _d.get(self._applications_tag, {})
+        if isinstance(_applications, BaseValidator):
+            _applications = _applications.get_data()
+
+#        if __applications is not None:
+#            if len(__applications) > 0:
+
+        for k in _applications:
+            app = _applications[k]
+            assert isinstance(app, DockerComposeApplication)
+
+            g = app.get_group()
+            assert isinstance(g, Group)
+            l = g.computable(_implicit_groups)
+
+            if l is not None:
+                g.set_stations(l)
+                for sid in g.get_stations():
+                    assert sid in _stations
+                    s = _stations[sid]
+                    assert isinstance(s, Station)
+                    s.add_application(k, app)
+
+            else:
+                if PEDANTIC:
+                    log.error("Bad Group-Of-Compatible-Stations definition in application [%s]: ", k)
                     _key_error(k, __applications[k], __applications.lc.key(k), "Application key: {}")
-
                     _ret = False
-
-        # ! TODO: check Uniqueness of keys among (Profiles/Stations/Groups) !!!!
-        # ! TODO: check for GroupID <-> StationID <-!=-> ProfileID
+                else:  # NOTE: ignore such apps...
+                    log.warning("Bad Group-Of-Compatible-Stations definition in application [%s]: ", k)
+                    _key_error(k, __applications[k], __applications.lc.key(k), "Application key: {}")
 
         return _ret
 
