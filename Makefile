@@ -12,8 +12,8 @@ usage: # Print Targets
 	@grep '^[^#[:space:]].*:' Makefile
 
 check: # Run the tests
-	/bin/bash -c 'py.test -v -l --tb=auto --full-trace --color=auto tests/test_*.py'
-	/bin/bash -c 'py.test-3 -v -l --tb=auto --full-trace --color=auto tests/test_*.py'
+	/bin/bash -c 'py.test -vv -l --tb=auto --full-trace --color=auto tests/test_*.py'
+	/bin/bash -c 'py.test-3 -vv -l --tb=auto --full-trace --color=auto tests/test_*.py'
 	
 tox: tox.ini setup.py # Run clean testing via tox
 	tox
