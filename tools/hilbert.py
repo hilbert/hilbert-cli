@@ -322,19 +322,6 @@ def cmd_list_stations(parser, context, args):
         if isinstance(obj, BaseValidator):
             obj = obj.data_dump()
 
-        apps = None
-        try:
-            apps = cfg.query('Applications/keys')
-        except:
-            log.exception("Sorry could not query ApplicationId-s from the given configuration!")
-            sys.exit(1)
-
-        # TODO: FIXME: actually compute compatible_stations => Groups!
-        if isinstance(apps, BaseValidator):
-            apps = apps.data_dump()
-
-        apps = '\n"' + '",\n"'.join(apps) + '"\n'
-
         first = True
         print('[')
         for k in obj:
@@ -352,17 +339,31 @@ def cmd_list_stations(parser, context, args):
             if s is not None:
                 assert isinstance(s, dict)
                 d = s.get('hilbert_station_default_application', '')
-            a = apps  # TODO: FIXME: actually compute them!!!
+
+            assert 'compatible_applications' in o
+            apps = None
+            try:
+                apps = o.get('compatible_applications', None)
+            except:
+                log.exception("Sorry could not query compatible_applications for a station [%s]!", k)
+                sys.exit(1)
+
+            if isinstance(apps, BaseValidator):
+                apps = apps.data_dump()
+
+            apps = '\n"' + '",\n"'.join(apps) + '"\n'
 
             if not first:
                 print(',')
+
             print('{')
             print('"{0}": "{1}",'.format('id', k))
             print('"{0}": "{1}",'.format('name', o['name']))
             print('"{0}": "{1}",'.format('type', o['profile']))
             print('"{0}": "{1}",'.format('default_app', d))
-            print('"{0}": [{1}]'.format('possible_apps', a))
+            print('"{0}": [{1}]'.format('possible_apps', apps))
             print('}')
+
             first = False
 
         print(']')
