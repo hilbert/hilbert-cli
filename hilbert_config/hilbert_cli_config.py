@@ -63,7 +63,7 @@ def get_SSH_CONFIG():
         if os.path.exists(d):
             d = os.path.join(d, _SSH_ACCESS_DB)
             if os.path.exists(d):
-                log.info("SSH_ACCESS_DB is expected under '%s'", d)
+                log.debug("SSH_ACCESS_DB is expected under '%s'", d)
                 _SSH_CONFIG_PATH = d
                 return d
             else:
@@ -108,7 +108,7 @@ def get_SSH_CONFIG():
         log.error(d)
         raise Exception(d)
 
-    log.info("SSH_ACCESS_DB is expected under '%s'", d)
+    log.debug("SSH_ACCESS_DB is expected under '%s'", d)
     _SSH_CONFIG_PATH = d
     return d
 
