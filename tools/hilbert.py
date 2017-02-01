@@ -534,7 +534,7 @@ def cmd_action(parser, context, args, Action=None, appIdRequired=False):
     return args
 
 
-@subcmd('start', help='poweron a station')
+@subcmd('poweron', help='wake-up/power-on/start station')
 def cmd_start(parser, context, args):
     action = 'start'
     log.debug("Running 'cmd_{}'".format(action))
@@ -555,7 +555,7 @@ def cmd_start(parser, context, args):
     return args
 
 
-@subcmd('stop', help='shutdown a station')
+@subcmd('poweroff', help='finalize Hilbert on a station and shut it down')
 def cmd_stop(parser, context, args):
     action = 'stop'
     log.debug("Running 'cmd_{}'".format(action))
