@@ -1,4 +1,8 @@
-# Management scripts
+# Hilbert server & client CLI tools
+
+[![Build Status: master](https://travis-ci.org/hilbert/hilbert-cli.svg?branch=master)](https://travis-ci.org/hilbert/hilbert-cli)
+[![devel](https://travis-ci.org/hilbert/hilbert-cli.svg?branch=devel)](https://travis-ci.org/hilbert/hilbert-cli)
+[![Current PR](https://travis-ci.org/hilbert/hilbert-cli.svg?branch=feature/hilbert_cli_tools)](https://travis-ci.org/hilbert/hilbert-cli)
 
 ## General System Overview
 
