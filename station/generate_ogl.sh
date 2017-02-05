@@ -16,16 +16,7 @@ ID=$(docker images | awk '{ print "[" $1 ":" $2 "]" }' | sort | uniq | grep "\[$
 
 if [ -z "$ID" ]; then
   echo "ERROR: no such image '${IMG}'"
-#  exit 2
-  U=malex984
-  IMG="$U/dockapp:${I}" # IMG="$APP" #IMG="$U/$I:$APP"
-  ID=$(docker images | awk '{ print "[" $1 ":" $2 "]" }' | sort | uniq | grep "\[${IMG}\]")
-
-  if [ -z "$ID" ]; then
-    echo "ERROR: no such image '${IMG}'"
-    exit 2
-  fi
-
+  exit 2
 fi
 
 #shift

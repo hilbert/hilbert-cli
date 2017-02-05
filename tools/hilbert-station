@@ -127,7 +127,8 @@ export HILBERT_STATION_VERSION_ID="\$Id$"
 ## NOTE: the following is run-time  (docker/docker-compose) specific!
 
 ## TODO: FIXME: will be hilbert due to migration!
-export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-dockapp}"
+export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-hilbert}"
+# export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-dockapp}"
 
 export HILBERT_OGL="${HILBERT_OGL:-/tmp/OGL.tgz}"
 declare -rg OGL="$(basename "${HILBERT_OGL}")"

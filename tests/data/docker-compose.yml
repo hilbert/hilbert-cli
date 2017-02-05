@@ -1,20 +1,19 @@
 version: '2.1'
 services:
   base:
-    image: malex984/dockapp:base
+    image: hilbert/base
     volumes:
      - /tmp:/tmp:rw
-     - ${PWD}:/DOCKAPP
+     - ${PWD}:/HILBERT_CONFIG
      - /etc/localtime:/etc/localtime:ro 
     labels:
      - "is_top_app=0"
-     - "description=Base for dockapp services"
-    working_dir: /DOCKAPP
+    working_dir: /HILBERT_CONFIG
     privileged: false
     network_mode: "host"
     ipc: host
     environment:
-     - CFG_DIR=/DOCKAPP
+     - CFG_DIR=/HILBERT_CONFIG
      - "CUPS_SERVER=${HILBERT_CUPS_SERVER}"
      - "ALSA_CARD=${HILBERT_ALSA_CARD:-0}"
      - "LANGUAGE=${HILBERT_PREFERRED_LANGUAGE:-en}"
@@ -28,10 +27,9 @@ services:
   ddd:
     extends: 
       service: base
-    image: ${DOCKER_COMPOSE_IMAGE:-malex984/dockapp:ddd}
+    image: hilbert/dd
     labels:
      - "is_top_app=0"
-     - "description=Docker CLI + Compose"
     volumes:
      - ${DOCKER_SOCKET}:${DOCKER_SOCKET}
     environment:
@@ -59,7 +57,7 @@ services:
   x11:
     extends:
       service: admin
-    image: malex984/dockapp:dummy
+    image: hilbert/dummy
     privileged: true
     stdin_open: false
     tty: false
@@ -92,7 +90,7 @@ services:
   omd_agent:
     extends: 
       service: ddd
-    image: imaginary.mfo.de:5000/malex984/omd_agent
+    image: hilbert/omd_agent
     environment:
      - "HB_INIT_TIMEOUT=0"
     ports:
@@ -116,7 +114,7 @@ services:
     extends: 
       service: base
     privileged: false
-    image: malex984/dockapp:omd_agent
+    image: hilbert/omd_agent
     environment:
      - "HB_INIT_TIMEOUT=3"
      - "APP_ID=${HILBERT_APPLICATION_ID:-hb_test}"
@@ -125,7 +123,6 @@ services:
     restart: "on-failure:5"
     labels:
      - "is_top_app=1"
-     - "description=HB test in python"
     entrypoint: 
      - /sbin/my_init
      - --skip-runit
@@ -139,7 +136,7 @@ services:
   hb_test_a:
     extends: 
       service: base
-    image: imaginary.mfo.de:5000/malex984/appa
+    image: hilbert/appa
     environment:
      - "APP_ID=${HILBERT_APPLICATION_ID:-hb_test_a}"
      - "HB_INIT_TIMEOUT=3"
@@ -147,7 +144,6 @@ services:
     tty: false
     restart: "on-failure:5"
     labels:
-     - "description=HB test in bash: A"
      - "is_top_app=1"
     entrypoint: 
      - /sbin/my_init
@@ -163,8 +159,6 @@ services:
       service: hb_test_a
     environment:
      - "APP_ID=${HILBERT_APPLICATION_ID:-hb_test_b}"
-    labels:
-     - "description=HB test in bash: B"
     command: 
      - BHB_HelloB
 
@@ -173,8 +167,6 @@ services:
       service: hb_test_a
     environment:
      - "APP_ID=${HILBERT_APPLICATION_ID:-hb_test_c}"
-    labels:
-     - "description=HB test in bash: C"
     command: 
      - CHB_HelloC
 
@@ -207,7 +199,7 @@ services:
   omd_anew:
     extends: 
       service: base
-    image: malex984/dockapp:omd
+    image: hilbert/omd
     ports:
      - "80"
      - "514"
@@ -276,7 +268,7 @@ services:
       service: gui
     labels:
      - "is_top_app=0"
-    image: malex984/dockapp:qrhandler
+    image: hilbert/qrhandler
     restart: "on-failure:5"
     volumes:
      - /tmp:/supernova
@@ -292,7 +284,7 @@ services:
       service: gui
     labels:
      - "is_top_app=0"
-    image: malex984/dockapp:x11vnc
+    image: hilbert/x11vnc
     restart: "on-failure:5"
     ports:
      - "127.0.0.1:5900-5910:5900-5910"
@@ -309,7 +301,7 @@ services:
   xeyes:
     extends: 
       service: gui
-    image: malex984/dockapp:xeyes
+    image: hilbert/xeyes
     restart: "on-failure:5"    
     labels:
      - "is_top_app=1"
@@ -319,11 +311,10 @@ services:
   kiosk:
     extends: 
       service: gui
-    image: malex984/dockapp:kiosk
+    image: hilbert/kiosk
     restart: "on-failure:5"
     labels:
      - "is_top_app=1"
-     - "description=Kiosk Web Browser GUI app."
     environment:
      - "HB_INIT_TIMEOUT=9"
      - "APP_ID=${HILBERT_APPLICATION_ID:-kiosk}"
@@ -343,8 +334,6 @@ services:
   IB_kiosk:
     extends: 
       service: kiosk
-    labels:
-     - "description=Image Blend under Kiosk"
     environment:
      - "APP_ID=${HILBERT_APPLICATION_ID:-light_pollution}"
     command:
@@ -353,8 +342,6 @@ services:
   HZ_kiosk:
     extends: 
       service: kiosk
-    labels:
-     - "description=Habitable Zone under Kiosk"
     environment:
      - "APP_ID=${HILBERT_APPLICATION_ID:-habitable_zones}"
     command:
@@ -363,10 +350,9 @@ services:
   chrome:
     extends: 
       service: gui
-    image: malex984/dockapp:chrome
+    image: hilbert/chrome
     labels:
      - "is_top_app=1"
-     - "description=Google Chrome Web Browser GUI app."
     restart: "on-failure:5"
     environment:
      - "HB_INIT_TIMEOUT=9"
@@ -385,8 +371,6 @@ services:
   IB_chrome:
     extends: 
       service: chrome
-    labels:
-     - "description=Image Blend under Chrome"
     environment:
      - "APP_ID=${HILBERT_APPLICATION_ID:-IB_chrome}"
     command:
@@ -395,8 +379,6 @@ services:
   HZ_chrome:
     extends: 
       service: chrome 
-    labels:
-     - "description=Habitable Zone under Chrome"
     environment:
      - "APP_ID=${HILBERT_APPLICATION_ID:-HZ_chrome}"
     command:
@@ -405,23 +387,19 @@ services:
   opera:
     extends: 
       service: chrome
-    labels:
-     - "description=Opera Web Browser GUI app."
     environment:
      - GOOGLE_CHROME=opera
 
   chromium:
     extends: 
       service: chrome
-    labels:
-     - "description=Chromium Web Browser GUI app."
     environment:
      - GOOGLE_CHROME=chromium-browser
 
   kivy:
     extends: 
       service: gui
-    image: malex984/dockapp:kivy
+    image: hilbert/kivy
     labels:
      - "is_top_app=1"
     restart: "on-failure:5"
@@ -437,7 +415,7 @@ services:
   main:
     extends: 
       service: gui
-    image: malex984/dockapp:main
+    image: hilbert/main
     labels:
      - "is_top_app=1"
     restart: "on-failure:5"
@@ -453,10 +431,9 @@ services:
   demo:
     extends: 
       service: gui
-    image: malex984/dockapp:demo
+    image: hilbert/demo
     labels:
      - "is_top_app=1"
-     - "description=Choose demo app"
     restart: "on-failure:5"
     environment:
      - MENU_TRY="${MENU_TRY:-gui}"
@@ -472,7 +449,6 @@ services:
     image: registry:2
     labels:
      - "is_top_app=0"
-     - "description=Docker Private Registry"
     ports:
      - "8055:5000"
     restart: "on-failure:5"
@@ -484,8 +460,6 @@ services:
       service: registry
     volumes:
      - "${HILBERT_REGISTRY_CERT:-./REG/CERT}:/certs"
-    labels:
-     - "description=Docker Private Registry (with TLS)"
     environment:
      - "REGISTRY_HTTP_TLS_CERTIFICATE=/certs/domain.crt"
      - "REGISTRY_HTTP_TLS_KEY=/certs/domain.key"
@@ -505,19 +479,19 @@ services:
     command:
      - 'apk update && apk add xorg-server xf86-video-vesa xf86-input-evdev xf86-input-mouse xf86-input-keyboard udev && echo "exec xclock">>~/.xinitrc && apk add xclock  --update-cache --repository "http://dl-cdn.alpinelinux.org/alpine/edge/testing" && startx'
 
-  dockapp:
+  hilbert_gui:
     extends:
       service: gui
     volumes:
-     - ${PWD}:/DOCKAPP
-    working_dir: /DOCKAPP/
+     - ${PWD}:/HILBERT_CONFIG
+    working_dir: /HILBERT_CONFIG/
     labels:
      - "is_top_app=1"
 
-  register:
+  keep_for_reference:
     extends:
-      service: dockapp
-    image: imaginary.mfo.de:5000/malex984/alpine
+      service: hilbert_gui
+    image: alpine:3.4
     devices:
      - "/dev/bus/usb:/dev/bus/usb:rwm"
      - "/dev/nvidia0:/dev/nvidia0"
