@@ -1,20 +1,14 @@
 # Hilbert server & client CLI tools
 
-[![Build Status: master](https://travis-ci.org/hilbert/hilbert-cli.svg?branch=master)](https://travis-ci.org/hilbert/hilbert-cli)
-[![devel](https://travis-ci.org/hilbert/hilbert-cli.svg?branch=devel)](https://travis-ci.org/hilbert/hilbert-cli)
-[![Current PR](https://travis-ci.org/hilbert/hilbert-cli.svg?branch=feature/hilbert_cli_tools)](https://travis-ci.org/hilbert/hilbert-cli)
+Travis CI Build Status: [![devel](https://travis-ci.org/hilbert/hilbert-cli.svg?branch=devel)](https://travis-ci.org/hilbert/hilbert-cli)
 
 ## General System Overview
 
 ![System structure](docs/GeneralDD.png)
 
-## Distilled `Hilbert` interfaces/interactions:
+## General Hilbert Configuration model
 
-![Minimal `hilbert` interfaces](docs/HilbertDD.png)
-
-## Current management structure:
-
-![Detailed current management structure](docs/mng.png)
+![Configuration Model](docs/ConfigurationDD.png)
 
 # General notes about shell scripts:
 
@@ -45,12 +39,70 @@ TODOs:
   * `start_station.sh` will not wait for remote machine to power-on completely - there should be a wait on OMD afterwards
   * `stop_station.sh` and `appchange_station.sh` should trigger update of OMD checks
 
-# Server-side low-level management commands: see `hilbert -h`
+# Server-side low-level management CLI tool:
 
-# Station-side low-level commands (accessible either locally or via SSH): see `hilbert-station -h`
+```
+usage: hilbert [-h] [-p] [-V] [-v | -q] [-H] subcommand
 
-NOTE: some of the actions may require station's configuration (e.g. in  `~/.config/hilbert-station/`)
+Hilbert - server tool: loads configuration and does something using it
 
+positional arguments:
+ subcommand      :
+                 app_change         change station's top application
+                 cfg_deploy         deploy station's local configuration to corresponding host
+                 cfg_query          query some part of configuration. possibly dump it to a file
+                 cfg_verify         verify the correctness of Hilbert Configuration .YAML file
+                 list_applications  list application IDs
+                 list_groups        list (named) group IDs
+                 list_profiles      list profile IDs
+                 list_services      list service IDs
+                 list_stations      list station IDs
+                 poweroff           finalize Hilbert on a station and shut it down
+                 poweron            wake-up/power-on/start station
+
+optional arguments:
+ -h, --help      show this help message and exit
+ -p, --pedantic  turn on pedantic mode
+ -V, --version   show hilbert's version and exit
+ -v, --verbose   increase verbosity
+ -q, --quiet     decrease verbosity
+ -H, --helpall   show detailed help and exit
+
+```
+
+# Client-side low-level driver (accessible either locally or via SSH):
+
+
+```
+usage: hilbert-station [-h] [-p] [-V] [-v | -q] subcommand
+
+Hilbert - client part for Linux systems
+
+positional arguments:
+ subcommand:
+   init [<cfg>]            init station based on given or installed configuration
+   list_applications       list of (supported) applications
+   list_services           list of background services
+   app_change <app_id>     change the currently running top application to specified
+   start                   start Hilbert on the system
+   stop                    stop Hilbert on the system
+   shutdown                shut down the system
+
+optional arguments:
+  -h                       show this help message and exit
+  -V                       show version info and exit
+  -v                       increase verbosity
+  -q                       decrease verbosity
+  -t                       turn on BASH tracing and verbosity
+  -T                       turn off BASH tracing and verbosity
+  -d                       turn on dry-run mode
+  -D                       turn off dry-run mode
+
+respected environment variables:
+  HILBERT_CONFIG_BASEDIR   location of the base configuration directory of hilbert-station. Default: '~/.config/hilbert-station'
+```
+
+NOTE: all commands (except `init <cfg>` / `shutdown` / `-h` / `-V`) require station's configuration to be present
 
 ## License
 This project is licensed under the [Apache v2 license](LICENSE). See also [Notice](NOTICE).
