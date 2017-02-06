@@ -1,4 +1,4 @@
-#! /bin/bash
+#! /usr/bin/env bash
 
 #if hash docker-composei 2>/dev/null; then
 #  echo "DEBUG: using $(which docker-compose), $(docker-compose --version)"

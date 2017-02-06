@@ -1,4 +1,4 @@
-#!/bin/bash
+#! /usr/bin/env bash
 
 SELFDIR=`dirname "$0"`
 SELFDIR=`cd "$SELFDIR" && pwd`

@@ -6,10 +6,12 @@ from __future__ import absolute_import, print_function, unicode_literals  # NOQA
 
 import sys
 from os import path
+import logging
+logging.basicConfig(level=logging.WARNING, stream=sys.stderr)  # TODO: FIXME: no log output!?
 
 DIR=path.dirname( path.dirname( path.abspath(__file__) ) )
 sys.path.append(DIR)
-sys.path.append(path.join(DIR, 'config'))
+sys.path.append(path.join(DIR, 'hilbert_config'))
 
 # from helpers import *
 from hilbert_cli_config import SemanticVersionValidator, load_yaml
@@ -45,28 +47,33 @@ def _helper(s, partial=False):
     assert validator_data is not None
     assert isinstance(validator_data, semantic_version.Version)
 
-    return v == validator_data
+    assert v == validator_data
+    return v
 
 
 class TestVersions:
     def test_good(self):
-        v = '0.0.1'
-        assert _helper(v)
+        v001 = _helper('0.0.1')
 
-        v = '0.1.2'
-        assert _helper(v)
+        v012 = _helper('0.1.2')
+        assert v012 > v001
 
-        v = '1.2.3'
-        assert _helper(v)
+        v123 = _helper('1.2.3')
+        assert v123 > v012
+        assert v123 > v001
 
     def test_good_partial(self):
-        v = '0.0'
-        assert _helper(v, partial=True)
+        v00 = _helper('0.0', partial=True)   # 0.0.0?
 
-        v = '0.1'
-        assert _helper(v, partial=True)
+        assert _helper('0.0.1') >= v00
 
-        v = '1.2'
-        assert _helper(v, partial=True)
+        v01 = _helper('0.1', partial=True)
+        assert v01 > v00
+        assert _helper('0.1.2') >= v01
+
+        v12 = _helper('1.2', partial=True)
+        assert v12 > v01
+        assert v12 > v00
+        assert _helper('1.2.3') >= v12
 
 # TODO: add failure tests: e.g. wrong version + with exceptions...

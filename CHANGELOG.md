@@ -7,13 +7,15 @@
 - Changelog according to (http://keepachangelog.com/)
 - License: Apache v2
 - Git branching model
+- Server-side Hilbert CLI (python) tool: `tools/hilbert` (low-level management using Hilbert YAML Configuration)
+- Client-side Hilbert CLI (bash) tool: `tools/hilbert-station` (low-level wrapper around docker/docker-compose and run remote actions for the server-side tool)
 
 ### Changed
-- Restructurization/migration of older `malex984/dockapp` to `hilbert/hilbert-*`
+- Restructurization/migration of older `malex984/dockapp` into sparate repos: `hilbert/hilbert-cli`, `hilbert/hilbert-heartbeat`, `hilbert/hilbert-docker-images`
 - Migration of high-level scripts from Dashboard to `hilbert/hilbert-cli`
 
 ### Security 
-- Starting to remove `sudo` and `privileged` requirements 
+- Starting to remove `sudo` and `privileged` requirements (and pid=host)
 
 ## [0.1.0] - 2016-09-02
 ### Added

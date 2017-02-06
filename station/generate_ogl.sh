@@ -1,4 +1,4 @@
-#!/bin/bash
+#! /usr/bin/env bash
 
 #SELFDIR=`dirname "$0"`
 #SELFDIR=`cd "$SELFDIR" && pwd`
@@ -16,22 +16,13 @@ ID=$(docker images | awk '{ print "[" $1 ":" $2 "]" }' | sort | uniq | grep "\[$
 
 if [ -z "$ID" ]; then
   echo "ERROR: no such image '${IMG}'"
-#  exit 2
-  U=malex984
-  IMG="$U/dockapp:${I}" # IMG="$APP" #IMG="$U/$I:$APP"
-  ID=$(docker images | awk '{ print "[" $1 ":" $2 "]" }' | sort | uniq | grep "\[${IMG}\]")
-
-  if [ -z "$ID" ]; then
-    echo "ERROR: no such image '${IMG}'"
-    exit 2
-  fi
-
+  exit 2
 fi
 
-shift
+#shift
 
-G="$1"
-shift
+G="/tmp/OGL.tgz"  # "$1"
+#shift
 
 #D=$1
 D=dummyx11

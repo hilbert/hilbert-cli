@@ -18,10 +18,12 @@ CMS_HOST="${CMS_HOST:-supernova}"
 
 ### sftp:
 CMS_URL="${CMS:-sftp://${CMS_HOST}}"
-CMS_CONFIG_DIR="${CMS_CONFIG_DIR:-.config/dockapp/STATIONS}"
+
+# HILBERT_SERVER_CONFIG_PATH ?
+CMS_CONFIG_DIR="${CMS_CONFIG_DIR:-.config/hilbert-station/}"
 
 ### local cache path:
-CACHE_DIR="${CACHE_DIR:-${SELFDIR}/STATIONS}"
+CACHE_DIR="${CACHE_DIR:-${SELFDIR}}"
 
 mkdir -p "${CACHE_DIR}"
 

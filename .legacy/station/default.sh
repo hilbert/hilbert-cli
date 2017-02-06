@@ -1,15 +1,24 @@
-#!/bin/sh
+#! /usr/bin/env bash
 
 SELFDIR=`dirname "$0"`
 SELFDIR=`cd "$SELFDIR" && pwd`
 cd "${SELFDIR}/"
 
-### set -e
-## unset DISPLAY
-
 #! NOTE: cleanup all previously started containers:
 # docker ps -aq | xargs --no-run-if-empty docker rm -fv
 # docker images -q -a | xargs --no-run-if-empty docker rmi
+
+
+if [ ! -f /tmp/OGL.tgz ]; then
+  if [ -f ./OGL.tgz ]; then
+    cp -fp ./OGL.tgz /tmp/ || sudo -n -P cp -fp ./OGL.tgz /tmp/
+  fi
+fi
+
+if [ ! -f /tmp/OGL.tgz ]; then
+  echo "WARNING: Missing 'OGL.tgz'! Please regenerate and place to '${SELFDIR}/' or '/tmp/'!"
+fi
+
 
 if [ -r "./station.cfg" ]; then
     . "./station.cfg"

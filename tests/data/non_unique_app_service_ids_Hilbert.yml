@@ -1,0 +1,17 @@
+Version: 0.7.0
+
+Services:
+  duplicating_id: { type: compose, ref: hb_test }
+
+Applications:
+  duplicating_id:
+    type: compose
+    ref: hb_test
+    file: docker-compose.yml
+    name: HB-Test
+    description: Random HB testing
+    compatible_stations: {}
+
+Profiles:
+Stations:
+Groups:
