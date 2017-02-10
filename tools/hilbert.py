@@ -66,9 +66,12 @@ def cmd_verify(parser, context, args):
     args = parser.parse_args(args)
     cfg = input_handler(parser, vars(context), args)
 
-    assert cfg is not None
+    if cfg is not None:
+        print("Input is a valid Hilbert configuration!")
+    else:
+        print("Input seems to be invalid Hilbert configuration!")
+        sys.exit(1)
 
-    log.debug("Done")
     return args
 
 
