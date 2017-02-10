@@ -3149,10 +3149,16 @@ class Hilbert(BaseRecordValidator):
                 _ret = False
 
             s = _stations[k]
+            assert s is not None
             assert isinstance(s, Station)
             p_ref = s.get_profile_ref()
-            assert p_ref in _profiles
+
+            if p_ref not in _profiles:
+                log.error("bad configuration: station '%s' has unknown/invalid profile specification: '%s'", k, p_ref)
+                return False
+
             p = _profiles[p_ref]
+            assert p is not None
             p.add_station(k, s)
 
             s.set_profile(p)
