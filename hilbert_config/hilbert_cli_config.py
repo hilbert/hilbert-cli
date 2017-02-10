@@ -2059,7 +2059,7 @@ class Station(BaseRecordValidator):  # Wrapper?
         assert _profile_id is not None
         assert _profile_id != ''
 
-        log.debug("Station's profile ID: %s", _profile_id)
+#        log.debug("Station's profile ID: %s", _profile_id)
 
         return _profile_id
 
@@ -2691,36 +2691,40 @@ class BaseList(BaseValidator):
         self._types = {}
 
     def validate(self, d):
+        """String or a sequence of strings"""
+
+#        log.debug("LIST INPUT: [%s], LIST INPUT TYPE: [%s]", d, type(d))
+
         if d is None:
             d = self._default_input_data
 
         assert self._default_type is not None
         assert len(self._types) > 0
 
-        _lc = d.lc
 
         # NOTE: determine the class of items based on the version and sample data
         self._type = self._types[self._default_type]
         assert self._type is not None
 
         if (not isinstance(d, (list, dict, tuple, set))) and isinstance(d, string_types):
-            try:
+            try:  # NOTE: Test single string item:
                 _d = [self._type.parse(StringValidator.parse(d, parent=self))]
-                self.get_data(_d)
+                self.set_data(_d)
                 return True
             except:
                 pass  # Not a single string entry...
 
-        # list!?
-        _ret = True
+        # NOTE: handle a collection (sequence or mapping) of given _type:
 
         _d = []
+        _ret = True
         for idx, i in enumerate(d):  # What about a string?
             _v = None
             try:
                 _v = self._type.parse(i, parent=self)
                 _d.insert(idx, _v)  # append?
             except ConfigurationError as err:
+                _lc = d.lc
                 _value_error("[%d]" % idx, d, _lc, "Wrong item in the given sequence!")
                 pprint(err)
                 _ret = False
