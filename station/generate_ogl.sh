@@ -15,8 +15,9 @@ IMG="$U/${I}:${IMAGE_VERSION}" # IMG="$APP" #IMG="$U/$I:$APP"
 ID=$(docker images | awk '{ print "[" $1 ":" $2 "]" }' | sort | uniq | grep "\[${IMG}\]")
 
 if [ -z "$ID" ]; then
-  echo "ERROR: no such image '${IMG}'"
-  exit 2
+  echo "NOTE: no dummy image '${IMG}', pulling..."
+  docker pull "${IMG}" || exit $?
+#  exit 2
 fi
 
 #shift
@@ -34,8 +35,8 @@ docker rm -vf $C 1>&2 || true
 docker rmi -f --no-prune=false $D 1>&2 || true
 
 
-R="-it -a stdin -a stdout -a stderr --label is_top_app=0 --ipc=host --net=host --pid=host -v /etc/localtime:/etc/localtime:ro -v /tmp/:/tmp/:rw"
-O="--skip-startup-files --no-kill-all-on-exit --quiet --skip-runit"
+R="-it -a stdin -a stdout -a stderr --label is_top_app=0 --ipc=host --net=host -v /etc/localtime:/etc/localtime:ro -v /tmp/:/tmp/:rw"
+O="/sbin/my_init --skip-startup-files --quiet --skip-runit"
 
 ## Create $C conainer out of $IMG and run customization script in it:
 docker run $R --name $C $IMG $O -- bash -c 'customize.sh' 1>&2
@@ -61,7 +62,10 @@ rm -Rf $G 1>&2 || true
 
 ## generate target archive $G:
 # TODO: --recursion ? ADDEDFILES=/bin/true /lib/x86_64-linux-gnu/libc.so.6 /lib64/ld-linux-x86-64.so.2 /usr/lib/x86_64-linux-gnu/ ?
-docker run $R --rm $D $O -- bash -c "tar czvf $G --hard-dereference --dereference $A && chmod a+rw $G"
+docker run $R --rm $D $O -- bash -c "tar czvf $G --hard-dereference --dereference $A && chmod a+rw $G" && \
+(echo "Temporary OGL patch is in $G, copying to $PWD..."; cp "$G" .; )
 
 ## post-cleanup:
 docker rmi -f --no-prune=false $D 1>&2 || true
+
+
