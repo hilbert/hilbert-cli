@@ -152,7 +152,7 @@ fi
 ## @fn cmd_usage Show CLI usage help
 function cmd_usage() {
     cat << EOF
-usage: ${TOOL} [-h] [-p] [-V] [-v | -q] subcommand
+usage: ${TOOL} [-h] [-d|-D] [-t|-T] [-V] [-v|-q] subcommand
 
 Hilbert - client part for Linux systems
 
