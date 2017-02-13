@@ -43,7 +43,7 @@ declare -ir LOCKFD=99
 
 ## PRIVATE flock WRAPPER API
 function _lock()             { flock "-$1" ${LOCKFD}; }
-function _no_more_locking()  { _lock u; _lock xn && rm -f "${LOCKFILE}"; }
+function _no_more_locking()  { _lock u; _lock xn && rm -f "${LOCKFILE}"; exec 2>&4 1>&3; }
 function _prepare_locking()  { eval "exec $LOCKFD>\"$LOCKFILE\""; trap _no_more_locking EXIT; }
 
 ## PUBLIC flock WRAPPER API
@@ -152,7 +152,7 @@ fi
 ## @fn cmd_usage Show CLI usage help
 function cmd_usage() {
     cat << EOF
-usage: ${TOOL} [-h] [-p] [-V] [-v | -q] subcommand
+usage: ${TOOL} [-h] [-d|-D] [-t|-T] [-V] [-v|-q] subcommand
 
 Hilbert - client part for Linux systems
 
@@ -370,7 +370,7 @@ while getopts ":hqtTdDvV" opt; do   # NOTE: removed 'p' for now
         ;;
     d )
         DEBUG "Turning on dry-run mode..."
-        DRY_RUN="dry-run-mode"
+        DRY_RUN="Dry-Run-Mode"
         ;;
     D )
         DEBUG "Turning off dry-run mode..."
@@ -440,7 +440,7 @@ function _service_get_type() {
 
 function _service_get_field() {
     local k="$1:$2"
-    echo "${services_and_applications[$k]}"
+    echo "${hilbert_station_services_and_applications[$k]}"
     return $?
 }
 
@@ -556,18 +556,49 @@ function cmd_install_station_config() {
 ## @fn cmd_read_configuration
 function cmd_read_configuration() {
     if [[ ! -r "${HILBERT_CONFIG_FILE}" ]]; then
-        ERROR "Could not read configuration from '${HILBERT_CONFIG_FILE}'!"
+        ERROR "Configuration file '${HILBERT_CONFIG_FILE}' is not readable ($(ls -la ${HILBERT_CONFIG_FILE})!"
         exit 1
     fi
 
-    # NOTE: read station configuration:
+    # NOTE: try to read/check station configuration only once (if it is valid):
+    declare -p "hilbert_station_services_and_applications" 1>>/dev/null 2>&1
+    if [[ $? -eq 0 ]]; then
+        DEBUG "Configuration file has been loaded already!"
+        return 0
+    fi
+
+    declare -p "hilbert_station_profile_services" 1>>/dev/null 2>&1
+    if [[ $? -eq 0 ]]; then
+        DEBUG "Configuration file has been loaded already!"
+        return 0
+    fi
+
+    declare -p "hilbert_station_profile_services" 1>>/dev/null 2>&1
+    if [[ $? -eq 0 ]]; then
+        DEBUG "Configuration file has been loaded already!"
+        return 0
+    fi
+
     source "${HILBERT_CONFIG_FILE}"  # TODO: FIXME: only pass declare ... key="...value..."!?
+    local _ret=$?
 
-    if [[ -v services_and_applications ]]; then
-        ERROR "Configuration file '${HILBERT_CONFIG_FILE}' does not set 'services_and_applications'!"
+    declare -p "hilbert_station_services_and_applications" 1>>/dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        ERROR "Wrong local configuration file: '${HILBERT_CONFIG_FILE}'! NOTE: it should set at least 'hilbert_station_services_and_applications'!"
         exit 1
     fi
-    return $?
+
+    declare -p "hilbert_station_profile_services" 1>>/dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        DEBUG "Strange local configuration file: '${HILBERT_CONFIG_FILE}': 'hilbert_station_profile_services' is not set!"
+    fi
+
+    declare -p "hilbert_station_compatible_applications" 1>>/dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        DEBUG "Strange local configuration file: '${HILBERT_CONFIG_FILE}': 'hilbert_station_compatible_applications' is not set!"
+    fi
+
+    return ${_ret}
 }
 
 ## @fn cmd_init
@@ -577,7 +608,7 @@ function cmd_init() {
 
     if [[ ! -w "/dev/pts/ptmx" ]]; then
         if [[ -n "${DRY_RUN}" ]]; then
-            echo "Running: [chmod a+rw /dev/pts/ptmx]..."
+            echo "[${DRY_RUN}] Running: [chmod a+rw /dev/pts/ptmx]..."
         else
             DEBUG "Trying to fix '/dev/pts/ptmx'-permissions:"
 
@@ -613,7 +644,7 @@ function cmd_init() {
     if [[ -n "${DOCKER_GC}" ]]; then
         if hash "${DOCKER_GC}" 2>/dev/null; then
             if [[ -z "${DRY_RUN}" ]]; then
-                DEBUG "Running: [${DOCKER_GC}]: "
+                echo "[${DRY_RUN}] Running: [${DOCKER_GC}]: "
 #                ${DOCKER_GC}  # NOTE: actually run this in production!
             else
                 echo "Running: [${DOCKER_GC}]"
@@ -671,6 +702,8 @@ function cmd_start_service() {
         exit 1
     fi
 
+    cmd_read_configuration
+
     local t
     t="$(_service_get_type "${arg}")"
 
@@ -702,6 +735,8 @@ function cmd_init_service() {
         cmd_usage
         exit 1
     fi
+
+    cmd_read_configuration
 
     local t
     t="$(_service_get_type "${arg}")"
@@ -737,6 +772,8 @@ function cmd_restart_service() {
         exit 1
     fi
 
+    cmd_read_configuration
+
     local t
     t="$(_service_get_type "${arg}")"
 
@@ -771,6 +808,8 @@ function cmd_stop_service() {
         exit 1
     fi
 
+    cmd_read_configuration
+
     local t
     t="$(_service_get_type "${arg}")"
 
@@ -797,7 +836,7 @@ function cmd_compose_start() {
     export HILBERT_APPLICATION_ID="$arg"  # NOTE: To be set as env. variable APP_ID within container...
 
     ## NOTE: Simplify COMPOSE_FILE -> launch!
-    local PLAIN_COMPOSE_FILE="${HILBERT_CONFIG_DIR}/docker-compose.plain.${HILBERT_APPLICATION_ID}.yaml"
+    local PLAIN_COMPOSE_FILE="${HILBERT_CONFIG_DIR}/cached_for_${HILBERT_APPLICATION_ID}.${HILBERT_APPLICATION_FILE:-docker-compose.yml}"
     if [[ -r ${PLAIN_COMPOSE_FILE} ]]; then
         export COMPOSE_FILE="${PLAIN_COMPOSE_FILE}"
     else
@@ -827,7 +866,7 @@ function cmd_compose_init() {
     export COMPOSE_FILE="${HILBERT_APPLICATION_FILE:-docker-compose.yml}"  # Default value
     export HILBERT_APPLICATION_ID="$arg"  # NOTE: To be set as env. variable APP_ID within container...
 
-    local PLAIN_COMPOSE_FILE="${HILBERT_CONFIG_DIR}/docker-compose.plain.${HILBERT_APPLICATION_ID}.yaml"
+    local PLAIN_COMPOSE_FILE="${HILBERT_CONFIG_DIR}/cached_for_${HILBERT_APPLICATION_ID}.${HILBERT_APPLICATION_FILE:-docker-compose.yml}"
     DEBUG "Trying to simplify: '${COMPOSE_FILE}' -> '${PLAIN_COMPOSE_FILE}': "
     cmd_docker_compose config > "${PLAIN_COMPOSE_FILE}"
     ## NOTE: running config once should be enough... ?
@@ -863,7 +902,7 @@ function cmd_compose_restart() {
     export HILBERT_APPLICATION_ID="$arg"  # NOTE: To be set as env. variable APP_ID within container...
 
     ## NOTE: Simplify COMPOSE_FILE -> launch!
-    local PLAIN_COMPOSE_FILE="${HILBERT_CONFIG_DIR}/docker-compose.plain.${HILBERT_APPLICATION_ID}.yaml"
+    local PLAIN_COMPOSE_FILE="${HILBERT_CONFIG_DIR}/cached_for_${HILBERT_APPLICATION_ID}.${HILBERT_APPLICATION_FILE:-docker-compose.yml}"
     if [[ -r ${PLAIN_COMPOSE_FILE} ]]; then
         export COMPOSE_FILE="${PLAIN_COMPOSE_FILE}"
     else
@@ -890,7 +929,7 @@ function cmd_compose_stop() {
     export HILBERT_APPLICATION_ID="$arg"  # NOTE: To be set as env. variable APP_ID within container...
 
     ## NOTE: Simplify COMPOSE_FILE -> launch!
-    local PLAIN_COMPOSE_FILE="${HILBERT_CONFIG_DIR}/docker-compose.plain.${HILBERT_APPLICATION_ID}.yaml"
+    local PLAIN_COMPOSE_FILE="${HILBERT_CONFIG_DIR}/cached_for_${HILBERT_APPLICATION_ID}.${HILBERT_APPLICATION_FILE:-docker-compose.yml}"
     if [[ -r ${PLAIN_COMPOSE_FILE} ]]; then
         export COMPOSE_FILE="${PLAIN_COMPOSE_FILE}"
     else
@@ -931,7 +970,7 @@ function cmd_docker_stop() {
 
 function cmd_docker_compose() {
     if [[ -n "${DRY_RUN}" ]]; then
-        echo "Running: [${DOCKER_COMPOSE} --skip-hostname-check $*]"
+        echo "[${DRY_RUN}] Running: [${DOCKER_COMPOSE} --skip-hostname-check $*]"
         return 0
     fi
 
@@ -975,7 +1014,7 @@ function cmd_docker_compose() {
 
 function cmd_docker() {
     if [[ -n "${DRY_RUN}" ]]; then
-        echo "Running: [${DOCKER} $*]"
+        echo "[${DRY_RUN}] Running: [${DOCKER} $*]"
         return 0
     fi
 
@@ -1310,7 +1349,12 @@ function cmd_stop() {
 function cmd_shutdown() {
     local arg=$@
     DEBUG "Shutting this system down... Arguments: [${arg}]"
-    ${SHUTDOWN} ${arg} || sudo -n -P ${SHUTDOWN} ${arg}
+
+    if [[ -n "${DRY_RUN}" ]]; then
+        echo "[${DRY_RUN}] Running: [${SHUTDOWN} ${arg} || sudo -n -P ${SHUTDOWN} ${arg}]..."
+    else
+        ${SHUTDOWN} ${arg} || sudo -n -P ${SHUTDOWN} ${arg}
+    fi
 }
 
 ## @fn cmd_subcommand_handle Main CLI parser/handler

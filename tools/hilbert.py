@@ -56,6 +56,24 @@ __CLI_VERSION_ID = "$Id$"
 #    log.exception("Uncaught exception! Type: {0}, Value: {1}, TB: {2}".format(type, value, traceback.format_tb(tb)))
 ##sys.excepthook = main_exception_handler # Install exception handler
 
+
+def set_log_level_options(_ctx):
+    if 'verbose' in _ctx:
+        c = _ctx['verbose']
+        if c is None:
+            c = 0
+        for i in range(c):
+            add_HILBERT_STATION_OPTIONS('-v')
+
+    if 'quiet' in _ctx:
+        c = _ctx['quiet']
+        if c is None:
+            c = 0
+        for i in range(c):
+            add_HILBERT_STATION_OPTIONS('-q')
+
+
+
 @subcmd('cfg_verify', help='verify the correctness of Hilbert Configuration .YAML file')
 def cmd_verify(parser, context, args):
     log.debug("Running '{}'".format('cfg_verify'))
@@ -66,9 +84,12 @@ def cmd_verify(parser, context, args):
     args = parser.parse_args(args)
     cfg = input_handler(parser, vars(context), args)
 
-    assert cfg is not None
+    if cfg is not None:
+        print("Input is a valid Hilbert configuration!")
+    else:
+        print("Input seems to be invalid Hilbert configuration!")
+        sys.exit(1)
 
-    log.debug("Done")
     return args
 
 
@@ -95,8 +116,6 @@ def input_handler(parser, ctx, args):
         else:
             fn = os.path.join('.', 'Hilbert.yml')
             log.info("Missing input file specification: using default: '{}'!".format(fn))
-
-
 
     if (fn is not None) and (df is not None):
         log.error("Input file specification clashes with the input dump specification: specify a single input source!")
@@ -228,7 +247,6 @@ def cmd_query(parser, context, args):
         log.info("Writing the configuration into '{}'...".format(od))
         pickle_dump(od, obj)
 
-    log.debug("Done")
     return args
 
 
@@ -261,7 +279,6 @@ def cmd_list_applications(parser, context, args):
     else:
         print(yaml_dump(obj))
 
-    log.debug("Done")
     return args
 
 
@@ -368,7 +385,6 @@ def cmd_list_stations(parser, context, args):
 
         print(']')
 
-    log.debug("Done")
     return args
 
 
@@ -401,7 +417,6 @@ def cmd_list_profiles(parser, context, args):
     else:
         print(yaml_dump(obj))
 
-    log.debug("Done")
     return args
 
 
@@ -434,7 +449,6 @@ def cmd_list_groups(parser, context, args):
     else:
         print(yaml_dump(obj))
 
-    log.debug("Done")
     return args
 
 
@@ -467,14 +481,13 @@ def cmd_list_services(parser, context, args):
     else:
         print(yaml_dump(obj))
 
-    log.debug("Done")
     return args
-
 
 # NOTE: just a helper ATM
 def cmd_action(parser, context, args, Action=None, appIdRequired=False):
     args = parser.parse_args(args)
     _args = vars(args)
+    _ctx = vars(context)
 
     action = Action
     if action is None:
@@ -506,6 +519,7 @@ def cmd_action(parser, context, args, Action=None, appIdRequired=False):
     elif 'action_args' in _args:
         action_args = _args.get('action_args', None)
 
+
     stations = None
     log.debug("Validating given StationID: '%s'...", stationId)
     try:
@@ -519,6 +533,7 @@ def cmd_action(parser, context, args, Action=None, appIdRequired=False):
 
     if stationId not in stations.get_data():
         log.error("Invalid StationID (%s)!", stationId)
+        print()
         sys.exit(1)
 
     station = stations.get_data()[stationId]
@@ -526,6 +541,9 @@ def cmd_action(parser, context, args, Action=None, appIdRequired=False):
 
     log.debug("StationID is valid according to the Configuration!")
     log.debug("Running action: '{0} {1}' on station '{2}'".format(action, str(action_args), stationId))
+
+    set_log_level_options(_ctx)
+
     try:
         station.run_action(action, action_args)  # NOTE: temporary API for now
     except:
@@ -551,7 +569,6 @@ def cmd_start(parser, context, args):
 
     cmd_action(parser, context, args, Action=action, appIdRequired=False)
 
-    log.debug("Done")
     return args
 
 
@@ -572,7 +589,6 @@ def cmd_stop(parser, context, args):
 
     cmd_action(parser, context, args, Action=action, appIdRequired=False)
 
-    log.debug("Done")
     return args
 
 
@@ -593,7 +609,6 @@ def cmd_cfg_deploy(parser, context, args):
 
     cmd_action(parser, context, args, Action=action, appIdRequired=False)
 
-    log.debug("Done")
     return args
 
 
@@ -615,7 +630,6 @@ def cmd_app_start(parser, context, args):
 
     cmd_action(parser, context, args, Action=action, appIdRequired=True)
 
-    log.debug("Done")
     return args
 
 
@@ -638,7 +652,6 @@ def cmd_app_stop(parser, context, args):
 
     cmd_action(parser, context, args, Action=action, appIdRequired=True)
 
-    log.debug("Done")
     return args
 
 
@@ -660,7 +673,6 @@ def cmd_app_change(parser, context, args):
 
     cmd_action(parser, context, args, Action=action, appIdRequired=True)
 
-    log.debug("Done")
     return args
 
 
@@ -680,7 +692,6 @@ def cmd_run_action(parser, context, args):
 
     cmd_action(parser, context, args, Action=None, appIdRequired=False)
 
-    log.debug("Done")
     return args
 
 
@@ -691,6 +702,26 @@ class PedanticModeAction(argparse._StoreTrueAction):
     def __call__(self, *args, **kwargs):
         super(PedanticModeAction, self).__call__(*args, **kwargs)
         start_pedantic_mode()
+
+
+class RemoteTraceModeAction(argparse._StoreTrueAction):
+    def __init__(self, *args, **kwargs):
+        super(RemoteTraceModeAction, self).__init__(*args, **kwargs)
+
+    def __call__(self, *args, **kwargs):
+        super(RemoteTraceModeAction, self).__call__(*args, **kwargs)
+        add_HILBERT_STATION_OPTIONS('-t')
+
+
+class CountedDryRunModeAction(argparse._CountAction):
+    def __init__(self, *args, **kwargs):
+        super(CountedDryRunModeAction, self).__init__(*args, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        new_count = argparse._ensure_value(namespace, self.dest, 0) + 1
+        setattr(namespace, self.dest, new_count)
+
+        start_dry_run_mode()  # increase
 
 
 def _version():
@@ -707,10 +738,11 @@ def _version():
     log.debug("logging           version: {}".format(logging.__version__))
     log.debug("semantic_version  version: {}".format(semantic_version.__version__))
 
-
     print("Hilbert Configuration API:     {}".format(Hilbert(None).get_api_version()))
     print("Root Logging Level:            {}".format(logging.getLevelName(logging.getLogger().level)))
     print("PEDANTIC mode:                 {}".format(get_PEDANTIC()))
+    print("DRY_RUN mode:                  {}".format(get_DRY_RUN_MODE()))
+    print("HILBERT_STATION_OPTIONS:       {}".format(get_HILBERT_STATION_OPTIONS()))
 
     d = os.environ.get('HILBERT_SERVER_CONFIG_PATH', None)
     if d is not None:
@@ -720,21 +752,21 @@ def _version():
     if d is not None:
         print("HILBERT_SERVER_CONFIG_SSH_PATH:  {}".format(d))
 
-#    print("INPUT_DIRNAME:                 {}".format(get_INPUT_DIRNAME()))
-    log.debug("Done")
+
+# print("INPUT_DIRNAME:                 {}".format(get_INPUT_DIRNAME()))
 
 
-class ListVersionsAction(argparse.Action):
+class ListVersionsAction(argparse._VersionAction):
     def __init__(self, option_strings, *args, **kwargs):
         super(ListVersionsAction, self).__init__(option_strings=option_strings, *args, **kwargs)
 
     def __call__(self, parser, args, values, option_string=None):
+        set_log_level_options(vars(args))
+#        formatter = parser._get_formatter()
+#        formatter.add_text(version)
+#        parser._print_message(formatter.format_help(), _sys.stdout)
         _version()
-        parser.exit(status=0)
-
-
-# setattr(args, self.dest, values)
-
+        parser.exit()
 
 def main():
     handler = SubCommandHandler(use_subcommand_help=True, enable_autocompletion=True,
@@ -745,9 +777,17 @@ def main():
                          default=argparse.SUPPRESS, required=False,
                          help="turn on pedantic mode")
 
+    handler.add_argument('-t', '--trace', action=RemoteTraceModeAction,
+                         default=argparse.SUPPRESS, required=False,
+                         help="turn on remote verbose-trace mode")
+
+    handler.add_argument('-d', '--dryrun', action=CountedDryRunModeAction,
+                         help="increase dry-run mode")
+
     handler.add_argument('-V', '--version', action=ListVersionsAction,
-                         nargs=0, default=argparse.SUPPRESS, required=False, type=None, metavar=None,
                          help="show %(prog)s's version and exit")
+    #              nargs=0, default=argparse.SUPPRESS, required=False, type=None, metavar=None,
+
 
     _argv = sys.argv[1:]
 
@@ -755,10 +795,11 @@ def main():
     if len(_argv) == 0:
         log.debug("No command arguments given => Showing usage help!")
         _argv = ['-h']
-    #        handler.print_help()
+    # handler.print_help()
 
     args = handler.run(_argv)
-    handler.exit(status=0)
+    handler.exit()
+
 
 if __name__ == "__main__":
     main()

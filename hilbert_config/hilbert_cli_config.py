@@ -45,6 +45,29 @@ _pp = PP.PrettyPrinter(indent=4)
 PEDANTIC = False  # NOTE: to treat invalid values/keys as errors?
 INPUT_DIRNAME = './'  # NOTE: base location for external resources
 _SSH_CONFIG_PATH = None
+_HILBERT_STATION = '~/bin/hilbert-station'  # NOTE: client-side CLI tool (driver)
+_HILBERT_STATION_OPTIONS = ''  # -v/-q? -t/-d?
+_DRY_RUN_MODE = 0  # 0 - normal mode, 1 => server & client side dry-run mode!, 2 => server-side dry mode (no remote executions!),
+
+
+###############################################################
+def add_HILBERT_STATION_OPTIONS(opt):
+    """Add new option to the global _HILBERT_STATION_OPTIONS string of options to client-side driver"""
+    global _HILBERT_STATION_OPTIONS
+    _save = _HILBERT_STATION_OPTIONS
+
+    if _HILBERT_STATION_OPTIONS:
+        _HILBERT_STATION_OPTIONS = _HILBERT_STATION_OPTIONS + ' ' + str(opt)
+    else:
+        _HILBERT_STATION_OPTIONS = str(opt)
+
+    return _save
+
+
+def get_HILBERT_STATION_OPTIONS():
+    global _HILBERT_STATION_OPTIONS
+    return _HILBERT_STATION_OPTIONS
+
 
 ###############################################################
 def get_SSH_CONFIG():
@@ -130,6 +153,33 @@ def set_INPUT_DIRNAME(d):
 
 
 ###############################################################
+def start_dry_run_mode():
+    global _DRY_RUN_MODE
+
+    if _DRY_RUN_MODE == 0:
+        _DRY_RUN_MODE = 1
+        add_HILBERT_STATION_OPTIONS('-d')
+        log.debug("DRY_RUN mode is ON! Will do remote execution in dry-mode")
+    elif _DRY_RUN_MODE == 1:
+        # NOTE: dry_run mode twice?
+        _DRY_RUN_MODE = 2
+        log.debug("DRY_RUN mode is ON+ON! No remote executions!")
+    else:
+        log.debug("NOTE: DRY_RUN mode is already ON+ON!")
+
+
+def get_DRY_RUN_MODE():
+    return _DRY_RUN_MODE
+
+
+def get_NO_REMOTE_EXEC_MODE():
+    return (get_DRY_RUN_MODE() >= 2)
+
+def get_NO_LOCAL_EXEC_MODE():
+    return (get_DRY_RUN_MODE() >= 1)
+
+
+###############################################################
 def start_pedantic_mode():
     global PEDANTIC
 
@@ -195,17 +245,27 @@ def pprint(cfg):
 
 ###############################################################
 # timeout=None,
-def _execute(_cmd, shell=False, stdout=None, stderr=None):  # True??? Try several times? Overall timeout?
+def _execute(_cmd, shell=False, stdout=None, stderr=None, dry_run=False):  # True??? Try several times? Overall timeout?
+    """Same as subprocess.call but with logging and possible dry-run mode or pedantic error handling"""
+
     __cmd = ' '.join(_cmd)
     # stdout = tmp, stderr = open("/dev/null", 'w')
     # stdout=open("/dev/null", 'w'), stderr=open("/dev/null", 'w'))
     log.debug("Executing shell command: '{}'...".format(__cmd))
 
+    _shell = ''
+    if shell:
+        _shell = ' through the shell'
+
     retcode = None
     try:
         #    with subprocess.Popen(_cmd, shell=shell, stdout=stdout, stderr=stderr) as p:
         # timeout=timeout,
-        retcode = subprocess.call(_cmd, shell=shell, stdout=stdout, stderr=stderr)
+        if dry_run:
+            print("[Dry-Run-Mode] Execute [{0}]{1}".format(__cmd, _shell))
+            retcode = 0
+        else:
+            retcode = subprocess.call(_cmd, shell=shell, stdout=stdout, stderr=stderr)
     except:
         log.exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
         raise
@@ -1058,7 +1118,7 @@ class AutoDetectionScript(StringValidator):
             _cmd = ["bash", "-n", path]
             try:
                 # NOTE: Check for valid bash script
-                retcode = _execute(_cmd)
+                retcode = _execute(_cmd, dry_run=get_NO_LOCAL_EXEC_MODE())
             except:
                 log.exception("Error while running '{}' to check auto-detection script!".format(' '.join(_cmd)))
                 return False  # if PEDANTIC:  # TODO: add a special switch?
@@ -1073,7 +1133,7 @@ class AutoDetectionScript(StringValidator):
             _cmd = ["shellcheck", "-s", "bash", path]
             try:
                 # NOTE: Check for valid bash script
-                retcode = _execute(_cmd)
+                retcode = _execute(_cmd, dry_run=get_NO_LOCAL_EXEC_MODE())
             except:
                 log.exception("Error while running '{}' to check auto-detection script!".format(' '.join(_cmd)))
                 return False
@@ -1213,7 +1273,7 @@ class HostAddress(StringValidator):
             return False
 
         if PEDANTIC:
-            if not self.check_ssh_alias(_h, shell=False, timeout=2):
+            if not self.check_ssh_alias(_h, timeout=2):
                 return False
 
         return True
@@ -1228,6 +1288,9 @@ class HostAddress(StringValidator):
         return self.check_ssh_alias(self.get_address())
 
     def rsync(self, source, target, **kwargs):
+        if get_NO_REMOTE_EXEC_MODE():
+            kwargs['dry_run'] = True
+
         log.debug("About to rsync/ssh %s -> %s:%s...", source, str(self.get_address()), target)
         log.debug("rsync(%s, %s, %s [%s])", self, source, target, str(kwargs))
 
@@ -1266,6 +1329,9 @@ class HostAddress(StringValidator):
 
     # TODO: check/use SSH/SCP calls!
     def scp(self, source, target, **kwargs):
+        if get_NO_REMOTE_EXEC_MODE():
+            kwargs['dry_run'] = True
+
         assert self.recheck()
         _h = self.get_address()  # 'jabberwocky' #
 
@@ -1295,6 +1361,9 @@ class HostAddress(StringValidator):
         return retcode
 
     def ssh(self, cmd, **kwargs):
+        if get_NO_REMOTE_EXEC_MODE():
+            kwargs['dry_run'] = True
+
         assert self.recheck()
         _h = self.get_address()  # 'jabberwocky'
 
@@ -1326,6 +1395,9 @@ class HostAddress(StringValidator):
     def check_ssh_alias(cls, _h, **kwargs):
         """Check for ssh alias"""
         timeout = kwargs.pop('timeout', 2)
+
+        if get_NO_REMOTE_EXEC_MODE():
+            kwargs['dry_run'] = True
 
         log.debug("Checking ssh alias: '{0}'...".format(text_type(_h)))
         try:
@@ -1518,8 +1590,6 @@ class DockerMachine(BaseRecordValidator):
     """DockerMachine :: StationPowerOnMethod"""
 
     # _DM = 'docker-machine'
-    _HILBERT_STATION = '~/bin/hilbert-station'  # TODO: look at station for this..?
-
     def __init__(self, *args, **kwargs):
         super(DockerMachine, self).__init__(*args, **kwargs)
 
@@ -1571,9 +1641,9 @@ class DockerMachine(BaseRecordValidator):
         _n = self.get_vm_name()
 
         # DISPLAY =:0
-        _cmd = [self._HILBERT_STATION, 'dm_start', _n]  # self._DM
+        _cmd = [_HILBERT_STATION, _HILBERT_STATION_OPTIONS, 'dm_start', _n]  # self._DM
         try:
-            _ret = _a.ssh(_cmd, shell=True)
+            _ret = _a.ssh(_cmd, shell=True)  # TODO: check for that shell=True!!!???
         except:
             s = "Could not power-on virtual station {0} (at {1})".format(_n, _a)
             if not PEDANTIC:
@@ -1635,7 +1705,7 @@ class WOL(BaseRecordValidator):
         _cmd = [self._WOL, _MAC]  # NOTE: avoid IP for now? {"-i", _address, }
         __cmd = ' '.join(_cmd)
         try:
-            retcode = _execute(_cmd, shell=False)
+            retcode = _execute(_cmd, dry_run=get_NO_LOCAL_EXEC_MODE())
             assert retcode is not None
             if not retcode:
                 log.debug("Command ({}) execution success!".format(__cmd))
@@ -1662,7 +1732,7 @@ class WOL(BaseRecordValidator):
         _cmd = [self._WOL, "-i", _address, _MAC]
         __cmd = ' '.join(_cmd)
         try:
-            retcode = _execute(_cmd, shell=False)
+            retcode = _execute(_cmd, dry_run=get_NO_LOCAL_EXEC_MODE())
             assert retcode is not None
             if not retcode:
                 log.debug("Command ({}) execution success!".format(__cmd))
@@ -1975,8 +2045,6 @@ class Station(BaseRecordValidator):  # Wrapper?
     _client_settings_tag = text_type('client_settings')
     _type_tag = text_type('type')
 
-    _HILBERT_STATION = '~/bin/hilbert-station'
-
     def __init__(self, *args, **kwargs):
         super(Station, self).__init__(*args, **kwargs)
 
@@ -2008,8 +2076,6 @@ class Station(BaseRecordValidator):  # Wrapper?
         self._types = {self._default_type: default_rule}
 
         self._compatible_applications = {}
-
-        self._HILBERT_STATION = '~/bin/hilbert-station'
 
         self._profile = None
 
@@ -2059,7 +2125,7 @@ class Station(BaseRecordValidator):  # Wrapper?
         assert _profile_id is not None
         assert _profile_id != ''
 
-        log.debug("Station's profile ID: %s", _profile_id)
+#        log.debug("Station's profile ID: %s", _profile_id)
 
         return _profile_id
 
@@ -2131,7 +2197,7 @@ class Station(BaseRecordValidator):  # Wrapper?
         assert isinstance(_a, HostAddress)
 
         try:
-            _ret = _a.ssh([self._HILBERT_STATION, "stop"], shell=False)
+            _ret = _a.ssh([_HILBERT_STATION, _HILBERT_STATION_OPTIONS, "stop"])
         except:
             s = "Could not stop Hilbert on the station {}".format(_a)
             if not PEDANTIC:
@@ -2145,7 +2211,7 @@ class Station(BaseRecordValidator):  # Wrapper?
             return False
 
         try:
-            _ret = _a.ssh([self._HILBERT_STATION, "shutdown", "now"], shell=False)
+            _ret = _a.ssh([_HILBERT_STATION, _HILBERT_STATION_OPTIONS, "shutdown", "now"])
         except:
             s = "Could not schedule immediate shutdown on the station {}".format(_a)
             if not PEDANTIC:
@@ -2160,7 +2226,7 @@ class Station(BaseRecordValidator):  # Wrapper?
             return False
 
         try:
-            _ret = _a.ssh([self._HILBERT_STATION, "shutdown"], shell=False)
+            _ret = _a.ssh([_HILBERT_STATION, _HILBERT_STATION_OPTIONS, "shutdown"])
         except:
             s = "Could not schedule delayed shutdown on the station {}".format(_a)
             if not PEDANTIC:
@@ -2232,7 +2298,11 @@ class Station(BaseRecordValidator):  # Wrapper?
                 # NOTE: ATM only compose && Application/ServiceIDs == refs to the same docker-compose.yml!
                 # TODO: NOTE: may differ depending on Station::type!
 
-                tmp.write('declare -Agr services_and_applications=(\\\n')
+                # NOTE: the following variables should be set in order to generate a valid config file:
+                # hilbert_station_services_and_applications
+                # hilbert_station_profile_services
+                # hilbert_station_compatible_applications
+                tmp.write('declare -Agr hilbert_station_services_and_applications=(\\\n')
                 #               ss = []
                 for k in _serviceIDs:
                     s = all_services.get(k, None)  # TODO: check compatibility during verification!
@@ -2276,7 +2346,6 @@ class Station(BaseRecordValidator):  # Wrapper?
                         # TODO: app.check()
 
                         app.copy(tmpdir)
-
                     else:
                         log.warning('Default application %s is not in the list of compatible apps!', app)
 
@@ -2291,10 +2360,10 @@ class Station(BaseRecordValidator):  # Wrapper?
             # NOTE: tmp is now generated!
 
             try:
-                #            _cmd = ["scp", path, "{0}:/tmp/{1}".format(_a, os.path.basename(path))]  # self._HILBERT_STATION, 'deploy'
+                #            _cmd = ["scp", path, "{0}:/tmp/{1}".format(_a, os.path.basename(path))]  # _HILBERT_STATION, 'deploy'
                 # _a.scp(path, remote_tmpdir, shell=False)
                 log.debug("About to deploy %s -> %s... (%s)", tmpdir, remote_tmpdir, str(_a.get_address()))
-                _a.rsync(tmpdir, remote_tmpdir, shell=False)
+                _a.rsync(tmpdir, remote_tmpdir) #  , dry_run=dry_run)
             except:
                 log.debug("Exception during deployment!")
                 s = "Could not deploy new local settings to {}".format(_a)
@@ -2312,11 +2381,15 @@ class Station(BaseRecordValidator):  # Wrapper?
         finally:
             log.debug("Temporary Station Configuration File: {}".format(path))
             os.umask(saved_umask)
-            shutil.rmtree(tmpdir)  # NOTE: tmpdir is not empty!
 
-        _cmd = [self._HILBERT_STATION, "init", remote_tmpdir]
+            if not get_NO_LOCAL_EXEC_MODE():
+                shutil.rmtree(tmpdir)  # NOTE: tmpdir is not empty!
+            else:
+                print("[Dry-Run-Mode] Keeping temporary location [{0}] that was prepared for deployment to [{1}]".format(tmpdir, str(_a.get_address())))
+
+        _cmd = [_HILBERT_STATION, _HILBERT_STATION_OPTIONS, "init", remote_tmpdir]
         try:
-            _ret = _a.ssh(_cmd, shell=False)
+            _ret = _a.ssh(_cmd)
         except:
             s = "Could not initialize the station using the new configuration file with {}".format(' '.join(_cmd))
             if not PEDANTIC:
@@ -2334,6 +2407,7 @@ class Station(BaseRecordValidator):  # Wrapper?
             # TODO: what about other external resources? docker-compose*.yml etc...?
             # TODO: restart hilbert-station?
 
+
         #        raise NotImplementedError("Cannot deploy local configuration to this station!")
         return True
 
@@ -2344,7 +2418,7 @@ class Station(BaseRecordValidator):  # Wrapper?
         assert isinstance(_a, HostAddress)
 
         try:
-            _ret = _a.ssh([self._HILBERT_STATION, "app_change", app_id], shell=False)
+            _ret = _a.ssh([_HILBERT_STATION, _HILBERT_STATION_OPTIONS, "app_change", app_id])
         except:
             s = "Could not change top application on the station '{0}' to '{1}'".format(_a, app_id)
             if not PEDANTIC:
@@ -2363,6 +2437,7 @@ class Station(BaseRecordValidator):  # Wrapper?
         assert _d is not None
 
         poweron = _d.get(self._poweron_tag, None)
+
         if poweron is None:
             log.error("Missing/wrong Power-On Method configuration for this station!")
             raise Exception("Missing/wrong Power-On Method configuration for this station!")
@@ -2691,36 +2766,40 @@ class BaseList(BaseValidator):
         self._types = {}
 
     def validate(self, d):
+        """String or a sequence of strings"""
+
+#        log.debug("LIST INPUT: [%s], LIST INPUT TYPE: [%s]", d, type(d))
+
         if d is None:
             d = self._default_input_data
 
         assert self._default_type is not None
         assert len(self._types) > 0
 
-        _lc = d.lc
 
         # NOTE: determine the class of items based on the version and sample data
         self._type = self._types[self._default_type]
         assert self._type is not None
 
         if (not isinstance(d, (list, dict, tuple, set))) and isinstance(d, string_types):
-            try:
+            try:  # NOTE: Test single string item:
                 _d = [self._type.parse(StringValidator.parse(d, parent=self))]
-                self.get_data(_d)
+                self.set_data(_d)
                 return True
             except:
                 pass  # Not a single string entry...
 
-        # list!?
-        _ret = True
+        # NOTE: handle a collection (sequence or mapping) of given _type:
 
         _d = []
+        _ret = True
         for idx, i in enumerate(d):  # What about a string?
             _v = None
             try:
                 _v = self._type.parse(i, parent=self)
                 _d.insert(idx, _v)  # append?
             except ConfigurationError as err:
+                _lc = d.lc
                 _value_error("[%d]" % idx, d, _lc, "Wrong item in the given sequence!")
                 pprint(err)
                 _ret = False
@@ -3145,10 +3224,16 @@ class Hilbert(BaseRecordValidator):
                 _ret = False
 
             s = _stations[k]
+            assert s is not None
             assert isinstance(s, Station)
             p_ref = s.get_profile_ref()
-            assert p_ref in _profiles
+
+            if p_ref not in _profiles:
+                log.error("bad configuration: station '%s' has unknown/invalid profile specification: '%s'", k, p_ref)
+                return False
+
             p = _profiles[p_ref]
+            assert p is not None
             p.add_station(k, s)
 
             s.set_profile(p)

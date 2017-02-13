@@ -116,6 +116,9 @@ class TestValidate:
     def test_single(self, capsys):
         hilbert_validation('singleHostHilbert.yml', 'singleHostHilbert.yml.data.pickle')
 
+    def test_groups(self, capsys):
+        hilbert_validation('miniGroupHilbert.yml', 'miniGroupHilbert.yml.data.pickle')
+
     def test_non_unique_app_service_ids(self, capsys):
         test_output = None
 

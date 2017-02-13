@@ -1,0 +1,91 @@
+Version: '0.9'
+Services:
+Profiles:
+  P1:
+    services: []
+    description: P1
+    name: P1
+    supported_types: []
+
+  P2:
+    services: []
+    description: P2
+    name: P2
+    supported_types: []
+Stations:
+  S1:
+    type: hidden
+    name: S1
+    description: S1
+    profile: P1
+    omd_tag: standalone
+    address: localhost
+    hidden: true
+
+  S2:
+    type: hidden
+    name: S1
+    description: S1
+    profile: P2
+    omd_tag: standalone
+    address: localhost
+    hidden: true
+
+Groups:
+  group_include: { include: S1 }
+  group_include_seq: { include: [S1] }
+  group_include_seq2: { include: [group_include, group_include_seq] }
+
+  group_exclude: { S1, exclude: S1 }
+  group_exclude_seq: { S1, exclude: [S1] }
+  group_exclude_seq2: { S1, exclude: [group_exclude, group_exclude_seq] }
+
+  group_intersectwith: { S1, intersect_with: S1 }
+  group_intersectwith_seq: { S1, intersect_with: [S1] }
+  group_intersectwith_seq2: { S1, intersect_with: [group_intersectwith, group_intersectwith_seq] }
+
+  group_spec: { S1, include: group_include, intersect_with: group_intersectwith, exclude: group_exclude }
+  group_spec_seq: { S1, include: [ group_include ], intersect_with: [group_intersectwith], exclude: [group_exclude] }
+  group_spec_seq2: { S1, include: [ group_include, group_include_seq ], intersect_with: [group_intersectwith, group_intersectwith_seq], exclude: [group_exclude, group_exclude_seq] }
+
+  # all the following groups are {S1, S2}
+  test_group_short_union1_12: {S1, S2}
+  test_group_short_union1_21: {S2, S1}
+  test_group_short_union2_12: {S1, P2}
+  test_group_short_union2_21: {S2, P1}
+  test_group_short_union3:    {P1, P2}
+
+  test_group_union1_12: { include: [S1, S2] }
+  test_group_union1_21: { include: [S2, S1] }
+  test_group_union2_12: { include: [S1, P2] }
+  test_group_union2_21: { include: [S2, P1] }
+  test_group_union3:    { include: [P1, P2] }
+
+  test_group_mix_union1_12: {S1, include: S2}
+  test_group_mix_union1_21: {S2, include: S1}
+  test_group_mix_union2_12: {S1, include: P2}
+  test_group_mix_union2_21: {S2, include: P1}
+  test_group_mix_union3:    {P1, include: P2}
+
+  # The following all are {S2}
+  test_group_exclude_short1: { include: [S1, S2], exclude: S1 }
+  test_group_exclude_short2: { include: [S1, S2], exclude: P1 }
+
+  test_group_exclude1: { include: [S1, S2], exclude: [S1] }
+  test_group_exclude2: { include: [S1, S2], exclude: [P1] }
+  test_group_exclude3: { include: [S1, S2], exclude: [S1, P1] }
+
+  # all the following groups are empty sets
+  test_group_short_intersect1: {include: S1, intersect_with: S2}
+  test_group_short_intersect2: {include: S2, intersect_with: S1}
+  test_group_short_intersect3: {include: S1, intersect_with: P2}
+  test_group_short_intersect4: {include: S2, intersect_with: P1}
+  test_group_short_intersect5: {include: P1, intersect_with: P2}
+
+  test_group_intersect1: {include: [S1], intersect_with: [S2]}
+  test_group_intersect2: {include: [S2], intersect_with: [S1]}
+  test_group_intersect3: {include: [S1], intersect_with: [P2]}
+  test_group_intersect4: {include: [S2], intersect_with: [P1]}
+  test_group_intersect5: {include: [P1], intersect_with: [P2]}
+
+Applications:

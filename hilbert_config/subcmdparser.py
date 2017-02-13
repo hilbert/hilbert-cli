@@ -313,5 +313,5 @@ class HelpAllAction(argparse.Action):  ### _HelpAction??
             except:
                 pass
 
-        parser.exit(0)
+        parser.exit()
         setattr(args, self.dest, values)
