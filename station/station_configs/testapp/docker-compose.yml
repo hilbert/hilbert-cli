@@ -1,0 +1,107 @@
+version: '2.1'
+services:
+  base:
+    image: hilbert/base:${IMAGE_VERSION:-latest}
+    volumes:
+     - /tmp:/tmp:rw
+     - /etc/localtime:/etc/localtime:ro 
+#     - ${PWD}:/HILBERT_CONFIG
+    labels:
+     - "is_top_app=0"
+     - "APP_ID=${HILBERT_APPLICATION_ID:-unset_application_service_id}"
+#    working_dir: /HILBERT_CONFIG
+    privileged: false
+    network_mode: "host"
+    ipc: host
+    environment:
+     - "CUPS_SERVER=${HILBERT_CUPS_SERVER}"
+     - "ALSA_CARD=${HILBERT_ALSA_CARD:-0}"
+     - "LANGUAGE=${HILBERT_PREFERRED_LANGUAGE:-en}"
+     - "MOUSE_CURSOR=${HILBERT_HIDE_MOUSE_CURSOR:-on}"
+     - "CUSTOMIZATION=${HILBERT_CUSTOMIZATIONS:-alsa nv}"
+     - "HB_URL=${HILBERT_HEARTBEAT_URL:-http://127.0.0.1:8888}"
+     - "APP_ID=${HILBERT_APPLICATION_ID:-unset_application_service_id}"
+     - "COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-hilbert}"
+#     - CFG_DIR=/HILBERT_CONFIG
+    entrypoint:
+     - /bin/sh
+
+  ddd:
+    extends: 
+      service: base
+    image: hilbert/dd:${IMAGE_VERSION:-latest}
+    labels:
+     - "is_top_app=0"
+    volumes:
+     - ${DOCKER_SOCKET}:${DOCKER_SOCKET}
+    environment:
+     - "NO_PROXY=${DOCKER_SOCKET}"
+     - DOCKER_HOST
+    entrypoint: 
+     - /bin/sh
+
+  admin:
+    extends: 
+      service: ddd
+    volumes:
+     - /dev:/dev:rw
+     - /run/udev:/run/udev
+     - /sys/fs/cgroup:/sys/fs/cgroup:ro
+     - /run/systemd:/run/systemd
+     - /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket
+    labels:
+     - "is_top_app=0"
+    cap_add:
+     - SYS_ADMIN
+     - NET_ADMIN
+     - ALL
+
+  pa:
+    extends:
+      service: admin
+    labels:
+     - "is_top_app=0"
+    volumes:
+     - ${PULSE_SERVER}:/run/pulse/native
+     - ${PULSE_COOKIE}:/run/pulse/cookie
+    environment:
+     - PULSE_SERVER=/run/pulse/native
+     - PULSE_COOKIE=/run/pulse/cookie
+
+  gui:
+    image: hilbert/gui:${IMAGE_VERSION:-latest}
+    extends: 
+      file: docker-compose.yml
+      service: pa
+    labels:
+     - "is_top_app=0"
+    environment:
+     - QT_X11_NO_MITSHM=1
+     - XLIB_SKIP_ARGB_VISUALS=1
+     - "XAUTHORITY=${HILBERT_XAUTH:-/tmp/.docker.xauth}"
+     - DISPLAY
+#=${DISPLAY:-:0}"
+    stdin_open: false
+    tty: false
+    ipc: host
+    privileged: false
+    network_mode: "host"
+    stdin_open: false
+    tty: false
+    entrypoint: 
+     - /sbin/my_init
+     - --skip-runit
+     - --skip-startup-files
+     - --
+
+  kiosk_base:
+    extends:
+      service: gui
+    image: hilbert/kiosk:${IMAGE_VERSION:-latest}
+    restart: "on-failure:5"
+    labels:
+     - "is_top_app=1"
+    environment:
+     - "HB_INIT_TIMEOUT=9"
+     - "APP_ID=${HILBERT_APPLICATION_ID:-web_kiosk}"
+    privileged: false

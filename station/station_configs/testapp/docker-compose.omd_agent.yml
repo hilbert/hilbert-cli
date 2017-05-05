@@ -1,0 +1,25 @@
+version: '2.1'
+services:
+  omd_agent:
+    extends:
+      file: docker-compose.yml
+      service: ddd
+    image: hilbert/omd_agent:${IMAGE_VERSION:-latest}
+    environment:
+     - "HB_INIT_TIMEOUT=0"
+    ports:
+     - "6556"
+     - "8888"
+#     - "${HILBERT_HEARTBEAT_PORT:-8888}"
+    stdin_open: false
+    tty: false
+    restart: "on-failure:5"
+    labels:
+     - "is_top_app=0"
+    entrypoint:
+     - /sbin/my_init
+     - --skip-runit
+     - --skip-startup-files
+     - --
+    command: 
+     - omd_agent_entrypoint.sh

@@ -1,0 +1,17 @@
+version: '2.1'
+services:
+  kiosk_browser_testapp:
+    extends:
+      file: docker-compose.yml
+      service: kiosk_base
+    environment:
+     - "APP_ID=${HILBERT_APPLICATION_ID:-kiosk_browser_testapp}"
+    entrypoint: 
+     - /sbin/my_init 
+     - --skip-runit 
+     - --skip-startup-files
+     - --
+    command:
+     - hb_wrapper.sh
+     - launch.sh
+     - testapp.sh

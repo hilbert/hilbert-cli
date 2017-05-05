@@ -1,0 +1,21 @@
+version: '2.1'
+services:
+  x11vnc:
+    extends:
+      file: docker-compose.yml
+      service: gui
+    labels:
+     - "is_top_app=0"
+    image: hilbert/x11vnc:${IMAGE_VERSION:-latest}
+    restart: "on-failure:5"
+    ports:
+     - "127.0.0.1:5900-5910:5900-5910"
+    environment:
+     - "VNC_PASSWD=${HILBERT_VNC_PASSWD:-1234}"
+    entrypoint:
+     - /sbin/my_init
+     - --skip-runit
+     - --skip-startup-files
+     - --
+    command:
+     - /usr/local/bin/x11vnc.sh
