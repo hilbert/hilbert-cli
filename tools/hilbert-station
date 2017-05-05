@@ -14,6 +14,8 @@
 declare -rg TOOL_SH="$0"
 declare -rg TOOL="$(basename "${TOOL_SH}")" # script_name=`basename "$0"` # script_name="${script_name%.*}"
 
+declare -rg LOGGER="logger --id=$$ -t ${TOOL} "
+
 declare -g LOGLEVEL=2  # WARNING-LEVEL
 declare -g DRY_RUN=""  # NOTE: turn on dry mode (not actual service-runtime action execution) if non-empty
 declare -g hibert_station_process_kill_timeout=8
@@ -92,25 +94,32 @@ function cmd_start_locking() {
 
 function DEBUG() {
     if [[ $LOGLEVEL -le 0 ]]; then
-        echo "DEBUG   [${TOOL}:${FUNCNAME[1]}] $*"
+        local MSG="DEBUG   [${TOOL}:${FUNCNAME[1]}] $*"
+        echo "${MSG}"
+	${LOGGER} -p user.debug "${MSG}"
     fi
     return 0
 }
 function INFO() {
     if [[ $LOGLEVEL -le 1 ]]; then
-        echo "INFO    [${TOOL}:${FUNCNAME[1]}] $*"
+        local MSG="INFO    [${TOOL}:${FUNCNAME[1]}] $*"
+        echo "${MSG}"
+	${LOGGER} -p user.info "${MSG}"
     fi
     return 0
 }
 function WARNING() {
     if [[ $LOGLEVEL -le 2 ]]; then
-        echo "WARNING [${TOOL}:${FUNCNAME[1]}] $*" 1>&2
+        local MSG="WARNING [${TOOL}:${FUNCNAME[1]}] $*"
+	${LOGGER} --stderr -p user.warning "${MSG}"
     fi
     return 0
 }
+
 function ERROR() {
     if [[ $LOGLEVEL -le 3 ]]; then
-        echo "ERROR   [${TOOL}:${FUNCNAME[1]}] $*" 1>&1
+        local MSG="ERROR   [${TOOL}:${FUNCNAME[1]}] $*"
+	${LOGGER} --stderr -p user.err "${MSG}"
     fi
     return 1
 }
@@ -131,11 +140,12 @@ export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-hilbert}"
 # export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-dockapp}"
 
 export HILBERT_OGL="${HILBERT_OGL:-/tmp/OGL.tgz}"
+# ${HILBERT_CONFIG_BASEDIR}/${OGL}
 declare -rg OGL="$(basename "${HILBERT_OGL}")"
 
 export DOCKER="$(readlink -f "${DOCKER:-$(which docker)}")"
 export DOCKER_GC="$(readlink -f "${DOCKER_GC:-$(which docker-gc)}")"
-export DOCKER_COMPOSE="$(readlink -f "${HILBERT_CONFIG_BASEDIR}/compose")"
+export DOCKER_COMPOSE="$(readlink -f "${DOCKER_COMPOSE:-$(which docker-compose)}")"
 
 for d in /usr/sbin/shutdown /sbin/shutdown;
 do

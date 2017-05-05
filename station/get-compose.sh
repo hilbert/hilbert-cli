@@ -5,7 +5,7 @@
 #  ln -s `which docker-compose` "${PWD}/compose"
 #else
  #! Get Docker compose
- DOCKER_COMPOSE_VERSION=1.9.0 # NOTE: update to newer compose version if necessary!
+ DOCKER_COMPOSE_VERSION=1.13.0 # NOTE: update to newer compose version if necessary!
  DOCKER_COMPOSE_BASE_URL="https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}"
 
  DOCKER_COMPOSE_BIN_URL="${DOCKER_COMPOSE_BASE_URL}/docker-compose-$(uname -s)-$(uname -m)"
