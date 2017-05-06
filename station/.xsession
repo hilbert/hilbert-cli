@@ -22,6 +22,13 @@ ps auwwwxf
 docker ps -a
 docker images -a
 
+
+if [ -r /etc/profile.d/hilbert-env.sh ]; then 
+  . /etc/profile.d/hilbert-env.sh
+fi
+
+export HILBERT_STATION="${HILBERT_STATION:-hilbert-station}"
+
 ${HILBERT_STATION} -vV
 
 ${HILBERT_STATION} -v list_services
@@ -37,7 +44,7 @@ while :
 do
 #  ls -la /dev/pts/ptmx
   sudo chmod a+rw /dev/pts/ptmx # || exit $?
-  sudo chvt 7 || exit $?
+  sudo chvt 7 || exit $? # NOTE: compare with nodm.conf!
 
   sleep 120
 done

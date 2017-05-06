@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+### Changed
+### Added
+### Security
+
+## [0.9.0] - 2017-05-06
+
+### Changed
+- Fixed issues due to global system installation 
+
+### Added
+- Helpers due to global system installation 
+- Sample NODM configuration + .xsession
+- Sample station configurations (minimal + testapp)
+- Initial RPM .spec files for a station
+
+## [0.8.0] - 2017-02-13
+
 ### Added
 - [Semantic Versioning](http://semver.org/)
 - Changelog according to (http://keepachangelog.com/)
@@ -34,5 +51,7 @@
 - Proof-of-concept demo scripts and driver images (`:main` and later `:demo`) 
 
 
-[Unreleased]: https://github.com/hilbert/hilbert-cli/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/hilbert/hilbert-cli/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/hilbert/hilbert-cli/compare/v0.8.0...v0.9.0
+[0.8.0]: https://github.com/hilbert/hilbert-cli/compare/v0.8.0...v0.1.0
 [0.1.0]: https://github.com/hilbert/hilbert-cli/compare/v0.0.1...v0.1.0
