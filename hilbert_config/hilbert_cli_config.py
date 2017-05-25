@@ -45,7 +45,7 @@ _pp = PP.PrettyPrinter(indent=4)
 PEDANTIC = False  # NOTE: to treat invalid values/keys as errors?
 INPUT_DIRNAME = './'  # NOTE: base location for external resources
 _SSH_CONFIG_PATH = None
-_HILBERT_STATION = '~/bin/hilbert-station'  # NOTE: client-side CLI tool (driver)
+_HILBERT_STATION = 'hilbert-station'  # NOTE: client-side CLI tool (driver)
 _HILBERT_STATION_OPTIONS = ''  # -v/-q? -t/-d?
 _DRY_RUN_MODE = 0  # 0 - normal mode, 1 => server & client side dry-run mode!, 2 => server-side dry mode (no remote executions!),
 

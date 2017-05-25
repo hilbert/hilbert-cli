@@ -9,7 +9,7 @@ mkdir -p "${LOG_DIR}"
 # latest log-dir - for later use!
 declare -r LOG_LATEST="${LOG_BASEDIR}/latest"
 
-declare -r HILBERT_STATION="${HOME}/bin/hilbert-station"
+declare -r HILBERT_STATION="${HILBERT_STATION:-hilbert-station}"
 declare -r HILBERT_LOG="${LOG_DIR}/autostart.log"
 
 function Status() {

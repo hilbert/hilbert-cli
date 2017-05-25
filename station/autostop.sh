@@ -13,7 +13,7 @@ else
   mkdir -p "${LOG_DIR}"
 fi
 
-declare -r HILBERT_STATION="${HOME}/bin/hilbert-station"
+declare -r HILBERT_STATION="${HILBERT_STATION:-hilbert-station}"
 declare -r HILBERT_LOG="${LOG_DIR}/autostop.log"
 
 function Status() {
