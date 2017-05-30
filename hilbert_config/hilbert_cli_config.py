@@ -400,12 +400,12 @@ class VerboseRoundTripConstructor(RoundTripConstructor):
 class VerboseRoundTripLoader(Reader, RoundTripScanner, RoundTripParser, Composer,
                              VerboseRoundTripConstructor, VersionedResolver):
     def __init__(self, stream, version=None, preserve_quotes=None):
-        Reader.__init__(self, stream)
-        RoundTripScanner.__init__(self)
-        RoundTripParser.__init__(self)
-        Composer.__init__(self)
-        VerboseRoundTripConstructor.__init__(self, preserve_quotes=preserve_quotes)
-        VersionedResolver.__init__(self, version)
+        Reader.__init__(self, stream, loader=self)
+        RoundTripScanner.__init__(self, loader=self)
+        RoundTripParser.__init__(self, loader=self)
+        Composer.__init__(self, loader=self)
+        VerboseRoundTripConstructor.__init__(self, preserve_quotes=preserve_quotes, loader=self)
+        VersionedResolver.__init__(self, version, loader=self)
 
 
 ###############################################################

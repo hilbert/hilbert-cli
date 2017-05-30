@@ -14,11 +14,11 @@ setup(name='hilbert_config',
       classifiers=[''],
       platforms=[''],  # data_files=[('config/templates', ['docker-compose.yml'])],
       install_requires=[
-          'dill>=0.2.5',
-          'semantic_version>=2.6.0',
-          'argparse>=1.4.0',
-          'argcomplete>=1.6.0',
-          'ruamel.yaml>=0.12.15',
+          "dill>=0.2.5",
+          "semantic_version>=2.6.0",
+          "argparse>=1.4.0",
+          "argcomplete>=1.6.0",
+          "ruamel.yaml>=0.14.2",
       ],
       extras_require={
           ':python_version == "2.7"': [
