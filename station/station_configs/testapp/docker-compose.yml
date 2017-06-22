@@ -62,6 +62,7 @@ services:
     labels:
      - "is_top_app=0"
     volumes:
+     - "/etc/pulse:/etc/pulse:ro"
      - ${PULSE_SERVER}:/run/pulse/native
      - ${PULSE_COOKIE}:/run/pulse/cookie
     environment:

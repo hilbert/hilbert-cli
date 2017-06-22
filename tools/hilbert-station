@@ -20,6 +20,8 @@ declare -g LOGLEVEL=2  # WARNING-LEVEL
 declare -g DRY_RUN=""  # NOTE: turn on dry mode (not actual service-runtime action execution) if non-empty
 declare -g hibert_station_process_kill_timeout=8
 
+declare -rg XSETROOT="${XSETROOT:-xsetroot}"
+
 ## NOTE: locking following: http://stackoverflow.com/a/1985512 by Przemyslaw Pawelczyk <przemoc@gmail.com>
 ## NOTE: uses flock from util-linux[-ng]
 ## TODO(?): evaluate other ways according to http://stackoverflow.com/questions/1715137/the-best-way-to-ensure-only-1-copy-of-bash-script-is-running
@@ -266,12 +268,21 @@ function cmd_native_autodetect() {
         (xhost +; xhost "+si:localuser:${USER}"; xhost +si:localuser:root) 1> /dev/null 2>&1 # xhost + localhost;
     fi
 
-   INFO "DISPLAY: ${DISPLAY}, XAUTHORITY: ${XAUTHORITY}, HILBERT_XAUTH: ${HILBERT_XAUTH}"
+   DEBUG "DISPLAY: ${DISPLAY}, XAUTHORITY: ${XAUTHORITY}, HILBERT_XAUTH: ${HILBERT_XAUTH}"
 
    ## Pulse Audio
-   export PULSE_SERVER=${PULSE_SERVER:-/run/user/${UID}/pulse/native}
-   export PULSE_COOKIE=${PULSE_COOKIE:-${HOME}/.config/pulse/cookie}
-   INFO "PULSE_SERVER: ${PULSE_SERVER}, PULSE_COOKIE: ${PULSE_COOKIE}"
+   if [[ ! -S "${PULSE_SERVER}" ]]; then
+     unset PULSE_SERVER
+     unset PULSE_COOKIE
+     [[ -S "/var/run/pulse/native" ]] && export PULSE_SERVER="/var/run/pulse/native"
+     
+     if [[ ! -S "${PULSE_SERVER}" ]]; then
+       export PULSE_SERVER="/run/user/${UID}/pulse/native"
+       export PULSE_COOKIE="${HOME}/.config/pulse/cookie"
+     fi
+   fi
+
+   DEBUG "PULSE_SERVER: ${PULSE_SERVER}, PULSE_COOKIE: ${PULSE_COOKIE}"
 
    # Detect HILBERT_ALSA_CARD??
    return 0
@@ -697,6 +708,15 @@ function cmd_app_change() {
         else
             cmd_stop_service "${APP_ID}"  #  cmd_restart_service "${APP_ID}" ; return 0 # Same Application ID => Same Env.Vars??? :-(
         fi
+        if [[ -n DISPLAY ]]; then
+            DEBUG "Paint X11 after stopping '${APP_ID}'"
+            "${XSETROOT}" -grey
+        fi
+    fi
+
+    if [[ -n DISPLAY ]]; then
+        DEBUG "Paint X11 root grey before starting [$arg]"
+        "${XSETROOT}" -grey
     fi
 
     cmd_start_service "$arg"

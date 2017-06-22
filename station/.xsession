@@ -22,6 +22,31 @@ ps auwwwxf
 docker ps -a
 docker images -a
 
+# unset DISPLAY 
+if [ -r /etc/profile.d/pa_system-env.sh ]; then 
+  . /etc/profile.d/pa_system-env.sh
+fi
+
+if [ -n "${PULSE_SERVER}" ]; then
+
+  echo "PA Server: '${PULSE_SERVER}', Cookie: '${PULSE_COOKIE}'"
+
+  sudo pactl info
+  sudo pactl list 
+
+  #sudo pactl set-card-profile 0 "output:analog-stereo"
+  #sudo pactl set-sink-port 0 "analog-output-headphones"
+
+  # Note: the following tries to workaround the plugged-in headphones issue...
+  # TODO: check whether this has any effect!
+  sudo alsactl restore
+  sudo pactl suspend-sink 0 1
+  sudo pactl suspend-sink 0 0
+  sudo alsactl restore
+
+  sudo pactl set-sink-volume 0 "50%"
+  sudo pactl set-source-volume 0 "100%"
+fi
 
 if [ -r /etc/profile.d/hilbert-env.sh ]; then 
   . /etc/profile.d/hilbert-env.sh
@@ -34,22 +59,21 @@ ${HILBERT_STATION} -vV
 ${HILBERT_STATION} -v list_services
 ${HILBERT_STATION} -v list_applications
 
-${HILBERT_STATION} -v init || exit $?
-${HILBERT_STATION} -v start || exit $?
-#autostart.sh || exit $?
+${HILBERT_STATION} -v init || echo "Hilbert: 'init' failed with error code: $?"
+${HILBERT_STATION} -v start || echo "Hilbert: 'start' failed with error code: $?"
 
-
-sudo chvt ${XDG_VTNR}
+# openbox # NOTE: uncomment if WM is required
 
 # Endless loop (only remote control is expected)
 while : 
 do
 #  ls -la /dev/pts/ptmx
   sudo chmod a+rw /dev/pts/ptmx # || exit $?
-  sudo chvt ${XDG_VTNR} || exit $? # NOTE: compare with nodm.conf!
+  sudo chvt 7 || exit $? # NOTE: compare with nodm.conf!
 
   sleep 120
 done
 
 exit 0
 # exec $HOME/bin/store_wait.sh
+

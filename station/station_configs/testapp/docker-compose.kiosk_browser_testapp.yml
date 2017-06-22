@@ -6,6 +6,7 @@ services:
       service: kiosk_base
     environment:
      - "APP_ID=${HILBERT_APPLICATION_ID:-kiosk_browser_testapp}"
+    privileged: true
     entrypoint: 
      - /sbin/my_init 
      - --skip-runit 
