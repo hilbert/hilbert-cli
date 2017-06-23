@@ -22,12 +22,16 @@ ps auwwwxf
 docker ps -a
 docker images -a
 
+echo "=============== ALSA AUDIO ==============="
+alsa-info.sh --no-upload --stdout --with-devices --with-dmesg --with-aplay --with-amixer --with-alsactl --with-configs 
+
 # unset DISPLAY 
 if [ -r /etc/profile.d/pa_system-env.sh ]; then 
   . /etc/profile.d/pa_system-env.sh
 fi
 
 if [ -n "${PULSE_SERVER}" ]; then
+  echo "=============== PULSEAUDIO ==============="
 
   echo "PA Server: '${PULSE_SERVER}', Cookie: '${PULSE_COOKIE}'"
 
@@ -38,7 +42,6 @@ if [ -n "${PULSE_SERVER}" ]; then
   #sudo pactl set-sink-port 0 "analog-output-headphones"
 
   # Note: the following tries to workaround the plugged-in headphones issue...
-  # TODO: check whether this has any effect!
   sudo alsactl restore
   sudo pactl suspend-sink 0 1
   sudo pactl suspend-sink 0 0
