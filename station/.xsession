@@ -30,6 +30,8 @@ if [ -r /etc/profile.d/pa_system-env.sh ]; then
   . /etc/profile.d/pa_system-env.sh
 fi
 
+amixer -c 0
+
 if [ -n "${PULSE_SERVER}" ]; then
   echo "=============== PULSEAUDIO ==============="
 
@@ -49,6 +51,8 @@ if [ -n "${PULSE_SERVER}" ]; then
 
   sudo pactl set-sink-volume 0 "50%"
   sudo pactl set-source-volume 0 "100%"
+
+  amixer -c 0
 fi
 
 if [ -r /etc/profile.d/hilbert-env.sh ]; then 
