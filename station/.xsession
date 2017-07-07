@@ -19,18 +19,58 @@ xset s off -dpms || exit $?
 xset q
 
 ps auwwwxf
+systemctl status
+
 docker ps -a
 docker images -a
+docker volume ls
 
 echo "=============== ALSA AUDIO ==============="
 alsa-info.sh --no-upload --stdout --with-devices --with-dmesg --with-aplay --with-amixer --with-alsactl --with-configs 
+lspci | grep -i audio
+cat /proc/asound/cards
 
 # unset DISPLAY 
+
+if hash amixer 2>/dev/null; then
+  amixer
+  sudo alsactl restore
+  amixer
+  amixer sset 'Capture' 0 mute
+  amixer sset 'Master' "100%" unmute nocap
+  sudo alsactl store
+ 
+  for ALSA_CARD in $(cat /proc/asound/cards | grep -E '^ *[0-9]+ ' | sed -e 's@^ *@@g' -e 's@ .*$@@g'); 
+  do
+    echo "Card: ${ALSA_CARD}"
+
+    amixer -c "${ALSA_CARD}"
+    sudo alsactl restore "${ALSA_CARD}"
+    amixer -c "${ALSA_CARD}"
+
+    amixer -c "${ALSA_CARD}" -- sset 'Capture' 0 mute
+    amixer -c "${ALSA_CARD}" -- sset 'Master' "100%" unmute nocap
+    amixer -c "${ALSA_CARD}" -- sset 'Auto-Mute Mode' 'Disabled' 
+    amixer -c "${ALSA_CARD}" -- sset 'Loopback Mixing' 'Enabled'
+
+    for CTL in "Beep" "Speaker" "Speaker+LO"; 
+    do
+      amixer -c "${ALSA_CARD}" -- sset "${CTL}" 0 mute nocap
+    done
+
+    for CTL in "Line Out" "PCM" "Headphone" "Digital"; 
+    do
+      amixer -c "${ALSA_CARD}" -- sset "${CTL}" "100%" unmute nocap
+    done
+
+
+    sudo alsactl store "${ALSA_CARD}"
+  done
+fi
+
 if [ -r /etc/profile.d/pa_system-env.sh ]; then 
   . /etc/profile.d/pa_system-env.sh
 fi
-
-amixer -c 0
 
 if [ -n "${PULSE_SERVER}" ]; then
   echo "=============== PULSEAUDIO ==============="
@@ -44,15 +84,13 @@ if [ -n "${PULSE_SERVER}" ]; then
   #sudo pactl set-sink-port 0 "analog-output-headphones"
 
   # Note: the following tries to workaround the plugged-in headphones issue...
-  sudo alsactl restore
   sudo pactl suspend-sink 0 1
   sudo pactl suspend-sink 0 0
-  sudo alsactl restore
 
   sudo pactl set-sink-volume 0 "50%"
   sudo pactl set-source-volume 0 "100%"
 
-  amixer -c 0
+
 fi
 
 if [ -r /etc/profile.d/hilbert-env.sh ]; then 
