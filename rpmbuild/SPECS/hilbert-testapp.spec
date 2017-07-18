@@ -16,7 +16,7 @@ Name:           hilbert-testapp
 Version:        0.9.0
 
 License:        Apache License, Version 2.0
-Release:        2%{?dist}
+Release:        3%{?dist}
 
 URL:            https://github.com/hilbert/%{origname}
 Source:         %{origname}.tar.gz

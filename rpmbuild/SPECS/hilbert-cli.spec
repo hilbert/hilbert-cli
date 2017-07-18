@@ -17,7 +17,7 @@ Name:           hilbert-cli
 Version:        0.9.0
 
 License:        Apache License, Version 2.0
-Release:        2%{?dist}
+Release:        3%{?dist}
 
 URL:            https://github.com/hilbert/%{origname}
 Source:         hilbert-cli.tar.gz
@@ -72,7 +72,7 @@ rm -rf $RPM_BUILD_ROOT
 
 # Install Hilbert Client-tools into a separate location
 mkdir -p %{buildroot}/%{_bin_dir}/
-cp tools/hilbert-station station/{docker-gc,generate_ogl.sh,get-compose.sh} %{buildroot}/%{_bin_dir}/
+cp tools/hilbert-station station/docker-gc station/generate_ogl.sh station/get-compose.sh %{buildroot}/%{_bin_dir}/
 
 # Make sure that 
 # 1. hilbert-station and docker-compose can be found in the PATH

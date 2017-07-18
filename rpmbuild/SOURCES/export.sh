@@ -1,4 +1,6 @@
 #!/bin/bash
 
-cd hilbert-cli && git archive -9 --format tar.gz -o ../hilbert-cli.tar.gz HEAD && cd -
+P="${PWD}"
+
+cd ../../ && git archive -9 --format tar.gz -o $P/hilbert-cli.tar.gz HEAD && cd -
 
