@@ -20,10 +20,10 @@ License:        Apache License, Version 2.0
 Release:        3%{?dist}
 
 URL:            https://github.com/hilbert/%{origname}
-Source:         hilbert-cli.tar.gz
+Source0:         hilbert-cli.tar.gz
 # v%{version}.tar.gz
 # https://github.com/hilbert/hilbert-cli/archive/v%{version}.tar.gz
-#Source1:        OGL.tgz.tar.gz
+Source1:        hilbert-compose-customizer.tar.gz
 
 #hilbert-default-config.tar.gz
 #Source2:        station.cfg
@@ -55,8 +55,9 @@ Moreover %{user} has to be already pre-configured before installing this RPM!
 ## pwd ; ls -la ; echo $RPM_BUILD_ROOT ; echo %{buildroot}; export 
 rm -rf $RPM_BUILD_ROOT
 
-%setup -c
-#?# %setup -a 1
+#%setup
+%setup -c -a 0
+%setup -D -a 1
 
 ##%%%%setup -T -D -a 1
 ##%%autosetup
@@ -71,8 +72,9 @@ rm -rf $RPM_BUILD_ROOT
 
 
 # Install Hilbert Client-tools into a separate location
-mkdir -p %{buildroot}/%{_bin_dir}/
-cp tools/hilbert-station station/docker-gc station/generate_ogl.sh station/get-compose.sh %{buildroot}/%{_bin_dir}/
+mkdir -p %{buildroot}/%{_bin_dir}/ || exit $?
+cp tools/hilbert-station station/docker-gc station/generate_ogl.sh station/get-compose.sh %{buildroot}/%{_bin_dir}/  || exit $?
+cp hilbert-compose-customizer %{buildroot}/%{_bin_dir}/  || exit $?
 
 # Make sure that 
 # 1. hilbert-station and docker-compose can be found in the PATH
@@ -147,6 +149,10 @@ rm -Rf /tmp/minimal
 # docker rmi hello-world:latest
 
 %changelog
+* Tue Jul 18 2017 Alex
+- Updated hilbert-station + added hilbert-compose-customizer
+
+
 * Fri May  5 2017 Alex
 - Fixed and updated hilbert-cli tools
 
