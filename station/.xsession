@@ -14,21 +14,22 @@ echo
 set
 echo
 
-xhost + || exit $?
+xhost +local: || exit $? # TODO	
+
 xset s off -dpms || exit $?
 xset q
 
-ps auwwwxf
-systemctl status
+lsblk -a -O
 
-docker ps -a
-docker images -a
-docker volume ls
+ps auwwwxf
+
+sudo systemctl status --system
+sudo systemctl status --system pulseaudio.service
 
 echo "=============== ALSA AUDIO ==============="
 alsa-info.sh --no-upload --stdout --with-devices --with-dmesg --with-aplay --with-amixer --with-alsactl --with-configs 
-lspci | grep -i audio
-cat /proc/asound/cards
+#lspci | grep -i audio
+#cat /proc/asound/cards
 
 # unset DISPLAY 
 
@@ -75,7 +76,7 @@ fi
 if [ -n "${PULSE_SERVER}" ]; then
   echo "=============== PULSEAUDIO ==============="
 
-  echo "PA Server: '${PULSE_SERVER}', Cookie: '${PULSE_COOKIE}'"
+  echo "PA Server: '`ls -la ${PULSE_SERVER}`', Cookie: '${PULSE_COOKIE}'"
 
   sudo pactl info
   sudo pactl list 
@@ -92,6 +93,17 @@ if [ -n "${PULSE_SERVER}" ]; then
 
 
 fi
+
+sudo systemctl status --system docker.service
+
+ls -la /var/run/docker*
+
+docker -D version
+docker -D info
+docker -D ps -a
+docker -D stats -a --no-stream
+docker -D images -a
+docker -D volume ls
 
 if [ -r /etc/profile.d/hilbert-env.sh ]; then 
   . /etc/profile.d/hilbert-env.sh

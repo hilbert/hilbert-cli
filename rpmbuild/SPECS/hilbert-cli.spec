@@ -17,7 +17,7 @@ Name:           hilbert-cli
 Version:        0.9.0
 
 License:        Apache License, Version 2.0
-Release:        3%{?dist}
+Release:        4%{?dist}
 
 URL:            https://github.com/hilbert/%{origname}
 Source0:         hilbert-cli.tar.gz
