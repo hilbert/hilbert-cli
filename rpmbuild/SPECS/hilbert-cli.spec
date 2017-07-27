@@ -17,13 +17,14 @@ Name:           hilbert-cli
 Version:        0.9.0
 
 License:        Apache License, Version 2.0
-Release:        4%{?dist}
+Release:        5%{?dist}
 
 URL:            https://github.com/hilbert/%{origname}
 Source0:         hilbert-cli.tar.gz
 # v%{version}.tar.gz
 # https://github.com/hilbert/hilbert-cli/archive/v%{version}.tar.gz
 Source1:        hilbert-compose-customizer.tar.gz
+Source2:        docker-compose.tar.gz
 
 #hilbert-default-config.tar.gz
 #Source2:        station.cfg
@@ -58,6 +59,7 @@ rm -rf $RPM_BUILD_ROOT
 #%setup
 %setup -c -a 0
 %setup -D -a 1
+%setup -D -a 2
 
 ##%%%%setup -T -D -a 1
 ##%%autosetup
@@ -72,21 +74,23 @@ rm -rf $RPM_BUILD_ROOT
 
 
 # Install Hilbert Client-tools into a separate location
-mkdir -p %{buildroot}/%{_bin_dir}/ || exit $?
-cp tools/hilbert-station station/docker-gc station/generate_ogl.sh station/get-compose.sh %{buildroot}/%{_bin_dir}/  || exit $?
-cp hilbert-compose-customizer %{buildroot}/%{_bin_dir}/  || exit $?
+mkdir -p "%{buildroot}/%{_bin_dir}/" || exit $?
+cp tools/hilbert-station station/docker-gc station/generate_ogl.sh station/get-compose.sh "%{buildroot}/%{_bin_dir}/"  || exit $?
+
 
 # Make sure that 
 # 1. hilbert-station and docker-compose can be found in the PATH
 # 2. corresponding variables: HILBERT_STATION & DOCKER_COMPOSE are set accordingly
-mkdir -p %{buildroot}/etc/profile.d/
-cp station/etc/profile.d/hilbert-env.sh %{buildroot}/etc/profile.d/
+mkdir -p "%{buildroot}/etc/profile.d/"
+cp station/etc/profile.d/hilbert-env.sh "%{buildroot}/etc/profile.d/"
 
 # Copy minimal sample configuration + sample xsession
-mkdir -p %{buildroot}/%{_cfg_dir}/
-cp -R station/station_configs/minimal %{buildroot}/%{_cfg_dir}/
-cp station/.xsession %{buildroot}/%{_cfg_dir}/
+mkdir -p "%{buildroot}/%{_cfg_dir}/"
+cp -R station/station_configs/minimal "%{buildroot}/%{_cfg_dir}/"
+cp station/.xsession "%{buildroot}/%{_cfg_dir}/"
 
+mkdir -p "%{buildroot}/etc/tmpfiles.d/"
+echo "D /var/run/hilbert 0755 %{user} %{user} - " > "%{buildroot}/etc/tmpfiles.d/hilbert.conf"
 
 
 # OGL will be a separate story!
@@ -100,12 +104,22 @@ cp station/.xsession %{buildroot}/%{_cfg_dir}/
 #sudo -g %{user} -u %{user} HILBERT_CONFIG_BASEDIR=%{buildroot}/%{_cfg_dir}/ -i %{buildroot}/%{_bin_dir}/hilbert-station -vv init 
 #chown -R %{user}:%{user} %{buildroot}/%{_cfg_dir}/../../
 
+cp hilbert-compose-customizer "%{buildroot}/%{_bin_dir}/"  || exit $?
+
+if [ -f docker-compose ]; then
+  cp docker-compose "%{buildroot}/%{_bin_dir}/"
+fi
+
+
 # Download docker-compose 1.13.0 from GitHub 
-BASE=$PWD
-cd %{buildroot}/%{_bin_dir}/
-./get-compose.sh || exit 1 
-unlink ./compose
-cd $BASE
+if [ ! -f "%{buildroot}/%{_bin_dir}/docker-compose" ]; then
+  BASE=$PWD
+  cd %{buildroot}/%{_bin_dir}/
+  ./get-compose.sh || exit 1 
+  unlink ./compose
+  cd $BASE
+fi
+
 
 ##%%make_install
 

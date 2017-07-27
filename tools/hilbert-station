@@ -28,7 +28,7 @@ declare -rg XSETROOT="${XSETROOT:-xsetroot}"
 
 ## NOTE: usually /var/lock/ is a symbolic link to /run/lock/ => it will be removed in case of a crash! No stale lockfile is possible!
 ## NOTE: just in case if /run != /var/run the following loop will check them separately:
-for d in /var/lock/lockdev /run/lock/lockdev /var/lock /run/lock /var/run /run;
+for d in /var/run/hilbert /var/run/lock/lockdev /run/lock/lockdev /var/run/lock /run/lock /var/run /run;
 do
     if [[ -w "${d}/" ]]; then
         declare -- LOCKFILE="${d}"
