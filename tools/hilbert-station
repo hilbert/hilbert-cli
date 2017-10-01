@@ -943,7 +943,7 @@ function cmd_compose_init() {
         fi
     fi
 
-    cmd_docker_compose pull --ignore-pull-failures "${HILBERT_APPLICATION_REF}"
+    cmd_docker_compose pull --ignore-pull-failures "${HILBERT_APPLICATION_REF}" | cat
     ret=$?
 
     unset -v HILBERT_APPLICATION_ID COMPOSE_FILE

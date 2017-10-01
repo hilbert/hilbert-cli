@@ -17,7 +17,7 @@ Name:           hilbert-cli
 Version:        0.9.0
 
 License:        Apache License, Version 2.0
-Release:        5%{?dist}
+Release:        6%{?dist}
 
 URL:            https://github.com/hilbert/%{origname}
 Source0:         hilbert-cli.tar.gz
@@ -163,6 +163,10 @@ rm -Rf /tmp/minimal
 # docker rmi hello-world:latest
 
 %changelog
+* Sun Oct 1 2017 Alex
+- Updated hilbert-station to avoid unnecessary output from `docker pull` 
+- Updated hilbert-compose-customizer to workaround nvidia-docker issue with the host networking driver/mode
+
 * Tue Jul 18 2017 Alex
 - Updated hilbert-station + added hilbert-compose-customizer
 
