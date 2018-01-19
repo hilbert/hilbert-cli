@@ -362,6 +362,13 @@ def _value_error(key, value, lc, error, e='E'):
 
 
 ###############################################################
+def xstr(s):
+    """ Convert None to default ?-string, if necessary """
+    if s is None:
+        return '?'
+    return str(s)
+
+###############################################################
 class VerboseRoundTripConstructor(RoundTripConstructor):
     def construct_mapping(self, node, maptyp, deep=False):
 
@@ -414,11 +421,13 @@ class BaseValidator(AbstractValidator):
 
     __version = [None]  # NOTE: shared version among all Validator Classes!
     _parent = None  # NOTE: (for later) parent Validator
+    _id = None
     _data = None  # NOTE: result of valid validation
     _default_input_data = None  # NOTE: Default input to the parser instead of None
 
     def __init__(self, *args, **kwargs):
         parent = kwargs.pop('parent', None)
+        id = kwargs.pop('id', None)
         parsed_result_is_data = kwargs.pop('parsed_result_is_data', False)
 
         # TODO: FIXME: assure *args, **kwargs are empty!
@@ -426,6 +435,9 @@ class BaseValidator(AbstractValidator):
 
         assert self._parent is None
         self._parent = parent
+
+        assert self._id is None
+        self._id = id
 
         # parsed_result_is_data default:
         # - False => parsed result is self
@@ -457,6 +469,13 @@ class BaseValidator(AbstractValidator):
         log.error("Sorry: could not find parent of specified class ({0})!"
                   "Found top is of type: {1}".format(cls, type(_p)))
         return None
+
+
+    def get_id(self):
+        if self._parent is not None:
+            return os.path.join(self._parent.get_id(), xstr(self._id))
+        else:
+            return xstr(self._id)
 
     def get_api_version(self):
         return self.__API_VERSION_ID
@@ -502,7 +521,7 @@ class BaseValidator(AbstractValidator):
         """
         self = cls(*args, **kwargs)
 
-        log.debug("{1}::parse( input type: {0} )".format(type(d), type(self)))
+        log.debug("{1}::parse( input type: {0}, id: {2} )".format(type(d), type(self), self.get_id()))
 
         if self.validate(d):  # NOTE: validate should not **explicitly** throw exceptions!!!
             if self._parsed_result_is_data:
@@ -511,7 +530,7 @@ class BaseValidator(AbstractValidator):
             return self
 
         # NOTE: .parse should throw exceptions in case of invalid input data!
-        raise ConfigurationError(u"{}: {}".format("ERROR:", "Invalid data: '{0}' in {1}!".format(d, type(self))))
+        raise ConfigurationError(u"{}: {}".format("ERROR:", "Invalid data: '{0}' in {1} [{2}]!".format(d, type(self), self.get_id())))
 
     def __repr__(self):
         """Print using pretty formatter"""
@@ -572,7 +591,7 @@ class BaseValidator(AbstractValidator):
         """
         Generic query for data subset about this object
 
-        A/B/C/(all|keys|data)?
+        A/B/C/(all|keys|data|id)?
 
         Get object under A/B/C and return
         * it (if 'all') - default!
@@ -590,6 +609,9 @@ class BaseValidator(AbstractValidator):
         if what == 'all':
             return self
 
+        if what == 'id':
+            return self.get_id()
+        
         if what == 'data':
             return self.data_dump()
 
@@ -692,7 +714,7 @@ class BaseRecordValidator(BaseValidator):
                     _ret = False
 
                 try:
-                    _v = (r[1]).parse(None, parent=self)  # Default Value!
+                    _v = (r[1]).parse(None, parent=self, id=k)  # Default Value!
                 except ConfigurationError as err:
                     _key_note(k, _lc, "Error: invalid default value (for optional key: '{}') (type: '%s')" % self._type)
                     pprint(err)
@@ -721,7 +743,7 @@ class BaseRecordValidator(BaseValidator):
                     _ret = False
 
                 try:
-                    _v = (_rule[k][1]).parse(v, parent=self)
+                    _v = (_rule[k][1]).parse(v, parent=self, id=k)
                 except ConfigurationError as err:
                     _value_error(k, v, lc, "Error: invalid field value (key: '{}') (type: '%s')" % self._type)
                     pprint(err)
@@ -746,7 +768,7 @@ class BaseRecordValidator(BaseValidator):
                         _ret = False
 
                     try:
-                        _v = (_extra_rule[1]).parse(v, parent=self)
+                        _v = (_extra_rule[1]).parse(v, parent=self, id=k)
                     except ConfigurationError as err:
                         # TODO: FIXME: wrong col (it was for key - not value)!
                         _value_error(k, v, lc, "Error: invalid field value '{}' value (type: '%s')" % self._type)
@@ -834,7 +856,7 @@ class SemanticVersionValidator(BaseValidator):
         if d is None:
             d = self._default_input_data
 
-        log.debug("{1}::validate( input type: {0} )".format(type(d), type(self)))
+        log.debug("{1}::validate( input type: {0} at {2} )".format(type(d), type(self), self.get_id()))
         #        log.debug("SemanticVersionValidator::validate( input data: {0} )".format(str(d)))
 
         try:
@@ -1517,7 +1539,7 @@ class VariadicRecordWrapper(BaseValidator):
 
         t = None
         try:
-            t = self._type_cls.parse(d[self._type_tag], parent=self.get_parent(), parsed_result_is_data=True)
+            t = self._type_cls.parse(d[self._type_tag], parent=self.get_parent(), parsed_result_is_data=True, id=self.get_parent()._id)
         except:
             log.exception("Wrong type data: {}".format(d[self._type_tag]))
             return False
@@ -2516,7 +2538,7 @@ class Station(BaseRecordValidator):  # Wrapper?
         if bb is not None:
             dd = _d.get(k, None)
             if dd is None:
-                dd = StationClientSettings.parse(None, parent=delta)
+                dd = StationClientSettings.parse(None, parent=delta, id=k)
 
             assert isinstance(dd, StationClientSettings)
             assert isinstance(bb, StationClientSettings)
@@ -2600,7 +2622,7 @@ class BaseIDMap(BaseValidator):
                 _ret = False
 
             try:
-                _vv = _rule.parse(v, parent=self)
+                _vv = _rule.parse(v, parent=self, id=k)
             except ConfigurationError as err:
                 _value_error(k, v, _lc, "invalid Value (for ID: '{}') (type: '%s')" % (self._type))  # Raise Exception?
                 pprint(err)
@@ -2796,7 +2818,7 @@ class BaseList(BaseValidator):
         for idx, i in enumerate(d):  # What about a string?
             _v = None
             try:
-                _v = self._type.parse(i, parent=self)
+                _v = self._type.parse(i, parent=self, id='['+str(idx)+']')
                 _d.insert(idx, _v)  # append?
             except ConfigurationError as err:
                 _lc = d.lc
@@ -3102,7 +3124,7 @@ class Hilbert(BaseRecordValidator):
 
         try:
             _v = SemanticVersionValidator.parse(d[self._version_tag], parent=self, partial=True,
-                                                parsed_result_is_data=True)
+                                                parsed_result_is_data=True, id=self._version_tag)
         except:
             _value_error(self._version_tag, d, d.lc, "Wrong value of global '{}' specification!")
             raise
@@ -3351,7 +3373,7 @@ def load_yaml_file(filename):
 ###############################################################
 def parse_hilbert(d, parent=None):
     assert d is not None
-    return Hilbert.parse(d, parent=parent, parsed_result_is_data=False)
+    return Hilbert.parse(d, parent=parent, parsed_result_is_data=False, id="/")
 
 
 ###############################################################
