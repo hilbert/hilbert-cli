@@ -10,6 +10,7 @@
 rpmbuild --nodeps -ba ./SPECS/hilbert-cli.spec || exit $?
 # sudo alien -d -c ./RPMS/x86_64/hilbert-cli-*.x86_64.rpm
 
+rpmbuild --nodeps --target noarch -ba ./SPECS/hilbert-minimal.spec || exit $?
 rpmbuild --nodeps --target noarch -ba ./SPECS/hilbert-testapp.spec || exit $?
 # sudo alien -d -c ./RPMS/noarch/hilbert-testapp-*.noarch.rpm
 

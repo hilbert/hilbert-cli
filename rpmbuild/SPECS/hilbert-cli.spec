@@ -1,3 +1,4 @@
+####%define user          imaginary
 %global debug_package %{nil}
 %define origname      hilbert-cli
 %define user          kiosk
@@ -14,10 +15,10 @@
 # BuildRoot:      %{buildroot}
 Summary:        Hilbert: client-side tools with a basic minimal configuration
 Name:           hilbert-cli
-Version:        0.9.0
+Version:        0.9.1
 
 License:        Apache License, Version 2.0
-Release:        6%{?dist}
+Release:        7%{?dist}
 
 URL:            https://github.com/hilbert/%{origname}
 Source0:         hilbert-cli.tar.gz
@@ -46,11 +47,12 @@ Requires:       docker-engine
 
 # Group:          Development/Tools
 
+#### Moreover %{user} has to be already pre-configured before installing this package!
 %description
 Hilbert: client side tools + minimal configuration
 
 NOTE: ATM Requires internet connection to GitHub to download docker-compose 1.13.0 binary bundle. 
-Moreover %{user} has to be already pre-configured before installing this RPM!
+
 
 %prep
 ## pwd ; ls -la ; echo $RPM_BUILD_ROOT ; echo %{buildroot}; export 
@@ -86,7 +88,7 @@ cp station/etc/profile.d/hilbert-env.sh "%{buildroot}/etc/profile.d/"
 
 # Copy minimal sample configuration + sample xsession
 mkdir -p "%{buildroot}/%{_cfg_dir}/"
-cp -R station/station_configs/minimal "%{buildroot}/%{_cfg_dir}/"
+#cp -R station/station_configs/minimal "%{buildroot}/%{_cfg_dir}/"
 cp station/.xsession "%{buildroot}/%{_cfg_dir}/"
 
 mkdir -p "%{buildroot}/etc/tmpfiles.d/"
@@ -146,9 +148,9 @@ rm -rf $RPM_BUILD_ROOT
 # rm -f %{_cfg_dir}/configs/image
 
 ## TODO: use random temporary directory instead of /tmp/minimal or /tmp/testapp!
-sudo -g %{user} -u %{user} bash -c "cp -R %{_cfg_dir}/minimal /tmp/" && \
-sudo -g %{user} -u %{user} DOCKER_COMPOSE=%{_bin_dir}/docker-compose %{_bin_dir}/hilbert-station -q init /tmp/minimal || echo "Sorry: something failed during initialization!"
-rm -Rf /tmp/minimal
+#sudo -g %{user} -u %{user} bash -c "cp -R %{_cfg_dir}/minimal /tmp/" && \
+#sudo -g %{user} -u %{user} DOCKER_COMPOSE=%{_bin_dir}/docker-compose %{_bin_dir}/hilbert-station -q init /tmp/minimal || echo "Sorry: something failed during initialization!"
+#rm -Rf /tmp/minimal
 
 ##cd /tmp/ && (echo "0"; echo) | %{_bin_dir}/generate_ogl.sh && \
 ##sudo -g %{user} -u %{user} bash -c "cd; cp /tmp/OGL.tgz .config/hilbert-station"

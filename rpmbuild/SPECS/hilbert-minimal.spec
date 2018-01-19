@@ -12,12 +12,12 @@
 
 #%define buildroot %{_topdir}/%{origname}-%{version}
 #BuildRoot:      %{buildroot}
-Summary:        TestApp: Hilbert's client-side testing configuration
-Name:           hilbert-testapp
+Summary:        TestApp: Hilbert's minimal (empty) configuration
+Name:           hilbert-minimal
 Version:        0.9.0
 
 License:        Apache License, Version 2.0
-Release:        4%{?dist}
+Release:        1%{?dist}
 
 URL:            https://github.com/hilbert/%{origname}
 Source:         %{origname}.tar.gz
@@ -44,9 +44,8 @@ Requires:       %{origname}
 # Group:          Development/Tools
 
 %description
-Hilbert's station configuration for initial HW testing: display + multi-touch
+Empty minimal Hilbert's station configuration
 
-NOTE: ATM Requires internet connection to DockerHub to download hilbert/* images
 %prep
 ## echo 0 ; pwd ; ls -la ; echo $RPM_BUILD_ROOT ; export 
 
@@ -83,7 +82,7 @@ rm -rf $RPM_BUILD_ROOT
 # Copy sample configs + sample xsession
 mkdir -p $RPM_BUILD_ROOT/%{_cfg_dir}/
 #cd hilbert-cli-0.9.0/
-cp -R station/station_configs/testapp $RPM_BUILD_ROOT/%{_cfg_dir}/
+cp -R station/station_configs/minimal $RPM_BUILD_ROOT/%{_cfg_dir}/
 #cp station/.xsession %{buildroot}/%{_cfg_dir}/
 
 # OGL will be a separate story!
@@ -133,10 +132,10 @@ cp -R station/station_configs/testapp $RPM_BUILD_ROOT/%{_cfg_dir}/
 #docker load -i %{_cfg_dir}/configs/image
 # rm -f %{_cfg_dir}/configs/image
 
-## TODO: use random temporary directory instead of /tmp/minimal or /tmp/testapp!
-sudo -g %{user} -u %{user} bash -c "cp -R %{_cfg_dir}/testapp /tmp/" && \
-sudo -g %{user} -u %{user} DOCKER_COMPOSE=%{_bin_dir}/docker-compose %{_bin_dir}/hilbert-station -q init /tmp/testapp || echo "Sorry: something failed during initialization!"
-rm -Rf /tmp/testapp
+## TODO: use random temporary directory instead of /tmp/minimal!
+sudo -g %{user} -u %{user} bash -c "cp -R %{_cfg_dir}/minimal /tmp/" && \
+sudo -g %{user} -u %{user} DOCKER_COMPOSE=%{_bin_dir}/docker-compose %{_bin_dir}/hilbert-station -q init /tmp/minimal || echo "Sorry: something failed during initialization!"
+rm -Rf /tmp/minimal
 
 ##cd /tmp/ && (echo "0"; echo) | %{_bin_dir}/generate_ogl.sh && \
 ##sudo -g %{user} -u %{user} bash -c "cd; cp /tmp/OGL.tgz .config/hilbert-station"
@@ -151,9 +150,6 @@ rm -Rf /tmp/testapp
 # docker rmi hello-world:latest
 
 %changelog
-* Sat May  6 2017 Alex
-- RPM .spec for separate Hilbert testapp (without direct access to ${KIOSK_HOME})
-
-* Tue Apr  4 2017 Alex
-- Initial version of RPM .spec
+* Mon Dec 4 2017 Alex
+- Initial version of RPM .spec for minimal Hilbert configuration
 
