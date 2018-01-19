@@ -1781,13 +1781,15 @@ class DockerComposeService(BaseRecordValidator):
         super(DockerComposeService, self).__init__(*args, **kwargs)
 
         self._type_tag = text_type('type')
-        self._hook_tag = text_type('auto_detections')
+        self._prerun_detections_hook_tag = text_type('auto_detections')
+        self._preinit_hook_tag = text_type('pre_init')
         self._ref_tag = text_type('ref')
         self._file_tag = text_type('file')
 
         _compose_rule = {
             self._type_tag: (True, ServiceType),  # Mandatory
-            self._hook_tag: (False, AutoDetectionScript),
+            self._prerun_detections_hook_tag: (False, AutoDetectionScript),
+            self._preinit_hook_tag: (False, AutoDetectionScript),
             self._ref_tag: (True, DockerComposeServiceName),
             self._file_tag: (False, DockerComposeYAMLFile)
         }
@@ -1822,7 +1824,7 @@ class DockerComposeService(BaseRecordValidator):
 
     def to_bash_array(self, n):
         _d = self.data_dump()
-        _min_compose = [self._type_tag, self._ref_tag, self._file_tag, self._hook_tag]
+        _min_compose = [self._type_tag, self._ref_tag, self._file_tag, self._prerun_detections_hook_tag, self._preinit_hook_tag]
 
         return ' '.join(["['{2}:{0}']='{1}'".format(k, _d[k], n) for k in _min_compose])
 
