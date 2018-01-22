@@ -16,12 +16,13 @@ declare -rg TOOL="$(basename "${TOOL_SH}")" # script_name=`basename "$0"` # scri
 export PATH="${PATH}:$(readlink -f "$(dirname "${TOOL_SH}")")" # Add the tool' directory into the search PATH...
 declare -rg LOGGER="logger --id=$$ -t ${TOOL} "
 
-declare -g hibert_station_process_kill_timeout=8
 declare -g LOGLEVEL=${LOGLEVEL:-2}  # WARNING-LEVEL
 declare -g DRY_RUN="${DRY_RUN:-}"  # NOTE: turn on dry mode (not actual service-runtime action execution) if non-empty
 
 declare -g XSETROOT=${XSETROOT:-xsetroot -solid black}
 
+# delays during stopping/killing/removing docker containers
+declare -g hibert_station_process_kill_timeout=${hibert_station_process_kill_timeout:-7}
 
 ## NOTE: locking following: http://stackoverflow.com/a/1985512 by Przemyslaw Pawelczyk <przemoc@gmail.com>
 ## NOTE: uses flock from util-linux[-ng]
@@ -136,12 +137,16 @@ function ERROR() {
 
 ## TODO: read HILBERT_CONFIG_BASEDIR from '~/.hilbert-station' ?
 ## TODO: use @configs!!!!
-export HILBERT_CONFIG_BASEDIR="${HILBERT_CONFIG_BASEDIR:-${HOME}/.config/${TOOL}}"
+export HILBERT_CONFIG_BASEDIR="${HILBERT_CONFIG_BASEDIR:-${HOME}/.config/hilbert-station}"
 
+# current configuration
 export HILBERT_CONFIG_DIR="${HILBERT_CONFIG_BASEDIR}/configs"
+
+export HILBERT_CONFIG_BACKUP="${HILBERT_CONFIG_BASEDIR}/config_backup"
+
 export HILBERT_CONFIG_FILE="${HILBERT_CONFIG_DIR}/station.cfg"
 
-export HILBERT_STATION_VERSION_ID="\$Id$"
+declare -rg HILBERT_STATION_VERSION_ID="\$Id$"
 
 ## NOTE: the following is run-time  (docker/docker-compose) specific!
 
@@ -174,8 +179,8 @@ if [[ ! -v SHUTDOWN ]]; then
     declare -rg SHUTDOWN=$(which shutdown 2>&1)
 fi
 
-## @fn cmd_usage Show CLI usage help
-function cmd_usage() {
+
+function cmd_usage() { ## @fn Show CLI usage help
     cat << EOF
 usage: ${TOOL} [-h] [-d|-D] [-t|-T] [-V] [-v|-q] subcommand
 
@@ -192,8 +197,8 @@ positional arguments:
    shutdown                shut down the system
 
 optional arguments:
-  -h                       show this help message and exit
-  -V                       show version info and exit
+  -h                       show this help message [+internal commands] and exit
+  -V                       show tool version [+internal info] and exit
   -v                       increase verbosity
   -q                       decrease verbosity
   -t                       turn on BASH tracing and verbosity
@@ -203,12 +208,18 @@ optional arguments:
   -L                       disable locking for recursive sub-calls
 
 respected environment variables:
-  HILBERT_CONFIG_BASEDIR   location of the base configuration directory of ${TOOL}. Default: '~/.config/${TOOL}'
+  HILBERT_CONFIG_BASEDIR   location of the base configuration directory of ${TOOL}. Default: '~/.config/hilbert-station/'
 EOF
+
+    if [[ $LOGLEVEL -le 0 ]]; then
+        echo 
+        echo "Internal commands supported by this tool: "
+        ${GREP} -E '^function cmd_' "${TOOL_SH}" | sed -e 's@function  *@@g' -e 's@() *[{#]@\t@g'
+	echo
+    fi
 }
 
-## @fn cmd_native_autodetect Native Auto-detections
-function cmd_native_autodetect() {
+function cmd_native_autodetect() { ## @fn Native Auto-detections 
     ## Docker Engine
     export DOCKER_SOCKET=${DOCKER_SOCKET:-/var/run/docker.sock}
     if [[ -S "${DOCKER_SOCKET}" ]]; then
@@ -302,8 +313,7 @@ function cmd_native_autodetect() {
    return 0
 }
 
-## @fn cmd_info Show Station System INFO & Configuration
-function cmd_info() {
+function cmd_info() { ## @fn Show Station System INFO & Configuration
     cat << EOF
 This tool:   [${TOOL}: ${TOOL_SH}: $(ls -l "${TOOL_SH}" 2>&1)]
 PID:         [$$]
@@ -312,7 +322,7 @@ Lockfile:    [${LOCKFILE}: $(ls -l "${LOCKFILE}" 2>&1)]
 Do locking:  [${LOCKING}]
 
 Config Base: [${HILBERT_CONFIG_BASEDIR}]
-Config Dir:  [${HILBERT_CONFIG_DIR}: $(readlink -f "${HILBERT_CONFIG_DIR}" 2>&1)]
+Config Dir:  [${HILBERT_CONFIG_DIR} -> $(readlink -f "${HILBERT_CONFIG_DIR}" 2>&1)]
 Config File: [${HILBERT_CONFIG_FILE}: $(readlink -f "${HILBERT_CONFIG_FILE}" 2>&1)]
 All Configs: [$(sh -c "cd ${HILBERT_CONFIG_DIR}/ && ls * | xargs" 2>&1)]
 
@@ -369,9 +379,7 @@ Previously started Hilbert's services/applications found:
     return 0
 }
 
-## @fn cmd_version Script name + version
-## NOTE: will show more info for debugging
-function cmd_version() {
+function cmd_version() { ## @fn Show Script name + version. May show more info for debugging
     cat << EOF
 ${TOOL} Version ID: [${HILBERT_STATION_VERSION_ID}]
 EOF
@@ -693,9 +701,7 @@ function cmd_install_station_config() { ## @fn Try to Install new station config
     return 0
 }
 
-
-## @fn cmd_read_configuration
-function cmd_read_configuration() {
+function cmd_read_configuration() { ## @fn Read current station configuration
     if [[ ! -r "${HILBERT_CONFIG_FILE}" ]]; then
         ERROR "Configuration file '${HILBERT_CONFIG_FILE}' is not readable ($(ls -la ${HILBERT_CONFIG_FILE})!"
         exit 1
@@ -903,7 +909,7 @@ function cmd_app_change() { ## @fn Change current application (to be stopped) to
     return $?
 }
 
-function cmd_start_service() {
+function cmd_start_service() { ## @fn Start Hilbert service
     local arg="$*"
 
     if [[ -z ${arg} ]]; then
@@ -936,8 +942,8 @@ function cmd_start_service() {
     return $?
 }
 
-function cmd_init_service() {
-    ## NOTE: Application/Service ID
+function cmd_init_service() { ## @fn Prepare/initialize Hilbert service or application. E.g. pull docker image/cache docker-compose.yml/run pre_init hook
+    ## NOTE: Application ID | Service ID
     local arg="$*"
 
     if [[ -z ${arg} ]]; then
@@ -978,9 +984,7 @@ function cmd_init_service() {
     return $?
 }
 
-## @fn cmd_restart_service  Deprecated!!!! TO BE REMOVED!?
-## @param arg ApplicationID
-function cmd_restart_service() {
+function cmd_restart_service() { ## @fn Restart currently running service NOTE: Deprecated! TO BE REMOVED? @param arg ApplicationID
     ## NOTE: Application ID
     local arg="$*"
 
@@ -1014,9 +1018,7 @@ function cmd_restart_service() {
     return $?
 }
 
-## @fn cmd_stop_service
-## @param arg ApplicationID
-function cmd_stop_service() {
+function cmd_stop_service() { ## @fn Stop Hilbert Service, @param arg ApplicationID
     ## NOTE: Application ID
     local arg="$*"
 
@@ -1042,7 +1044,7 @@ function cmd_stop_service() {
     return 0
 }
 
-function cmd_compose_start() {
+function cmd_compose_start() { ## @fn Run Docker-Compose service
     ## NOTE: Application ID
     local arg="$*"
 
@@ -1070,7 +1072,7 @@ function cmd_compose_start() {
 }
 
 
-function cmd_compose_init() {
+function cmd_compose_init() { ## @fn Initialize/prepare/cache a Docker-Compose service for faster start-up
     ## NOTE: Application/Service ID (of compose type)
     local arg="$*"
     export HILBERT_APPLICATION_ID="$arg"  # NOTE: To be set as env. variable APP_ID within container...
@@ -1136,7 +1138,7 @@ function cmd_compose_init() {
 }
 
 
-function cmd_compose_restart() {
+function cmd_compose_restart() { ## @fn Restart Docker-Compose service. DEPRECATED. TO BE REMOVED?!
     ## NOTE: Application ID
     local arg="$*"
 
@@ -1164,7 +1166,7 @@ function cmd_compose_restart() {
     return $ret
 }
 
-function cmd_compose_stop() {
+function cmd_compose_stop() { ## @fn Stop Docker-Compose service
     local arg="$*"  # Application ID
 
     local HILBERT_APPLICATION_FILE
@@ -1186,7 +1188,7 @@ function cmd_compose_stop() {
 
     local d="${HILBERT_APPLICATION_REF}"
 
-    DEBUG "Stopping/Killing/Removing service '$d' using docker-compose..."
+    DEBUG "Stopping/Killing/Removing service '$d' using '${DOCKER_COMPOSE}'..."
 
     cmd_docker_compose kill -s SIGINT "$d" && sleep "${hibert_station_process_kill_timeout}"
 #    cmd_docker_compose kill -s SIGTERM "$d"  #    cmd_docker_compose kill -s SIGKILL "$d"
@@ -1200,7 +1202,7 @@ function cmd_compose_stop() {
     return 0
 }
 
-function cmd_docker_stop() {
+function cmd_docker_stop() { ## @fn Stop/kill/renove a docker container
     local d=$*
     DEBUG "Stopping/Killing/Removing service '$d' using '${DOCKER}'..."
 
@@ -1214,7 +1216,7 @@ function cmd_docker_stop() {
     return $?
 }
 
-function cmd_docker_compose() {
+function cmd_docker_compose() { ## @fn Run low-level Docker-Compose command directly
     if [[ -n "${DRY_RUN}" ]]; then
         echo "[${DRY_RUN}] Simulating: [${DOCKER_COMPOSE} --skip-hostname-check $*], with COMPOSE_FILE='${COMPOSE_FILE}'"
         return 0
@@ -1238,7 +1240,7 @@ function cmd_docker_compose() {
     return 0
 }
 
-function cmd_docker() {
+function cmd_docker() {  ## @fn Run low-level Docker command directly
     if [[ -n "${DRY_RUN}" ]]; then
         echo "[${DRY_RUN}] Simulating: [${DOCKER} $*]"
         return 0
@@ -1275,7 +1277,7 @@ function cmd_docker() {
 ## NOTE: side effects:
 ##    Container IDs: current_bg_servce_ids, current_top_application_id
 ##    Hilbert Application ID: APP_ID, DC reference: current_top_application (unknown docker-compose.yml!)
-function cmd_detect_top_application() {
+function cmd_detect_top_application() {  ## @fn Detect the currently running Hilbert (top) application
     # TODO: FIXME: can only detect the DC's service name - not Application ID!!!
     # NOTE: cannot attach a label in runtime to docker-compose service :-(
     declare -rg current_bg_servce_ids=$(${DOCKER} ps -a -q --filter "label=is_top_app=0" --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" 2>/dev/null | xargs --no-run-if-empty)
@@ -1321,8 +1323,7 @@ function cmd_detect_top_application() {
     return 0
 }
 
-## @fn cmd_list_applications List Applications
-function cmd_list_applications() {
+function cmd_list_applications() { ## @fn List Applications
     local data
 
     cmd_read_configuration
@@ -1369,8 +1370,7 @@ function cmd_list_applications() {
     return 0
 }
 
-## @fn cmd_list_services List Services
-function cmd_list_services() {
+function cmd_list_services() { ## @fn List Hilbert Services for the current station configuration
     cmd_read_configuration
 
     if [[ -n "${hilbert_station_profile_services[@]}" ]]; then
@@ -1400,8 +1400,7 @@ function cmd_list_services() {
     return 0
 }
 
-## @fn cmd_start (re)start services and top application
-function cmd_start() {
+function cmd_start() { ## @fn (re)start services and top application
     cmd_native_autodetect
     cmd_read_configuration
     cmd_detect_top_application
@@ -1524,8 +1523,7 @@ function cmd_start() {
     return 0
 }
 
-## @fn cmd_stop stop current top application and background services
-function cmd_stop() {
+function cmd_stop() { ## @fn Stop Hilbert's current top application and background services
     cmd_native_autodetect
     cmd_read_configuration
     cmd_detect_top_application
@@ -1575,8 +1573,7 @@ function cmd_stop() {
     return 0
 }
 
-## @fn cmd_shutdown
-function cmd_shutdown() {
+function cmd_shutdown() { ## @fn Shutdown PC
     local arg=$@
     DEBUG "Shutting this system down... Arguments: [${arg}]"
 
@@ -1587,9 +1584,9 @@ function cmd_shutdown() {
     fi
 }
 
-## @fn cmd_subcommand_handle Main CLI parser/handler
-function cmd_subcommand_handle() {
+function cmd_subcommand_handle() { ## @fn Main CLI parser, sub-command handler
     subcommand=$1; shift
+    local _ret
 
     DEBUG "Subcommand to handle: '$subcommand'"
 
@@ -1637,16 +1634,29 @@ function cmd_subcommand_handle() {
         ## TODO: arguments?
         cmd_start "$*"
         exit $?
+        ;;	
+    cmd_usage|cmd_xsetroot|cmd_tool_subcall|cmd_native_autodetect|cmd_start_locking|cmd_subcommand_handle)
+        ${subcommand} "$*"
+	_ret=$?
+
+        if [[ ${_ret} -ne 0 ]]; then
+            ERROR "Something went wrong in subcommand handler: [${subcommand} '$*']. Exit code: ${_ret}!"
+            exit ${_ret}
+        else
+            DEBUG "Script successfully handled hidden subcommand: [${subcommand}]!"
+            exit 0
+        fi
         ;;
     cmd_*) ## NOTE: hidden subcommand-s (for testing)
         ## NOTE: lock to be sure...
         cmd_start_locking
         cmd_native_autodetect
         ${subcommand} "$*"
+	_ret=$?
 
-        if [[ $? -ne 0 ]]; then
-            ERROR "Something went wrong in subcommand handler: [${subcommand} '$*']!"
-            exit 1
+        if [[ ${_ret} -ne 0 ]]; then
+            ERROR "Something went wrong in subcommand handler: [${subcommand} '$*']. Exit code: ${_ret}!"
+            exit ${_ret}
         else
             DEBUG "Script successfully handled hidden subcommand: [${subcommand}]!"
             exit 0
