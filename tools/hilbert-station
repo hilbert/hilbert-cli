@@ -158,6 +158,10 @@ export DOCKER_GC="${DOCKER_GC:-docker-gc}"
 export DOCKER_COMPOSE="${DOCKER_COMPOSE:-docker-compose}"
 export HILBERT_COMPOSE_CUSTOMIZER="${HILBERT_COMPOSE_CUSTOMIZER:-hilbert-compose-customizer}"
 
+export RSYNC="${RSYNC:-rsync}"
+export GREP="${GREP:-grep}"
+export DIFF="${DIFF:-diff}" # required for comparing config-dirs!
+
 for d in /usr/sbin/shutdown /sbin/shutdown;
 do
     if [[ -f "${d}" && -x "${d}" ]]; then
@@ -223,7 +227,7 @@ function cmd_native_autodetect() {
         # What about forwarded X11 Displays? e.g. localhost:10.0?
         if [[ -z "${XAUTHORITY}" ]]; then  # TODO: Cleanup the following mess!!!
             if [[ -r "$XID" ]]; then
-                N=$(grep 'DISPLAY_NUM:' "$XID" | tail -n 1 | sed s@DISPLAY_NUM:@@g)
+                N=$(${GREP} 'DISPLAY_NUM:' "$XID" | tail -n 1 | sed s@DISPLAY_NUM:@@g)
             fi
 
             if [[ -f "/tmp/.X${N}-lock" ]]; then
@@ -316,6 +320,9 @@ INPUT_OPTS:  [${INPUT_OPT}]
 DRY_RUN:     [${DRY_RUN}]
 LOGLEVEL:    [${LOGLEVEL}]
 
+RSYNC:       [${RSYNC}: $(${RSYNC} --version 2>&1 | ${GREP} version)]
+GREP:        [${GREP}]
+DIFF:        [${DIFF}]
 XSETROOT:    [${XSETROOT}]
 
 OGL:         [${HILBERT_CONFIG_BASEDIR}/${OGL}: $(ls -l "${HILBERT_CONFIG_BASEDIR}/${OGL}" 2>&1)]
@@ -523,11 +530,58 @@ function _service_get_info() {
     return 0
 }
 
+function cmd_compare_station_configs() { ## @fn compare some station configuration with the current one
+    local arg="$1"
 
-function cmd_install_station_config() {
+    if [[ -z "${arg}" ]]; then
+        ERROR "Wrong argument '${arg}'!"
+        exit 1
+    fi
+
+    # TODO: what about further resources? Maybe a .tar.gz and unpack it into ${new_cfg_dir}? rsync?!
+    if [[ -d "${arg}" && -x "${arg}" && -r "${arg}" ]]; then
+        INFO "New directory with configuration: '${arg}'"  # is not yet fully supported!!!?
+
+        if [[ ! -r "${arg}/station.cfg" ]]; then
+            ERROR "Station configuration file '${arg}/station.cfg' is not readable or missing!"
+            exit 1
+        fi
+    else
+        ERROR "Wrong configuration specified by '${arg}'!"
+        exit 1
+    fi
+
+    ### TODO: FIXME: If there is no current configuration return 1!!!
+    if [[ ! -L "${HILBERT_CONFIG_DIR}" ]]; then 
+        DEBUG "No current configuration '${HILBERT_CONFIG_DIR}'!"
+	return 1
+    fi
+    
+    local _old="$(readlink -f "${HILBERT_CONFIG_DIR}")"
+
+    ### TODO: check beforehand and if necessary pre stop everything ++ post start anew, 
+    ### forget the currently running application choice??
+    ###    cmd_detect_changes
+    DEBUG "Comparison of the current configuration [${_old}] with the one in [$arg]: [diff -qr -x 'cache_*.yaml' '${_old}' '$arg']..."
+#    ${RSYNC} -zaic "${_old}" "${arg}" --dry-run
+    ${DIFF} -aqr -x 'cache_*.yaml' "${_old}" "${arg}"  # TODO: NOTE: requires `diff`!
+    local _ret=$?
+
+    if [[ ${_ret} -eq 0 ]]; then
+        DEBUG "Same Configuration files: nothing to update!!"
+        return 0
+    elif [[ ${_ret} -eq 1 ]]; then
+        DEBUG "Configs are different: configuration has to be updated!!"
+        return 1
+    else
+	ERROR "Could not compare configs!"
+	exit 1
+    fi
+}
+#    cmd_stop
+
+function cmd_install_station_config() { ## @fn Try to Install new station configuration instead of the current one (to be backuped)
     local arg="$*"
-    local base
-    local new_cfg_dir
 
     if [[ -z "${arg}" ]]; then
         ERROR "Wrong argument '${arg}'!"
@@ -535,42 +589,15 @@ function cmd_install_station_config() {
         exit 1
     fi
 
-    base=$(basename "${arg}")
-
-    new_cfg_dir=$(mktemp -u -d --tmpdir="${HILBERT_CONFIG_BASEDIR}" "$base.XXXXXXXXXX")
-    DEBUG "NOTE: new config is '${base}' => new_cfg_dir: '${new_cfg_dir}'"
-
     # TODO: what about further resources? Maybe a .tar.gz and unpack it into ${new_cfg_dir}? rsync?!
-    if [[ -d "${arg}" ]]; then
-
-        WARNING "New configuration directory: '${arg}'"  # is not yet fully supported!!!?
+    if [[ -d "${arg}" && -x "${arg}" && -r "${arg}" ]]; then
+        INFO "Directory with a new-configuration: '${arg}'"  # is not yet fully supported!!!?
 
         if [[ ! -r "${arg}/station.cfg" ]]; then
             ERROR "Station configuration file '${arg}/station.cfg' is not readable or missing!"
             cmd_usage
             exit 1
         fi
-
-        # NOTE: take over the deployed station configurations
-        DEBUG "Moving ${arg} => ${new_cfg_dir}..."
-        mv "${arg}" "${new_cfg_dir}"
-
-    elif [[ -r "${arg}" ]]; then
-
-        # NOTE: New station's configuration file
-        # TODO: make sure there is no such dir yet!
-
-        WARNING "Deprecated init method!!!"
-        INFO "Initializing with a single station-config file: [${arg}]... Unique base name: $base"
-
-        # NOTE: take over the deployed station configuration file!
-        DEBUG "Moving ${arg} => ${new_cfg_dir}/station.cfg"
-
-        mkdir -p "${new_cfg_dir}"  ## TODO: add mode?
-        mv "${arg}" "${new_cfg_dir}/station.cfg"
-
-        # NOTE: the rest of resources must be installed manually by hand:
-        ln -s '../docker-compose.yml' "${new_cfg_dir}/docker-compose.yml"
     else
         ERROR "Cannot Install configuration specified by '${arg}'!"
         cmd_usage
@@ -578,10 +605,41 @@ function cmd_install_station_config() {
     fi
 
 
+    ### TODO: check beforehand and if necessary pre stop everything ++ post start anew, 
+    ### forget the currently running application choice??
+    ###    cmd_detect_changes
+    local _old="$(readlink -f "${HILBERT_CONFIG_DIR}")"
+
+# rsync -zavc src/ dest/ --dry-run
+# -zaic
+
+#    echo "RSYNC RET: $?"
+#   exit 0
+
+    local base=$(basename "${arg}")
+    local new_cfg_dir=$(mktemp -u -d --tmpdir="${HILBERT_CONFIG_BASEDIR}" "$base.XXXXXXXXXX") # dry run: just output it!
+    DEBUG "NOTE: new config is '${base}' => new_cfg_dir: '${new_cfg_dir}'"
+
+
+    # NOTE: take over the deployed station configurations
+    DEBUG "Moving ${arg} => ${new_cfg_dir}..."
+    if [[ -n "${DRY_RUN}" ]]; then
+        echo "[${DRY_RUN}] Simulating: [mv '${arg}' '${new_cfg_dir}']..."
+    else
+        mv  "${arg}" "${new_cfg_dir}"
+# rsync --backup --backup-dir 
+    fi
+
+
     if [[ -L "${HILBERT_CONFIG_DIR}" ]]; then
-        DEBUG "${HILBERT_CONFIG_DIR} -> $(readlink -f "${HILBERT_CONFIG_DIR}")"
-        # TODO: remove older config?
-        unlink "${HILBERT_CONFIG_DIR}"
+        DEBUG "Current latest configuration: ${HILBERT_CONFIG_DIR} -> ${_old}"
+
+        if [[ -n "${DRY_RUN}" ]]; then
+            echo "[${DRY_RUN}] Simulating: [unlink '${HILBERT_CONFIG_DIR}']..."
+        else
+            unlink "${HILBERT_CONFIG_DIR}"
+        fi
+
     elif [[ -d "${HILBERT_CONFIG_DIR}" ]]; then
         ERROR "Directory ${HILBERT_CONFIG_DIR} exists and it is not a link!"
         exit 2
@@ -589,12 +647,47 @@ function cmd_install_station_config() {
 
     ## NOTE: atomic configuration update!
     ## NOTE: full path in symbolic link => may interfere when volume-mounted...
-    ln -sf "$(basename "${new_cfg_dir}")" "${HILBERT_CONFIG_DIR}"
+    if [[ -n "${DRY_RUN}" ]]; then
+        echo "[${DRY_RUN}] Simulating: [ln -sf '$(basename "${new_cfg_dir}")' '${HILBERT_CONFIG_DIR}']..."
+    else
+        ln -sf "$(basename "${new_cfg_dir}")" "${HILBERT_CONFIG_DIR}"
+    fi
 
+    # post-setup self-test
     if [[ ! -L "${HILBERT_CONFIG_DIR}" ]]; then
         ERROR "${HILBERT_CONFIG_DIR} is not a link!"
         exit 2
     fi
+
+    # TODO: backup older config for a while. FIXME: limited number of backups?
+    if [[ -n "${DRY_RUN}" ]]; then
+        echo "[${DRY_RUN}] Simulating: [mv --backup=numbered -T '${_old}' '${HILBERT_CONFIG_BACKUP}']..."
+    else
+        mv --backup=numbered -T "${_old}" "${HILBERT_CONFIG_BACKUP}"
+    fi
+
+    # Max 10 backups!
+    local _max_backup="10"
+    if [[ -d "${HILBERT_CONFIG_BACKUP}.~${_max_backup}~" ]]; then
+        local _i=1
+
+        if [[ -n "${DRY_RUN}" ]]; then
+            echo "[${DRY_RUN}] Simulating: [rm -Rf '${HILBERT_CONFIG_BACKUP}.~${_i}~']..."
+        else
+            rm -Rf "${HILBERT_CONFIG_BACKUP}.~${_i}~"
+        fi
+
+        for ((;;_i++)); do
+            [[ ${_i} -ge ${_max_backup} ]] && break
+
+            if [[ -n "${DRY_RUN}" ]]; then
+                echo "[${DRY_RUN}] Simulating: [mv -f '${HILBERT_CONFIG_BACKUP}.~$((${_i} + 1))~' '${HILBERT_CONFIG_BACKUP}.~${_i}~']..."
+            else
+                mv -f "${HILBERT_CONFIG_BACKUP}.~$((${_i} + 1))~" "${HILBERT_CONFIG_BACKUP}.~${_i}~"
+            fi
+        done
+    fi
+
 
     ## TODO: FIXME: All deployed docker-compose.yml files should be previously pre-peared & simplified!
     return 0
@@ -672,14 +765,47 @@ function cmd_init() { ## @fn Install/Initialize/Prepare Station configuration
         fi
     fi
 
-    cmd_native_autodetect
-    if [[ -n "${arg}" && -r "${arg}" ]]; then
-        cmd_install_station_config "${arg}"
+    local _ret
+
+    local new_cfg=0
+    if [[ -n "${arg}" ]]; then
+        cmd_compare_station_configs "${arg}"
+	new_cfg=$?
     fi
 
-    local s
+    if [[ ${new_cfg} -eq 1 ]]; then 
+	# NOTE: we avoid multiple config loading/recursiveness by sub-calling this tool recursively!
+
+        # NOTE: we can run quieter (with extra `-q`) or with the same log-level...
+	cmd_tool_subcall -q -L stop
+        _ret=$?
+
+        if [[ ${_ret} -ne 0 ]]; then
+	    ERROR "Could not stop Hilbert services/application before config update!"
+	    exit ${_ret}
+	fi
+
+        cmd_install_station_config "${arg}"
+        _ret=$?
+
+        if [[ ${_ret} -ne 0 ]]; then
+            ERROR "Faild to install new configuration from [$arg]!"
+
+            WARNING "Trying to restart previously stopped services/application:"
+
+            # NOTE: we can run quieter (with extra `-q`) or with the same log-level...
+	    cmd_tool_subcall -q -L start
+	    
+            WARNING "Note that restarting finished with exit code: [$?]!!!"
+
+            exit ${_ret}
+        fi
+    fi
+
+    cmd_native_autodetect
     cmd_read_configuration
 
+    local s
     if [[ ${#hilbert_station_profile_services[@]} -ne 0 ]]; then
         for s in "${hilbert_station_profile_services[@]}"; do
             DEBUG "Initializing service [$s]"
@@ -708,6 +834,17 @@ function cmd_init() { ## @fn Install/Initialize/Prepare Station configuration
 
     if [[ ! -r "${HILBERT_CONFIG_BASEDIR}/${OGL}" ]]; then
         INFO "Missing/unreadable '${HILBERT_CONFIG_BASEDIR}/${OGL}'! Please regenerate it for OpenGL apps!"
+    fi
+
+    if [[ ${new_cfg} -eq 1 ]]; then 
+        # NOTE: we can run quieter (with extra `-q`) or with the same log-level...
+	cmd_tool_subcall -q -L start
+        _ret=$?
+
+        if [[ ${_ret} -ne 0 ]]; then
+	    ERROR "Could not start Hilbert services/application anew after config update!"
+	    exit ${_ret}
+	fi
     fi
 
     return $?
