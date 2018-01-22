@@ -18,10 +18,10 @@ Name:           hilbert-cli
 Version:        0.9.1
 
 License:        Apache License, Version 2.0
-Release:        7%{?dist}
+Release:        8%{?dist}
 
 URL:            https://github.com/hilbert/%{origname}
-Source0:         hilbert-cli.tar.gz
+Source0:         %{origname}.tar.gz
 # v%{version}.tar.gz
 # https://github.com/hilbert/hilbert-cli/archive/v%{version}.tar.gz
 Source1:        hilbert-compose-customizer.tar.gz
@@ -165,9 +165,14 @@ rm -rf $RPM_BUILD_ROOT
 # docker rmi hello-world:latest
 
 %changelog
+* Mon Jan 22 2018 Alex
+- Updated/improved hilbert-station for better configuration deployment, X11-root-refresh, "pre_init"-hook handling
+
+
 * Sun Oct 1 2017 Alex
 - Updated hilbert-station to avoid unnecessary output from `docker pull` 
 - Updated hilbert-compose-customizer to workaround nvidia-docker issue with the host networking driver/mode
+
 
 * Tue Jul 18 2017 Alex
 - Updated hilbert-station + added hilbert-compose-customizer
