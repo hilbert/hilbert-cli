@@ -3109,8 +3109,8 @@ class Hilbert(BaseRecordValidator):
         default_rule = {
             self._version_tag: (True, SemanticVersionValidator),
             # Mandatory, specifies supported Types of Config's Entity
-            self._services_tag: (True, GlobalServices),
-            self._applications_tag: (True, GlobalApplications),
+            self._services_tag: (False, GlobalServices),
+            self._applications_tag: (False, GlobalApplications),
             self._profiles_tag: (True, GlobalProfiles),
             self._stations_tag: (True, GlobalStations),
             self._groups_tag: (False, GlobalGroups),  # Optional
