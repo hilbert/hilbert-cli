@@ -496,9 +496,9 @@ class BaseValidator(AbstractValidator):
         """
         return parsed value, throw exception if input is invalid!
 
-        :param d:
-        :param parent:
-        :return:
+        :param d: input data to be parsed/validated
+        :param parent: parent/container object
+        :return: constructed instance of requested class or parsed data
         """
         self = cls(*args, **kwargs)
 
