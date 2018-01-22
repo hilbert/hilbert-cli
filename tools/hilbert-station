@@ -788,6 +788,14 @@ function cmd_init_service() {
         eval "${HILBERT_APPLICATION_AD}"
     fi
 
+    ## NOTE: preparations are common for any type...
+    local HILBERT_APPLICATION_PREINIT
+    HILBERT_APPLICATION_PREINIT="$(_service_get_field "$arg" "pre_init")"
+    if [[ -n "${HILBERT_APPLICATION_PREINIT}" ]]; then
+        DEBUG "Running Preparations before initialization: [${HILBERT_APPLICATION_PREINIT}]..."
+        eval "${HILBERT_APPLICATION_PREINIT}"
+    fi
+
     DEBUG "Initializing/preparing service/application via docker-compose: ${arg}..."
     cmd_compose_init "${arg}"
 
