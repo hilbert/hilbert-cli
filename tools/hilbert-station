@@ -16,9 +16,10 @@ declare -rg TOOL="$(basename "${TOOL_SH}")" # script_name=`basename "$0"` # scri
 export PATH="${PATH}:$(readlink -f "$(dirname "${TOOL_SH}")")" # Add the tool' directory into the search PATH...
 declare -rg LOGGER="logger --id=$$ -t ${TOOL} "
 
-declare -g LOGLEVEL=2  # WARNING-LEVEL
-declare -g DRY_RUN=""  # NOTE: turn on dry mode (not actual service-runtime action execution) if non-empty
 declare -g hibert_station_process_kill_timeout=8
+declare -g LOGLEVEL=${LOGLEVEL:-2}  # WARNING-LEVEL
+declare -g DRY_RUN="${DRY_RUN:-}"  # NOTE: turn on dry mode (not actual service-runtime action execution) if non-empty
+
 declare -g XSETROOT=${XSETROOT:-xsetroot -solid black}
 
 
@@ -64,7 +65,14 @@ trap 'exec 2>&4 1>&3 ' SIGHUP SIGINT SIGQUIT SIGPIPE SIGTERM EXIT RETURN
 exec 2>&1
 # 1>log.out
 
-function cmd_start_locking() {
+declare -g LOCKING=1
+
+function cmd_start_locking() { ## @fn Start a lock to avoid parallel execution of this tool
+    if [[ "x${LOCKING}" = "x0" ]]; then
+        DEBUG "Avoiding locking or related checks on demand!"
+	return 0
+    fi
+
     local pid
     for pid in $(pidof -s "${TOOL}"); do
         if [[ $pid != $$ ]]; then
@@ -188,6 +196,7 @@ optional arguments:
   -T                       turn off BASH tracing and verbosity
   -d                       turn on dry-run mode
   -D                       turn off dry-run mode
+  -L                       disable locking for recursive sub-calls
 
 respected environment variables:
   HILBERT_CONFIG_BASEDIR   location of the base configuration directory of ${TOOL}. Default: '~/.config/${TOOL}'
@@ -294,13 +303,16 @@ function cmd_info() {
     cat << EOF
 This tool:   [${TOOL}: ${TOOL_SH}: $(ls -l "${TOOL_SH}" 2>&1)]
 PID:         [$$]
+
 Lockfile:    [${LOCKFILE}: $(ls -l "${LOCKFILE}" 2>&1)]
+Do locking:  [${LOCKING}]
 
 Config Base: [${HILBERT_CONFIG_BASEDIR}]
 Config Dir:  [${HILBERT_CONFIG_DIR}: $(readlink -f "${HILBERT_CONFIG_DIR}" 2>&1)]
 Config File: [${HILBERT_CONFIG_FILE}: $(readlink -f "${HILBERT_CONFIG_FILE}" 2>&1)]
 All Configs: [$(sh -c "cd ${HILBERT_CONFIG_DIR}/ && ls * | xargs" 2>&1)]
 
+INPUT_OPTS:  [${INPUT_OPT}]
 DRY_RUN:     [${DRY_RUN}]
 LOGLEVEL:    [${LOGLEVEL}]
 
@@ -363,10 +375,15 @@ EOF
 }
 
 declare -rg INPUT_ARGS=($@)
-
+declare -g INPUT_OPT=""
 # NOTE: Custom argument/option handling only using 'getopts'!
-while getopts ":hqtTdDvV" opt; do   # NOTE: removed 'p' for now
+while getopts ":hqtTdDviVL" opt; do   # NOTE: removed 'p' for now
+    INPUT_OPT="${INPUT_OPT} -${opt}"
     case ${opt} in
+    i )
+        cmd_info
+        exit 0
+        ;;
     h )
         cmd_usage
         exit 0
@@ -386,6 +403,10 @@ while getopts ":hqtTdDvV" opt; do   # NOTE: removed 'p' for now
         DEBUG "Turning off tracing of bash command execution + verbosity..."
         set +v
         set +x
+        ;;
+    L )
+        DEBUG "Disable locking..."
+        LOCKING="0"
         ;;
     v )
         DEBUG "Increase verbosity..."
@@ -628,9 +649,15 @@ function cmd_read_configuration() {
     return ${_ret}
 }
 
-## @fn cmd_init
-## @param [cfg] (optional)
-function cmd_init() {
+function cmd_tool_subcall() { ## @fn Execute this tool recursively. Add `-L` to avoid lock-guards for sub-process!
+    # LOGLEVEL=${LOGLEVEL} DRY_RUN=${DRY_RUN}
+    local _cmd="env ${TOOL_SH} ${INPUT_OPT} $@"
+    DEBUG "Running [$TOOL $@] via [${_cmd}]"
+    eval "${_cmd}"
+    return $?
+}
+
+function cmd_init() { ## @fn Install/Initialize/Prepare Station configuration
     local arg="$*"
 
     if [[ ! -w "/dev/pts/ptmx" ]]; then
