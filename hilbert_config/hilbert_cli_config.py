@@ -2377,10 +2377,16 @@ class Station(BaseRecordValidator):  # Wrapper?
                     if k.startswith('HILBERT_'):
                         # NOTE: HILBERT_* are exports for services/applications (docker-compose.yml)
                         tmp.write("declare -xg {0}='{1}'\n".format(k, str(_settings.get(k, ''))))
-                    else:
+                    elif k.startswith('hilbert_'):
                         # NOTE: hilbert_* are exports for client-side tool: `hilbert-station`
-                        assert k.startswith('hilbert_')
                         tmp.write("declare -rg {0}='{1}'\n".format(k, str(_settings.get(k, ''))))
+                    else:
+                        if not PEDANTIC:
+                            log.debug("Non-hilbert station setting: [%s]!")
+                            tmp.write("declare -xg {0}='{1}'\n".format(k, str(_settings.get(k, ''))))
+                        else:
+                            log.warning("Non-hilbert station setting: [%s]! Not allowed in pedantic mode!")
+
             # NOTE: tmp is now generated!
 
             try:
