@@ -3,7 +3,11 @@
 ## [Unreleased]
 
 ### Changed
+- Update due to ruamel API change (in ~0.14.2)
+
 ### Added
+- PulseAudio: Setup/Configuration/Support
+
 ### Security
 
 ## [0.9.0] - 2017-05-06

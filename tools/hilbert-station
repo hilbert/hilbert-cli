@@ -13,12 +13,14 @@
 ## NOTE: see also http://tldp.org/LDP/abs/html/exitcodes.html
 declare -rg TOOL_SH="$0"
 declare -rg TOOL="$(basename "${TOOL_SH}")" # script_name=`basename "$0"` # script_name="${script_name%.*}"
-
+export PATH="${PATH}:$(readlink -f "$(dirname "${TOOL_SH}")")" # Add the tool' directory into the search PATH...
 declare -rg LOGGER="logger --id=$$ -t ${TOOL} "
 
 declare -g LOGLEVEL=2  # WARNING-LEVEL
 declare -g DRY_RUN=""  # NOTE: turn on dry mode (not actual service-runtime action execution) if non-empty
 declare -g hibert_station_process_kill_timeout=8
+
+declare -rg XSETROOT="${XSETROOT:-xsetroot}"
 
 ## NOTE: locking following: http://stackoverflow.com/a/1985512 by Przemyslaw Pawelczyk <przemoc@gmail.com>
 ## NOTE: uses flock from util-linux[-ng]
@@ -26,7 +28,7 @@ declare -g hibert_station_process_kill_timeout=8
 
 ## NOTE: usually /var/lock/ is a symbolic link to /run/lock/ => it will be removed in case of a crash! No stale lockfile is possible!
 ## NOTE: just in case if /run != /var/run the following loop will check them separately:
-for d in /var/lock/lockdev /run/lock/lockdev /var/lock /run/lock /var/run /run;
+for d in /var/run/hilbert /var/run/lock/lockdev /run/lock/lockdev /var/run/lock /run/lock /var/run /run;
 do
     if [[ -w "${d}/" ]]; then
         declare -- LOCKFILE="${d}"
@@ -143,9 +145,10 @@ export HILBERT_OGL="${HILBERT_OGL:-/tmp/OGL.tgz}"
 # ${HILBERT_CONFIG_BASEDIR}/${OGL}
 declare -rg OGL="$(basename "${HILBERT_OGL}")"
 
-export DOCKER="$(readlink -f "${DOCKER:-$(which docker)}")"
-export DOCKER_GC="$(readlink -f "${DOCKER_GC:-$(which docker-gc)}")"
-export DOCKER_COMPOSE="$(readlink -f "${DOCKER_COMPOSE:-$(which docker-compose)}")"
+export DOCKER="${DOCKER:-docker}"
+export DOCKER_GC="${DOCKER_GC:-docker-gc}"
+export DOCKER_COMPOSE="${DOCKER_COMPOSE:-docker-compose}"
+export HILBERT_COMPOSE_CUSTOMIZER="${HILBERT_COMPOSE_CUSTOMIZER:-hilbert-compose-customizer}"
 
 for d in /usr/sbin/shutdown /sbin/shutdown;
 do
@@ -266,12 +269,21 @@ function cmd_native_autodetect() {
         (xhost +; xhost "+si:localuser:${USER}"; xhost +si:localuser:root) 1> /dev/null 2>&1 # xhost + localhost;
     fi
 
-   INFO "DISPLAY: ${DISPLAY}, XAUTHORITY: ${XAUTHORITY}, HILBERT_XAUTH: ${HILBERT_XAUTH}"
+   DEBUG "DISPLAY: ${DISPLAY}, XAUTHORITY: ${XAUTHORITY}, HILBERT_XAUTH: ${HILBERT_XAUTH}"
 
    ## Pulse Audio
-   export PULSE_SERVER=${PULSE_SERVER:-/run/user/${UID}/pulse/native}
-   export PULSE_COOKIE=${PULSE_COOKIE:-${HOME}/.config/pulse/cookie}
-   INFO "PULSE_SERVER: ${PULSE_SERVER}, PULSE_COOKIE: ${PULSE_COOKIE}"
+   if [[ ! -S "${PULSE_SERVER}" ]]; then
+     unset PULSE_SERVER
+     unset PULSE_COOKIE
+     [[ -S "/var/run/pulse/native" ]] && export PULSE_SERVER="/var/run/pulse/native"
+     
+     if [[ ! -S "${PULSE_SERVER}" ]]; then
+       export PULSE_SERVER="/run/user/${UID}/pulse/native"
+       export PULSE_COOKIE="${HOME}/.config/pulse/cookie"
+     fi
+   fi
+
+   DEBUG "PULSE_SERVER: ${PULSE_SERVER}, PULSE_COOKIE: ${PULSE_COOKIE}"
 
    # Detect HILBERT_ALSA_CARD??
    return 0
@@ -280,9 +292,9 @@ function cmd_native_autodetect() {
 ## @fn cmd_info Show Station System INFO & Configuration
 function cmd_info() {
     cat << EOF
-This tool:   [${TOOL}: ${TOOL_SH}: $(ls -l "$(readlink -f "${TOOL_SH}")" 2>&1)]
+This tool:   [${TOOL}: ${TOOL_SH}: $(ls -l "${TOOL_SH}" 2>&1)]
 PID:         [$$]
-Lockfile:    [${LOCKFILE}: $(ls -l "$(readlink -f "${LOCKFILE}")" 2>&1)]
+Lockfile:    [${LOCKFILE}: $(ls -l "${LOCKFILE}" 2>&1)]
 
 Config Base: [${HILBERT_CONFIG_BASEDIR}]
 Config Dir:  [${HILBERT_CONFIG_DIR}: $(readlink -f "${HILBERT_CONFIG_DIR}" 2>&1)]
@@ -293,13 +305,16 @@ DRY_RUN:     [${DRY_RUN}]
 LOGLEVEL:    [${LOGLEVEL}]
 
 OGL:         [${HILBERT_CONFIG_BASEDIR}/${OGL}: $(ls -l "${HILBERT_CONFIG_BASEDIR}/${OGL}" 2>&1)]
-HILBERT_OGL: [${HILBERT_OGL}: $(ls -l "$(readlink -f "${HILBERT_OGL}")" 2>&1)]
+HILBERT_OGL: [${HILBERT_OGL}: $(ls -l "${HILBERT_OGL}" 2>&1)]
 
 DOCKER:      [${DOCKER}: $(${DOCKER} --version 2>&1)]
-DOCKER_GC:   [${DOCKER_GC}: $(ls -l "${DOCKER_GC}" 2>&1)]
+DOCKER_GC:   [${DOCKER_GC}: $(ls -l "$(which "${DOCKER_GC}" 2>&1)" 2>&1)]
 
 DOCKER_COMPOSE:       [${DOCKER_COMPOSE}: $(${DOCKER_COMPOSE} --version 2>&1)]
 COMPOSE_PROJECT_NAME: [${COMPOSE_PROJECT_NAME}]
+
+HILBERT_CUSTOMIZATIONS:     [${HILBERT_CUSTOMIZATIONS}]
+HILBERT_COMPOSE_CUSTOMIZER: [$(ls -l "$(which "${HILBERT_COMPOSE_CUSTOMIZER}" 2>&1)" 2>&1)]
 
 HOME:        [${HOME}]
 PWD:         [${PWD}]
@@ -618,7 +633,7 @@ function cmd_init() {
 
     if [[ ! -w "/dev/pts/ptmx" ]]; then
         if [[ -n "${DRY_RUN}" ]]; then
-            echo "[${DRY_RUN}] Running: [chmod a+rw /dev/pts/ptmx]..."
+            echo "[${DRY_RUN}] Simulating: [chmod a+rw /dev/pts/ptmx]..."
         else
             DEBUG "Trying to fix '/dev/pts/ptmx'-permissions:"
 
@@ -634,18 +649,18 @@ function cmd_init() {
     fi
 
     local s
-
     cmd_read_configuration
+
     if [[ ${#hilbert_station_profile_services[@]} -ne 0 ]]; then
         for s in "${hilbert_station_profile_services[@]}"; do
-            DEBUG "Init [$s]"
+            DEBUG "Initializing service [$s]"
             cmd_init_service "${s}"
         done
     fi
 
     if [[ ${#hilbert_station_compatible_applications[@]} -ne 0 ]]; then
         for s in "${hilbert_station_compatible_applications[@]}"; do
-            DEBUG "Init [$s]"
+            DEBUG "Initializing application [$s]"
             cmd_init_service "${s}"
         done
     fi
@@ -654,7 +669,7 @@ function cmd_init() {
     if [[ -n "${DOCKER_GC}" ]]; then
         if hash "${DOCKER_GC}" 2>/dev/null; then
             if [[ -z "${DRY_RUN}" ]]; then
-                echo "[${DRY_RUN}] Running: [${DOCKER_GC}]: "
+                echo "[${DRY_RUN}] Simulating: [${DOCKER_GC}]: "
 #                ${DOCKER_GC}  # NOTE: actually run this in production!
             else
                 echo "Running: [${DOCKER_GC}]"
@@ -697,6 +712,15 @@ function cmd_app_change() {
         else
             cmd_stop_service "${APP_ID}"  #  cmd_restart_service "${APP_ID}" ; return 0 # Same Application ID => Same Env.Vars??? :-(
         fi
+        if [[ -n DISPLAY ]]; then
+            DEBUG "Paint X11 after stopping '${APP_ID}'"
+            "${XSETROOT}" -grey
+        fi
+    fi
+
+    if [[ -n DISPLAY ]]; then
+        DEBUG "Paint X11 root grey before starting [$arg]"
+        "${XSETROOT}" -grey
     fi
 
     cmd_start_service "$arg"
@@ -846,15 +870,14 @@ function cmd_compose_start() {
     export HILBERT_APPLICATION_ID="$arg"  # NOTE: To be set as env. variable APP_ID within container...
 
     ## NOTE: Simplify COMPOSE_FILE -> launch!
-    local PLAIN_COMPOSE_FILE="${HILBERT_CONFIG_DIR}/cached_for_${HILBERT_APPLICATION_ID}.${HILBERT_APPLICATION_FILE:-docker-compose.yml}"
-    if [[ -r ${PLAIN_COMPOSE_FILE} ]]; then
+    local PLAIN_COMPOSE_FILE="cache_for_${HILBERT_APPLICATION_ID}.yaml"
+    if [[ -r "${HILBERT_CONFIG_DIR}/${PLAIN_COMPOSE_FILE}" ]]; then
         export COMPOSE_FILE="${PLAIN_COMPOSE_FILE}"
     else
         export COMPOSE_FILE="${HILBERT_APPLICATION_FILE:-docker-compose.yml}"  # Default value
     fi
 
     DEBUG "Starting service/application: ${HILBERT_APPLICATION_ID} (${HILBERT_APPLICATION_REF} from ${COMPOSE_FILE})..."
-
     cmd_docker_compose up -d "${HILBERT_APPLICATION_REF}"
 
     unset -v HILBERT_APPLICATION_ID COMPOSE_FILE
@@ -866,6 +889,7 @@ function cmd_compose_start() {
 function cmd_compose_init() {
     ## NOTE: Application/Service ID (of compose type)
     local arg="$*"
+    export HILBERT_APPLICATION_ID="$arg"  # NOTE: To be set as env. variable APP_ID within container...
 
     local HILBERT_APPLICATION_FILE
     local HILBERT_APPLICATION_REF
@@ -874,24 +898,52 @@ function cmd_compose_init() {
 
     ## TODO: Simplify COMPOSE_FILE -> launch!
     export COMPOSE_FILE="${HILBERT_APPLICATION_FILE:-docker-compose.yml}"  # Default value
-    export HILBERT_APPLICATION_ID="$arg"  # NOTE: To be set as env. variable APP_ID within container...
 
-    local PLAIN_COMPOSE_FILE="${HILBERT_CONFIG_DIR}/cached_for_${HILBERT_APPLICATION_ID}.${HILBERT_APPLICATION_FILE:-docker-compose.yml}"
-    DEBUG "Trying to simplify: '${COMPOSE_FILE}' -> '${PLAIN_COMPOSE_FILE}': "
-    cmd_docker_compose config > "${PLAIN_COMPOSE_FILE}"
-    ## NOTE: running config once should be enough... ?
-    # "HB_URL=${HILBERT_HEARTBEAT_URL:-http://127.0.0.1:${HILBERT_HEARTBEAT_PORT:-8888}}" :-(
-
-    if [[ $? -eq 0 ]]; then  # && [[ -z "${DRY_RUN}" ]] ???
-#        export COMPOSE_FILE="${PLAIN_COMPOSE_FILE}~"
-#        cmd_docker_compose config > "${PLAIN_COMPOSE_FILE}"
-#        rm "${COMPOSE_FILE}"
-        export COMPOSE_FILE="${PLAIN_COMPOSE_FILE}"
+    if [[ ! -r "${HILBERT_CONFIG_DIR}/${COMPOSE_FILE}" ]]; then
+        ERROR "COMPOSE_FILE [${HILBERT_CONFIG_DIR}/${COMPOSE_FILE}] is missing or unreadable!"
+        return 2
     fi
-    #### TODO: all provided docker-compose.yml files should be pre-processed&simplified!...
 
-    DEBUG "Initializing/preparing service/application: ${HILBERT_APPLICATION_ID} (${HILBERT_APPLICATION_REF} from ${COMPOSE_FILE})..."
-    cmd_docker_compose pull --ignore-pull-failures "${HILBERT_APPLICATION_REF}"
+    local DOCKER_COMPOSE_OVERRIDE="override_for_${HILBERT_APPLICATION_ID}.yaml"
+
+    if [[ -n "${DRY_RUN}" ]]; then
+        echo "[${DRY_RUN}] Simulating: [rm '${HILBERT_CONFIG_DIR}/${DOCKER_COMPOSE_OVERRIDE}']"
+    else
+        rm -f "${HILBERT_CONFIG_DIR}/${DOCKER_COMPOSE_OVERRIDE}"
+    fi
+
+    if hash "${HILBERT_COMPOSE_CUSTOMIZER}" 2>/dev/null; then
+        DEBUG "Customizing for service/application: [${arg}]..."
+        ${HILBERT_COMPOSE_CUSTOMIZER} --formatversion "2.1" --services "${HILBERT_APPLICATION_REF}" --output "${HILBERT_CONFIG_DIR}/${DOCKER_COMPOSE_OVERRIDE}"
+    fi
+
+    if [[ -r "${HILBERT_CONFIG_DIR}/${DOCKER_COMPOSE_OVERRIDE}" ]]; then
+        export COMPOSE_FILE="${COMPOSE_FILE}:${DOCKER_COMPOSE_OVERRIDE}"
+    fi
+
+    local PLAIN_COMPOSE_FILE="cache_for_${HILBERT_APPLICATION_ID}.yaml"
+    DEBUG "Trying to simplify: '${COMPOSE_FILE}' -> '${PLAIN_COMPOSE_FILE}' in '${HILBERT_CONFIG_DIR}/': "
+
+    if [[ -n "${DRY_RUN}" ]]; then
+        echo "[${DRY_RUN}] Simulating: [rm '${HILBERT_CONFIG_DIR}/${PLAIN_COMPOSE_FILE}']"
+    else
+        rm -f "${HILBERT_CONFIG_DIR}/${PLAIN_COMPOSE_FILE}"
+    fi
+
+    cmd_docker_compose config > "${HILBERT_CONFIG_DIR}/${PLAIN_COMPOSE_FILE}"
+    local ret=$?
+
+    if [[ $? -eq 0 && -r "${HILBERT_CONFIG_DIR}/${PLAIN_COMPOSE_FILE}" ]]; then  # && [[ -z "${DRY_RUN}" ]] ???
+        export COMPOSE_FILE="${PLAIN_COMPOSE_FILE}"
+    else
+        if [[ -n "${DRY_RUN}" ]]; then
+            echo "[${DRY_RUN}] Simulating: [rm '${HILBERT_CONFIG_DIR}/${DOCKER_COMPOSE_OVERRIDE}']"
+        else
+            : rm -f "${HILBERT_CONFIG_DIR}/${DOCKER_COMPOSE_OVERRIDE}" # !
+        fi
+    fi
+
+    cmd_docker_compose pull --ignore-pull-failures "${HILBERT_APPLICATION_REF}" | cat
     ret=$?
 
     unset -v HILBERT_APPLICATION_ID COMPOSE_FILE
@@ -912,8 +964,8 @@ function cmd_compose_restart() {
     export HILBERT_APPLICATION_ID="$arg"  # NOTE: To be set as env. variable APP_ID within container...
 
     ## NOTE: Simplify COMPOSE_FILE -> launch!
-    local PLAIN_COMPOSE_FILE="${HILBERT_CONFIG_DIR}/cached_for_${HILBERT_APPLICATION_ID}.${HILBERT_APPLICATION_FILE:-docker-compose.yml}"
-    if [[ -r ${PLAIN_COMPOSE_FILE} ]]; then
+    local PLAIN_COMPOSE_FILE="cache_for_${HILBERT_APPLICATION_ID}.yaml"
+    if [[ -r "${HILBERT_CONFIG_DIR}/${PLAIN_COMPOSE_FILE}" ]]; then
         export COMPOSE_FILE="${PLAIN_COMPOSE_FILE}"
     else
         export COMPOSE_FILE="${HILBERT_APPLICATION_FILE:-docker-compose.yml}"  # Default value
@@ -939,8 +991,8 @@ function cmd_compose_stop() {
     export HILBERT_APPLICATION_ID="$arg"  # NOTE: To be set as env. variable APP_ID within container...
 
     ## NOTE: Simplify COMPOSE_FILE -> launch!
-    local PLAIN_COMPOSE_FILE="${HILBERT_CONFIG_DIR}/cached_for_${HILBERT_APPLICATION_ID}.${HILBERT_APPLICATION_FILE:-docker-compose.yml}"
-    if [[ -r ${PLAIN_COMPOSE_FILE} ]]; then
+    local PLAIN_COMPOSE_FILE="cache_for_${HILBERT_APPLICATION_ID}.yaml"
+    if [[ -r "${HILBERT_CONFIG_DIR}/${PLAIN_COMPOSE_FILE}" ]]; then
         export COMPOSE_FILE="${PLAIN_COMPOSE_FILE}"
     else
         export COMPOSE_FILE="${HILBERT_APPLICATION_FILE:-docker-compose.yml}"  # Default value
@@ -980,42 +1032,22 @@ function cmd_docker_stop() {
 
 function cmd_docker_compose() {
     if [[ -n "${DRY_RUN}" ]]; then
-        echo "[${DRY_RUN}] Running: [${DOCKER_COMPOSE} --skip-hostname-check $*]"
+        echo "[${DRY_RUN}] Simulating: [${DOCKER_COMPOSE} --skip-hostname-check $*], with COMPOSE_FILE='${COMPOSE_FILE}'"
         return 0
     fi
 
     local S="${PWD}"
-
     cd "${HILBERT_CONFIG_DIR}"
-
-    if [[ ! -r "${COMPOSE_FILE:-docker-compose.yml}" ]]; then
-        ERROR "COMPOSE_FILE ('${PWD}: ${COMPOSE_FILE:-docker-compose.yml}') is missing or unreadable!"
-        cd "${S}"
-        exit 2
-    fi
-
-    #### TODO: all provided docker-compose.yml files should be pre-processed&simplified!
-#    ${DOCKER_COMPOSE} config > "~docker-compose.yml~"
-#    local OLD="${COMPOSE_FILE}"
-#    export COMPOSE_FILE="~docker-compose.yml~"
-#    ${DOCKER_COMPOSE} config > "~~docker-compose.yml~~"
-#    rm "${COMPOSE_FILE}"
-#    export COMPOSE_FILE="~~docker-compose.yml~~"
-
-
 
     ## Actually run docker-compose
     # --debug / --verbose?
+#    COMPOSE_FILE="${CF}"
     ${DOCKER_COMPOSE} --skip-hostname-check $@
     local ret=$?
 
-    if [[ $LOGLEVEL -le "-1" ]]; then
-        ${DOCKER} ps -a
-    fi
-
     if [[ $ret -ne 0 ]]; then
-        ERROR "Could not run '${DOCKER_COMPOSE} --skip-hostname-check $*' in '${PWD}' with '${COMPOSE_FILE:-docker-compose.yml}'!"
-        exit 1
+        ERROR "Could not run '${DOCKER_COMPOSE} --skip-hostname-check $*' in '${PWD}' with COMPOSE_FILE='${COMPOSE_FILE}'!"
+        return $ret
     fi
 
     cd "${S}"
@@ -1024,7 +1056,7 @@ function cmd_docker_compose() {
 
 function cmd_docker() {
     if [[ -n "${DRY_RUN}" ]]; then
-        echo "[${DRY_RUN}] Running: [${DOCKER} $*]"
+        echo "[${DRY_RUN}] Simulating: [${DOCKER} $*]"
         return 0
     fi
 
@@ -1361,7 +1393,7 @@ function cmd_shutdown() {
     DEBUG "Shutting this system down... Arguments: [${arg}]"
 
     if [[ -n "${DRY_RUN}" ]]; then
-        echo "[${DRY_RUN}] Running: [${SHUTDOWN} ${arg} || sudo -n -P ${SHUTDOWN} ${arg}]..."
+        echo "[${DRY_RUN}] Simulating: [${SHUTDOWN} ${arg} || sudo -n -P ${SHUTDOWN} ${arg}]..."
     else
         ${SHUTDOWN} ${arg} || sudo -n -P ${SHUTDOWN} ${arg}
     fi
