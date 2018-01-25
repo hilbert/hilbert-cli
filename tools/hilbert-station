@@ -19,8 +19,8 @@ declare -rg LOGGER="logger --id=$$ -t ${TOOL} "
 declare -g LOGLEVEL=2  # WARNING-LEVEL
 declare -g DRY_RUN=""  # NOTE: turn on dry mode (not actual service-runtime action execution) if non-empty
 declare -g hibert_station_process_kill_timeout=8
+declare -g XSETROOT=${XSETROOT:-xsetroot -solid black}
 
-declare -rg XSETROOT="${XSETROOT:-xsetroot}"
 
 ## NOTE: locking following: http://stackoverflow.com/a/1985512 by Przemyslaw Pawelczyk <przemoc@gmail.com>
 ## NOTE: uses flock from util-linux[-ng]
@@ -303,6 +303,8 @@ All Configs: [$(sh -c "cd ${HILBERT_CONFIG_DIR}/ && ls * | xargs" 2>&1)]
 
 DRY_RUN:     [${DRY_RUN}]
 LOGLEVEL:    [${LOGLEVEL}]
+
+XSETROOT:    [${XSETROOT}]
 
 OGL:         [${HILBERT_CONFIG_BASEDIR}/${OGL}: $(ls -l "${HILBERT_CONFIG_BASEDIR}/${OGL}" 2>&1)]
 HILBERT_OGL: [${HILBERT_OGL}: $(ls -l "${HILBERT_OGL}" 2>&1)]
@@ -684,8 +686,25 @@ function cmd_init() {
     return $?
 }
 
-## @fn cmd_app_change
-function cmd_app_change() {
+function cmd_xsetroot() { ## @fn Wrapper for xsetroot
+    ## NOTE: debug message
+    local arg="$*"
+
+    if [[ -n DISPLAY ]]; then
+        DEBUG "${arg}"
+
+        if [[ -n "${DRY_RUN}" ]]; then
+            echo "[${DRY_RUN}] Simulating: [${XSETROOT}]"
+        else
+            ${XSETROOT}
+        fi
+    else
+        WARNING "Could not execute [${XSETROOT}] without X11 display! Debug message was: [${arg}]!"
+    fi
+}
+
+
+function cmd_app_change() { ## @fn Change current application (to be stopped) to the given one (to be started)
     ## NOTE: Application ID:
     local arg="$*"
 
@@ -712,16 +731,9 @@ function cmd_app_change() {
         else
             cmd_stop_service "${APP_ID}"  #  cmd_restart_service "${APP_ID}" ; return 0 # Same Application ID => Same Env.Vars??? :-(
         fi
-        if [[ -n DISPLAY ]]; then
-            DEBUG "Paint X11 after stopping '${APP_ID}'"
-            "${XSETROOT}" -grey
-        fi
     fi
 
-    if [[ -n DISPLAY ]]; then
-        DEBUG "Paint X11 root grey before starting [$arg]"
-        "${XSETROOT}" -grey
-    fi
+    cmd_xsetroot "Paint X11 root desktop before starting [$arg]"
 
     cmd_start_service "$arg"
     return $?
@@ -1354,6 +1366,8 @@ function cmd_stop() {
         else
             cmd_stop_service "${APP_ID}"
         fi
+	
+        cmd_xsetroot "Paint X11 after stopping '${APP_ID}'"
     else
         INFO "No previously started applications are currently detected"
     fi
@@ -1381,6 +1395,8 @@ function cmd_stop() {
                 ERROR "Could not stop service: '${sv}' ($data)"
             fi
         done
+
+        cmd_xsetroot "Paint X11 after stopping all services..."
     else
         DEBUG "No services should be running on this station!"
     fi
