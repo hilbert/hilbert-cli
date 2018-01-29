@@ -675,6 +675,23 @@ def cmd_app_change(parser, context, args):
 
     return args
 
+@subcmd('ssh', help="connect to a station via SSH")
+def cmd_ssh(parser, context, args):
+    action = 'ssh'
+    log.debug("Running 'cmd_{}'".format(action))
+
+    group = parser.add_mutually_exclusive_group()
+
+    group.add_argument('--configfile', required=False,
+                       help="specify input .YAML file (default: 'Hilbert.yml')")
+    group.add_argument('--configdump', required=False,
+                       help="specify input dump file")
+
+    parser.add_argument('StationID', help="specify the station")
+
+    cmd_action(parser, context, args, Action=action, appIdRequired=False)
+
+    return args
 
 # @subcmd('run_action', help='run specified action on given station with given arguments...')
 def cmd_run_action(parser, context, args):

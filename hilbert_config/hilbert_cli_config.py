@@ -2444,6 +2444,29 @@ class Station(BaseRecordValidator):  # Wrapper?
 
         return poweron.start()  # , action_args????
 
+    def ssh(self):
+        _a = self.get_address()
+
+        assert _a is not None
+        assert isinstance(_a, HostAddress)
+
+        try:
+            _ret = _a.ssh([])
+        except:
+            s = "Could not SSH into station {}".format(_a)
+            if not PEDANTIC:
+                log.warning(s)
+                return False
+            else:
+                log.exception(s)
+                raise
+
+        if _ret != 0:
+            return False
+
+        return (_ret == 0)
+
+
     def run_action(self, action, action_args):
         """
         Run the given action on/with this station
@@ -2456,11 +2479,12 @@ class Station(BaseRecordValidator):  # Wrapper?
                 app_change <ApplicationID>
 #                start [<ServiceID/ApplicationID>]
 #                finish [<ServiceID/ApplicationID>]
+                ssh
 
         :return: nothing.
         """
 
-        if action not in ['start', 'stop', 'cfg_deploy', 'app_change']:
+        if action not in ['start', 'stop', 'cfg_deploy', 'app_change', 'ssh']:
             raise Exception("Running action '{0}({1})' is not supported!".format(action, action_args))
 
         # Run 'ssh address hilbert-station action action_args'?!
@@ -2472,6 +2496,8 @@ class Station(BaseRecordValidator):  # Wrapper?
             _ret = self.shutdown()  # action_args
         elif action == 'app_change':
             _ret = self.app_change(action_args)  # ApplicationID
+        elif action == 'ssh':
+            _ret = self.ssh()  # action_args
 
         # elif action == 'start':
         #            self.start_service(action_args)
