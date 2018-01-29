@@ -289,23 +289,91 @@ def cmd_list_applications(parser, context, args):
     group.add_argument('--configdump', required=False,
                        help="specify input dump file")
 
+    parser.add_argument('-f', '--format', choices=['list', 'dashboard'],
+                        default='list', required=False,
+                        help="output format")
+
     args = parser.parse_args(args)
 
-    log.debug("Listing all Application ID...")
+    _args = vars(args)
+
+    mode = _args.get('format', 'list')
+
+    if mode == "list":
+        log.debug("Listing all Application ID...")
+
+        obj = None
+        try:
+            obj = cmd_list(parser, context, args, 'Applications/keys')
+        except:
+            log.exception("Sorry could not get the list of '{}' from the input file!".format('applications'))
+            sys.exit(1)
+
+        assert obj is not None
+
+        if isinstance(obj, BaseValidator):
+            print(yaml_dump(obj.data_dump()))
+        else:
+            print(yaml_dump(obj))
+
+        return args
+
+    assert mode == 'dashboard'
+
+    log.debug("Loading/parsing configuration...")
+    cfg = input_handler(parser, vars(context), args)
+    assert cfg is not None
+    assert isinstance(cfg, Hilbert)
 
     obj = None
+    log.debug("Listing all Applications for Dashboard...")
     try:
-        obj = cmd_list(parser, context, args, 'Applications/keys')
+        obj = cfg.query('Applications/data')
     except:
-        log.exception("Sorry could not get the list of '{}' from the input file!".format('applications'))
+        log.exception("Sorry could not query Applications's details from the given configuration!")
         sys.exit(1)
 
     assert obj is not None
-
     if isinstance(obj, BaseValidator):
-        print(yaml_dump(obj.data_dump()))
-    else:
-        print(yaml_dump(obj))
+        obj = obj.data_dump()
+
+    first = True
+    print('[')
+
+
+    for k in obj:
+        o = obj.get(k, None)
+        assert o is not None
+
+        sts = ""
+        if 'compatible_stations' in o:
+            try:
+                sts = o.get('compatible_stations', None)
+                if isinstance(sts, BaseValidator):
+                    sts = sts.data_dump()
+                sts = '"' + '", "'.join(sts) + '"'
+                if sts.strip() == '""':
+                    sts = ""
+            except:
+                log.debug("No [compatible_stations] for application [{0}]".format(k))
+
+        if not first:
+            print(',')
+
+        print('{')
+        for f in ['name', 'description', 'icon']:
+            if f in o:
+                print('"{0}": "{1}",'.format(f, o[f]))
+
+        if 'compatible_stations' in o:
+            print('"{0}": [{1}],'.format('compatible_stations', sts))
+
+        print('"{0}": "{1}"'.format('id', k))
+        print('}')
+
+        first = False
+
+    print(']')
 
     return args
 
@@ -347,71 +415,80 @@ def cmd_list_stations(parser, context, args):
             print(yaml_dump(obj.data_dump()))
         else:
             print(yaml_dump(obj))
-    else:
-        assert mode == 'dashboard'
 
-        log.debug("Loading/parsing configuration...")
-        cfg = input_handler(parser, vars(context), args)
-        assert cfg is not None
-        assert isinstance(cfg, Hilbert)
+        return args
 
-        obj = None
-        log.debug("Listing all Stations for Dashboard...")
+    assert mode == 'dashboard'
+
+    log.debug("Loading/parsing configuration...")
+    cfg = input_handler(parser, vars(context), args)
+    assert cfg is not None
+    assert isinstance(cfg, Hilbert)
+
+    obj = None
+    log.debug("Listing all Stations for Dashboard...")
+    try:
+        obj = cfg.query('Stations/data')
+    except:
+        log.exception("Sorry could not query Stations's details from the given configuration!")
+        sys.exit(1)
+
+    assert obj is not None
+    if isinstance(obj, BaseValidator):
+        obj = obj.data_dump()
+
+    first = True
+    print('[')
+    for k in obj:
+        o = obj.get(k, None)
+        assert o is not None
+
+        if (o.get('hidden', '') == 'true') or (o.get('hidden', False) == True):
+            continue
+
+        assert 'name' in o
+        assert 'profile' in o
+
+        s = o.get('client_settings', None)
+        d = ''
+        if s is not None:
+            assert isinstance(s, dict)
+            d = s.get('hilbert_station_default_application', '')
+
+        assert 'compatible_applications' in o
+        apps = None
         try:
-            obj = cfg.query('Stations/data')
+            apps = o.get('compatible_applications', None)
         except:
-            log.exception("Sorry could not query Stations's details from the given configuration!")
+            log.exception("Sorry could not query compatible_applications for a station [%s]!", k)
             sys.exit(1)
 
-        assert obj is not None
-        if isinstance(obj, BaseValidator):
-            obj = obj.data_dump()
+        if isinstance(apps, BaseValidator):
+            apps = apps.data_dump()
 
-        first = True
-        print('[')
-        for k in obj:
-            o = obj.get(k, None)
-            assert o is not None
+        apps = '"' + '", "'.join(apps) + '"'
 
-            if (o.get('hidden', '') == 'true') or (o.get('hidden', False) == True):
-                continue
+        if apps.strip() == '""':
+            apps = ""
 
-            assert 'name' in o
-            assert 'profile' in o
+        if not first:
+            print(',')
 
-            s = o.get('client_settings', None)
-            d = ''
-            if s is not None:
-                assert isinstance(s, dict)
-                d = s.get('hilbert_station_default_application', '')
+        print('{')
+        for f in ['name', 'description', 'icon']:
+            if f in o:
+                print('"{0}": "{1}",'.format(f, o[f]))
 
-            assert 'compatible_applications' in o
-            apps = None
-            try:
-                apps = o.get('compatible_applications', None)
-            except:
-                log.exception("Sorry could not query compatible_applications for a station [%s]!", k)
-                sys.exit(1)
+        print('"{0}": "{1}",'.format('type', o['profile']))
+        print('"{0}": "{1}",'.format('default_app', d))
+        print('"{0}": [{1}],'.format('possible_apps', apps))
 
-            if isinstance(apps, BaseValidator):
-                apps = apps.data_dump()
+        print('"{0}": "{1}"'.format('id', k))
+        print('}')
 
-            apps = '\n"' + '",\n"'.join(apps) + '"\n'
+        first = False
 
-            if not first:
-                print(',')
-
-            print('{')
-            print('"{0}": "{1}",'.format('id', k))
-            print('"{0}": "{1}",'.format('name', o['name']))
-            print('"{0}": "{1}",'.format('type', o['profile']))
-            print('"{0}": "{1}",'.format('default_app', d))
-            print('"{0}": [{1}]'.format('possible_apps', apps))
-            print('}')
-
-            first = False
-
-        print(']')
+    print(']')
 
     return args
 
@@ -427,23 +504,92 @@ def cmd_list_profiles(parser, context, args):
     group.add_argument('--configdump', required=False,
                        help="specify input dump file")
 
+    parser.add_argument('-f', '--format', choices=['list', 'dashboard'],
+                        default='list', required=False,
+                        help="output format")
+
     args = parser.parse_args(args)
 
-    log.debug("Listing all Profile ID...")
+    _args = vars(args)
+
+    mode = _args.get('format', 'list')
+
+    if mode == "list":
+
+        log.debug("Listing all Profile ID...")
+
+        obj = None
+        try:
+            obj = cmd_list(parser, context, args, 'Profiles/keys')
+        except:
+            log.exception("Sorry could not get the list of '{}' from the input file!".format('profiles'))
+            sys.exit(1)
+
+        assert obj is not None
+
+        if isinstance(obj, BaseValidator):
+            print(yaml_dump(obj.data_dump()))
+        else:
+            print(yaml_dump(obj))
+
+        return args
+        return args
+
+    assert mode == 'dashboard'
+
+    log.debug("Loading/parsing configuration...")
+    cfg = input_handler(parser, vars(context), args)
+    assert cfg is not None
+    assert isinstance(cfg, Hilbert)
 
     obj = None
+    log.debug("Listing all Profiles for Dashboard...")
     try:
-        obj = cmd_list(parser, context, args, 'Profiles/keys')
+        obj = cfg.query('Profiles/data')
     except:
-        log.exception("Sorry could not get the list of '{}' from the input file!".format('profiles'))
+        log.exception("Sorry could not query Profiles's details from the given configuration!")
         sys.exit(1)
 
     assert obj is not None
-
     if isinstance(obj, BaseValidator):
-        print(yaml_dump(obj.data_dump()))
-    else:
-        print(yaml_dump(obj))
+        obj = obj.data_dump()
+
+    first = True
+    print('[')
+
+    for k in obj:
+        o = obj.get(k, None)
+        assert o is not None
+
+        sts = ""
+        if 'station_list' in o:
+            try:
+                sts = o.get('station_list', None)
+                if isinstance(sts, BaseValidator):
+                    sts = sts.data_dump()
+                sts = '"' + '", "'.join(sts) + '"'
+                if sts.strip() == '""':
+                    sts = ""
+            except:
+                log.debug("No [station_list] for profile [{0}]".format(k))
+
+        if not first:
+            print(',')
+
+        print('{')
+        for f in ['name', 'description', 'icon']:
+            if f in o:
+                print('"{0}": "{1}",'.format(f, o[f]))
+
+        if 'station_list' in o:
+            print('"{0}": [{1}],'.format('station_list', sts))
+
+        print('"{0}": "{1}"'.format('id', k))
+        print('}')
+
+        first = False
+
+    print(']')
 
     return args
 
