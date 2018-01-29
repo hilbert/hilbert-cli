@@ -766,6 +766,9 @@ def _version():
     log.debug("logging           version: {}".format(logging.__version__))
     log.debug("semantic_version  version: {}".format(semantic_version.__version__))
 
+    # TODO: check for openssh client. E.g. via `ssh -V`
+    # sample output: OpenSSH_7.2p2 Ubuntu-4ubuntu2.4, OpenSSL 1.0.2g  1 Mar 2016
+
     print("Hilbert Configuration API:     {}".format(Hilbert(None).get_api_version()))
     print("Root Logging Level:            {}".format(logging.getLevelName(logging.getLogger().level)))
     print("PEDANTIC mode:                 {}".format(get_PEDANTIC()))
