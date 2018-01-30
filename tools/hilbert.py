@@ -675,6 +675,41 @@ def cmd_app_change(parser, context, args):
 
     return args
 
+@subcmd('cfg_query', help="query configuration properties")
+def cmd_cfg_query(parser, context, args):
+    action = 'cfg_query'
+    log.debug("Running 'cmd_{}'".format(action))
+
+    group = parser.add_mutually_exclusive_group()
+
+    group.add_argument('--configfile', required=False,
+                       help="specify input .YAML file (default: 'Hilbert.yml')")
+    group.add_argument('--configdump', required=False,
+                       help="specify input dump file")
+
+    parser.add_argument('QueryString', help="specify the query")
+
+    args = parser.parse_args(args)
+
+    log.debug("Querying '{}' from the configuration...".format(args.QueryString))
+
+    obj = None
+    try:
+        obj = cmd_list(parser, context, args, args.QueryString)
+    except:
+        log.exception("Sorry could not get the result of query '{}' from the input file!".format(args.QueryString))
+        sys.exit(1)
+
+    assert obj is not None
+
+    if isinstance(obj, BaseValidator):
+        yaml_dump(obj.data_dump(),sys.stdout)
+    elif isinstance(obj, (str, int, float, complex)):
+        print(obj)
+    else:
+        yaml.dump(obj,sys.stdout)
+
+    return args
 
 # @subcmd('run_action', help='run specified action on given station with given arguments...')
 def cmd_run_action(parser, context, args):
