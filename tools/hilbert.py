@@ -203,6 +203,38 @@ def cmd_list(parser, context, args, obj):
     return cfg.query(obj)
 
 
+def print_query_result(data, obj):
+    assert data is not None
+
+    if isinstance(data, BaseValidator):
+        log.debug("Referred object [{}] is stored in a Validator object".format(obj))
+        data = data.data_dump()
+        log.debug("Internal data: [{0}] of type: [{1}]".format(data, type(data)))
+
+        # def round_trip_dump(data, stream=None, Dumper=RoundTripDumper,
+        #                     default_style=None, default_flow_style=None,
+        #                     canonical=None, indent=None, width=None,
+        #                     allow_unicode=None, line_break=None,
+        #                     encoding=enc, explicit_start=None, explicit_end=None,
+        #                     version=None, tags=None, block_seq_indent=None,
+        #                     top_level_colon_align=None, prefix_colon=None):
+        # type: (Any, StreamType, Any,
+        # Any, Any,
+        # bool, Union[None, int], Union[None, int],
+        # bool, Any,
+        # Any, Union[None, bool], Union[None, bool],
+        # VersionType, Any, Any,
+        # Any, Any) -> Union[None, str]   # NOQA
+        #        if isinstance(data, (list, dict, tuple, set)):
+        print(yaml_dump(data, allow_unicode=True, canonical=False, indent=False, explicit_start=False,
+                        explicit_end=False))
+    #        else:
+    #       print(data)
+    else:
+        log.debug("Referred object [{0}] is stored as a plane data: [{1}]".format(obj, data))
+        print(data)
+
+
 @subcmd('cfg_query', help='query some part of configuration. possibly dump it to a file')
 def cmd_query(parser, context, args):
     log.debug("Running '{}'".format('cfg_query'))
@@ -235,34 +267,7 @@ def cmd_query(parser, context, args):
         log.exception("Sorry cannot query '{}' yet!".format(obj))
         sys.exit(1)
 
-    assert data is not None
-
-    if isinstance(data, BaseValidator):
-        log.debug("Referred object [{}] is stored in a Validator object".format(obj))
-        data = data.data_dump()
-        log.debug("Internal data: [{0}] of type: [{1}]".format(data, type(data)))
-
-        # def round_trip_dump(data, stream=None, Dumper=RoundTripDumper,
-        #                     default_style=None, default_flow_style=None,
-        #                     canonical=None, indent=None, width=None,
-        #                     allow_unicode=None, line_break=None,
-        #                     encoding=enc, explicit_start=None, explicit_end=None,
-        #                     version=None, tags=None, block_seq_indent=None,
-        #                     top_level_colon_align=None, prefix_colon=None):
-        # type: (Any, StreamType, Any,
-        # Any, Any,
-        # bool, Union[None, int], Union[None, int],
-        # bool, Any,
-        # Any, Union[None, bool], Union[None, bool],
-        # VersionType, Any, Any,
-        # Any, Any) -> Union[None, str]   # NOQA
-#        if isinstance(data, (list, dict, tuple, set)):
-        print(yaml_dump(data, allow_unicode=True, canonical=False, indent=False, explicit_start=False, explicit_end=False))
-#        else:
-#       print(data)
-    else:
-        log.debug("Referred object [{0}] is stored as a plane data: [{1}]".format(obj, data))
-        print(data)
+    print_query_result(data, obj)
 
     od = output_handler(parser, vars(context), args)
 
