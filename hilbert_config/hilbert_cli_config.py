@@ -707,7 +707,7 @@ class BaseRecordValidator(BaseValidator):
                 _k = None
                 _v = None
                 try:
-                    _k = StringValidator.parse(k, parent=self)
+                    _k = StringValidator.parse(k)
                 except ConfigurationError as err:
                     _key_note(k, _lc, "Error: invalid _optional_ key field '{}' (type: '%s')" % self._type)
                     pprint(err)
@@ -736,7 +736,7 @@ class BaseRecordValidator(BaseValidator):
 
             if k in _rule:
                 try:
-                    _k = StringValidator.parse(k, parent=self)
+                    _k = StringValidator.parse(k)
                 except ConfigurationError as err:
                     _key_error(k, v, lc, "Error: invalid key field '{}' (type: '%s')" % self._type)
                     pprint(err)
@@ -761,7 +761,7 @@ class BaseRecordValidator(BaseValidator):
                         continue
                 else:
                     try:
-                        _k = (_extra_rule[0]).parse(k, parent=self)
+                        _k = (_extra_rule[0]).parse(k)
                     except ConfigurationError as err:
                         _key_error(k, v, lc, "Error: invalid key '{}' (type: '%s')" % self._type)
                         pprint(err)
@@ -1539,7 +1539,7 @@ class VariadicRecordWrapper(BaseValidator):
 
         t = None
         try:
-            t = self._type_cls.parse(d[self._type_tag], parent=self.get_parent(), parsed_result_is_data=True, id=self.get_parent()._id)
+            t = self._type_cls.parse(d[self._type_tag], parent=self, parsed_result_is_data=True, id=self._type_tag)
         except:
             log.exception("Wrong type data: {}".format(d[self._type_tag]))
             return False
@@ -1549,7 +1549,7 @@ class VariadicRecordWrapper(BaseValidator):
             _key_error(self._type_tag, t, _lc, "ERROR: unsupported/wrong variadic type: '{}'")
             return False
 
-        tt = _rule[t](parent=self.get_parent())
+        tt = _rule[t](parent=self, id='_')
 
         if not tt.validate(d):
             _lc = d.lc.key(self._type_tag)
@@ -2623,7 +2623,7 @@ class BaseIDMap(BaseValidator):
             _vv = None
 
             try:
-                _id = _id_rule.parse(k, parent=self)
+                _id = _id_rule.parse(k)
             except ConfigurationError as err:
                 _key_error(k, v, _lc, "Invalid ID: '{}' (type: '%s')" % (self._type))  # Raise Exception?
                 pprint(err)
