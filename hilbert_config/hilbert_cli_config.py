@@ -3408,5 +3408,5 @@ def parse_hilbert(d, parent=None):
 
 
 ###############################################################
-def yaml_dump(d, stream=None):
-    return yaml.round_trip_dump(d, stream=stream)
+def yaml_dump(*args, **kwargs):
+    return yaml.round_trip_dump(*args, **kwargs)
