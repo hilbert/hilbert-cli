@@ -1073,9 +1073,9 @@ class ClientVariable(BaseID):  #
 
         # NOTE: starting with hilbert_ or HILBERT_ with letters, digits and '_'??
         if not re.match('^hilbert(_[a-z0-9]+)+$', v.lower()):
-            log.error("variable must start with HILBERT/hilbert and contain words separated by underscores!"
+            log.warning("variable should start with HILBERT/hilbert and contain words separated by underscores!"
                       " Input: '{}".format(d))
-            _ret = False
+#            _ret = False # still enable custom non-Hilbert variables!
 
         if _ret:
             self.set_data(v)
