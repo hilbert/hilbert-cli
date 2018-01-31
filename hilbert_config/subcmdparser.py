@@ -1,3 +1,8 @@
+"""
+This is a modified version of https://github.com/druths/arghandler/blob/master/arghandler/base.py
+by Derek Ruths, which is available under Apache License, Version 2.0
+"""
+
 # import arghandler                      # NOQA
 
 import argparse  # NOQA
