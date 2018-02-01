@@ -603,6 +603,9 @@ class BaseValidator(AbstractValidator):
 
         log.debug("Querying '%s'", what)
 
+        _sep = "/"
+        what = what.strip(_sep)
+
         if (what is None) or (what == ''):
             what = 'all'
 
@@ -611,37 +614,57 @@ class BaseValidator(AbstractValidator):
 
         if what == 'id':
             return self.get_id()
-        
-        if what == 'data':
-            return self.data_dump()
 
-        _d = self.get_data()
+        _data = self.data_dump()
+
+        if what == 'data':
+            return _data
 
         if what == 'keys':
-            if _d is None:
+            if _data is None:
                 return _default
 
-            assert isinstance(_d, dict)
-            return [k for k in _d.keys()]
+            _keys = []
 
-        s = StringValidator.parse(what, parent=self)
+            if isinstance(_data, dict):
+#                _keys = list(set(_keys + [k for k in _data.keys()]))
+                _keys = [text_type(k) for k in _data.keys()]
 
-        if s in _d:
-            return _d[s]
+            return _keys
 
-        sep = "/"
-        ss = s.split(sep)  # NOTE: encode using pathes!
+        s = StringValidator.parse(what)
 
+        if s in _data:
+            return _data[s]
+
+        ss = s.split(_sep)  # NOTE: encode using pathes!
         h = ss[0]  # top header
-        t = sep.join(ss[1:])  # tail
+        t = _sep.join(ss[1:]).strip(_sep)  # tail
+
+        assert h != '' # due to lstrip!
+
+        log.debug("Parsing Query object spec => head: [%s], tail: [%s]", h, t)
+
+        _d = self.get_data()
 
         if h in _d:
             d = _d[h]
             if isinstance(d, BaseValidator):
                 return d.query(t, _default)  # TODO: FIXME: avoid recursion...
 
-            log.warning("Could not query an object. Ignoring the tail: %s. Returning default [%s]", t, _default)
+            log.warning("Could not query an object. Ignoring the tail: %s. Returning default [%s]. Currently found data: [%s: %s]", t, _default, h, d)
             return _default
+
+        if h in _data: # computed data members? they are never Validators!
+            d = _data[h]
+
+            if (t == '') or (t == 'all') or (t == 'data'):
+                return d
+
+            assert not isinstance(d, BaseValidator)
+#                return d.query(t, _default)  # TODO: FIXME: avoid recursion...
+#            if (t == 'id') || (t == '')
+            raise Exception("Cannot continue object query: wrong tail: [{0}] or synthetic data! Currently found data: [{1}: {2}]".format(t, h, d))
 
         if _default is None:
             raise ConfigurationError(u"{}: {}".format("ERROR:",
@@ -3385,5 +3408,5 @@ def parse_hilbert(d, parent=None):
 
 
 ###############################################################
-def yaml_dump(d, stream=None):
-    return yaml.round_trip_dump(d, stream=stream)
+def yaml_dump(*args, **kwargs):
+    return yaml.round_trip_dump(*args, **kwargs)
