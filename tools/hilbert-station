@@ -797,7 +797,7 @@ function cmd_read_configuration() { ## @fn Read current station configuration
         return ${ERR_CODE_SUCCESS}
     fi
 
-    declare -p "hilbert_station_profile_services" 1>>/dev/null 2>&1
+    declare -p "hilbert_station_compatible_applications" 1>>/dev/null 2>&1
     if [[ $? -eq 0 ]]; then
         DEBUG "Some configuration file has been loaded already!"
         return ${ERR_CODE_SUCCESS}
@@ -814,12 +814,12 @@ function cmd_read_configuration() { ## @fn Read current station configuration
 
     declare -p "hilbert_station_profile_services" 1>>/dev/null 2>&1
     if [[ $? -ne 0 ]]; then
-        DEBUG "Strange local configuration file: '${HILBERT_CONFIG_FILE}': 'hilbert_station_profile_services' is not set!"
+        WARNING "Strange local station's config file: [${HILBERT_CONFIG_DIR}/${HILBERT_CONFIG_FILE}]: [hilbert_station_profile_services] is not set!"
     fi
 
     declare -p "hilbert_station_compatible_applications" 1>>/dev/null 2>&1
     if [[ $? -ne 0 ]]; then
-        DEBUG "Strange local configuration file: '${HILBERT_CONFIG_FILE}': 'hilbert_station_compatible_applications' is not set!"
+        WARNING "Strange local station's config file: [${HILBERT_CONFIG_DIR}/${HILBERT_CONFIG_FILE}]: [hilbert_station_compatible_applications] is not set!"
     fi
 
     return ${_ret}
@@ -943,6 +943,11 @@ function cmd_start_service() { ## @fn Start Hilbert service
     local t
     t="$(_service_get_type "${arg}")"
 
+    if [[ $? -ne 0 ]]; then
+        ERROR "Invalid service/application: [${arg}]!"
+        exit ${ERR_CODE_EXT_ERROR}
+    fi
+
     if [[ "x$t" != "xcompose" ]]; then
         ERROR "Unsupported application type of service/application [${arg}]: [$t]"
         exit ${ERR_CODE_EXT_ERROR}
@@ -976,6 +981,11 @@ function cmd_init_service() { ## @fn Prepare/initialize Hilbert service/applicat
 
     local t
     t="$(_service_get_type "${arg}")"
+
+    if [[ $? -ne 0 ]]; then
+        ERROR "Invalid service/application: [${arg}]!"
+        exit ${ERR_CODE_EXT_ERROR}
+    fi
 
     if [[ ! "x$t" = "xcompose" ]]; then
         ERROR "Wrong or unsupported application: [${arg}] (type: [$t])"
@@ -1019,6 +1029,11 @@ function cmd_restart_service() { ## @fn Restart currently running service NOTE: 
     local t
     t="$(_service_get_type "${arg}")"
 
+    if [[ $? -ne 0 ]]; then
+        ERROR "Invalid service/application: [${arg}]!"
+        exit ${ERR_CODE_EXT_ERROR}
+    fi
+
     if [[ ! "x$t" = "xcompose" ]]; then
         ERROR "Wrong or unsupported application: [${arg}] (type: [$t])"
         exit ${ERR_CODE_EXT_ERROR}
@@ -1053,6 +1068,11 @@ function cmd_stop_service() { ## @fn Stop Hilbert Service, @param arg Applicatio
     local t
     t="$(_service_get_type "${arg}")"
 
+    if [[ $? -ne 0 ]]; then
+        ERROR "Invalid service/application: [${arg}]!"
+        exit ${ERR_CODE_EXT_ERROR}
+    fi
+
     if [[ ! "x$t" = "xcompose" ]]; then
         ERROR "Wrong or unsupported application: [${arg}] (type: [$t])"
         exit ${ERR_CODE_EXT_ERROR}
@@ -1085,10 +1105,10 @@ function cmd_compose_start() { ## @fn Run Docker-Compose service
 
     DEBUG "Starting service/application: ${HILBERT_APPLICATION_ID} (${HILBERT_APPLICATION_REF} from ${COMPOSE_FILE})..."
     cmd_docker_compose up -d "${HILBERT_APPLICATION_REF}"
-
+    local _ret=$?
     unset -v HILBERT_APPLICATION_ID COMPOSE_FILE
 
-    return 0
+    return ${_ret}
 }
 
 
@@ -1199,16 +1219,20 @@ function cmd_compose_stop() { ## @fn Stop Docker-Compose service
 
     DEBUG "Stopping/Killing/Removing service [$d] using [${DOCKER_COMPOSE}]..."
 
+    local _ret=${ERR_CODE_SUCCESS}
     cmd_docker_compose kill -s SIGINT "$d" && sleep "${hibert_station_process_kill_timeout}"
+    _ret=$?
+
 #    cmd_docker_compose kill -s SIGTERM "$d"  #    cmd_docker_compose kill -s SIGKILL "$d"
     cmd_docker_compose stop -t "${hibert_station_process_kill_timeout}" "$d"
     cmd_docker_compose rm -vf "$d"
+#    _ret=$?
     cmd_docker_compose rm -vf "$d"  # NOTE: to remove "dead" left-over containers!
 #    (cmd_docker_compose rm "$d" || cmd_docker_compose rm -vf "$d")
 
     unset -v HILBERT_APPLICATION_ID COMPOSE_FILE
 
-    return 0
+    return ${_ret}
 }
 
 function cmd_docker_stop() {         ## @fn Stop/kill/renove a docker container
@@ -1255,20 +1279,22 @@ function cmd_docker() {         ## @fn Run low-level Docker command directly
         return ${ERR_CODE_SUCCESS}
     fi
 
+    local _CMD="$@"
     if [[ $LOGLEVEL -le "0" ]]; then
-        ${DOCKER} --debug --log-level=debug $@
+        _CMD="${DOCKER} --debug --log-level=debug ${_CMD}"
     else
-        ${DOCKER} $@
+        _CMD="${DOCKER} ${_CMD}"
     fi
+    eval ${_CMD}
     local ret=$?
 
-    if [[ $LOGLEVEL -le "-1" ]]; then
-        ${DOCKER} ps -a
-    fi
-
     if [[ $ret -ne 0 ]]; then
-        WARNING "Could not run '${DOCKER} [?--debug --log-level=debug?] $*' in '${PWD}'!"
-        ## exit 1
+        WARNING "Could not run [${_CMD}] in [${PWD}]! Ret: [${ret}]!"
+        if [[ $LOGLEVEL -le "-1" ]]; then
+            ${ECHO} "Current containers are as follows:"
+            ${DOCKER} ps -a
+        fi
+        ## exit ${ERR_CODE_EXT_ERROR} ## TODO: FIXME:
     fi
 
     return ${ret}
@@ -1290,6 +1316,11 @@ function cmd_detect_top_application() {  ## @fn Detect the currently running Hil
     # NOTE: cannot attach a label in runtime to docker-compose service :-(
     declare -rg current_bg_servce_ids=$(${DOCKER} ps -a -q --filter "label=is_top_app=0" --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" 2>/dev/null | ${XARGS} --no-run-if-empty)
 
+    if [[ $? -ne 0 ]]; then
+        ERROR "Could not query Docker Engine via ${DOCKER}!"
+        exit ${ERR_CODE_EXT_ERROR}
+    fi
+
     local TOP=($(${DOCKER} ps -a -q --filter "label=is_top_app=1" \
                --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" 2>/dev/null ))
 
@@ -1301,7 +1332,7 @@ function cmd_detect_top_application() {  ## @fn Detect the currently running Hil
     local N=${#TOP[@]}
     declare -rg current_top_application_id="${TOP[@]}"
 
-    if [[ $N -eq 0 ]]; then
+    if [[ -z "${TOP[@]}" ]]; then
         WARNING "Found no top application(s)!"
         return ${ERR_CODE_INT_ERROR}
     fi
@@ -1342,6 +1373,7 @@ function cmd_list_applications() { ## @fn List Applications
             data="$(_service_get_info "${app}")"
             if [[ $? -ne 0 ]]; then
                 ERROR "Wrong Application ID [${app}] specified in 'hilbert_station_compatible_applications' from station's config!"
+                exit ${ERR_CODE_INT_ERROR}
             else
                 ${ECHO} " - ${app} [$data]"
             fi
@@ -1355,6 +1387,7 @@ function cmd_list_applications() { ## @fn List Applications
         data="$(_service_get_info "${hilbert_station_default_application}")"
         if [[ $? -ne 0 ]]; then
             ERROR "Wrong Application ID specified in 'hilbert_station_default_application': [${hilbert_station_default_application}] from station's config!"
+            exit ${ERR_CODE_INT_ERROR}
         else
             ${ECHO} "Default application: ${hilbert_station_default_application} [$data]"
         fi
@@ -1388,6 +1421,7 @@ function cmd_list_services() { ## @fn List Hilbert Services for the current stat
             data="$(_service_get_info "${sv}")"
             if [[ $? -ne 0 ]]; then
                 ERROR "Wrong Service ID [${sv}] specified in 'hilbert_station_profile_services' from station configuration"
+                exit ${ERR_CODE_INT_ERROR}
             else
                 ${ECHO} " - ${sv} [$data]"
             fi
@@ -1538,6 +1572,7 @@ function cmd_start() {         ## @fn (re)start services and top application [pr
 
             if [[ $? -ne 0 ]]; then
                 ERROR "Could not start service: [${sv}] ($data)"
+                exit ${ERR_CODE_INT_ERROR}
             fi
         done
     else
@@ -1550,6 +1585,7 @@ function cmd_start() {         ## @fn (re)start services and top application [pr
         data="$(_service_get_info "${start_application}")"
         if [[ $? -ne 0 ]]; then
             ERROR "Trying to start a bad application: [${start_application}]"
+            exit ${ERR_CODE_INT_ERROR}
         else
             DEBUG "Starting Default application: ${start_application} [$data]"
         fi
@@ -1563,11 +1599,13 @@ function cmd_start() {         ## @fn (re)start services and top application [pr
 
         if [[ $? -ne 0 ]]; then
             ERROR "Could not start application: [${start_application}] ($data)"
+            exit ${ERR_CODE_INT_ERROR}
         fi
     else
         INFO "No default application: is this a server?!"
     fi
-    return 0
+
+    return $?
 }
 
 function cmd_stop() {         ## @fn Stop Hilbert's current top application and background services
@@ -1610,6 +1648,7 @@ function cmd_stop() {         ## @fn Stop Hilbert's current top application and 
 
             if [[ $? -ne 0 ]]; then
                 ERROR "Could not stop service: [${sv}] ($data)"
+                exit ${ERR_CODE_INT_ERROR}
             fi
         done
 
@@ -1617,7 +1656,8 @@ function cmd_stop() {         ## @fn Stop Hilbert's current top application and 
     else
         DEBUG "No services should be running on this station!"
     fi
-    return 0
+
+    return $?
 }
 
 function cmd_shutdown() {         ## @fn Shutdown PC
