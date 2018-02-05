@@ -289,6 +289,26 @@ if [[ ! -v SHUTDOWN ]]; then
 fi
 
 
+function cmd_internal_usage() {         ## @fn Show CLI internal help
+    if [[ $LOGLEVEL -le 1 ]]; then
+        ${CAT} << EOF
+Internal commands supported by this tool:
+
+$(${GREP} -E '^function cmd_' "${TOOL_SH}" | ${SED} -e 's@function  *@@g' -e 's@() *[{#]@\t@g')
+EOF
+    fi
+
+    if [[ $LOGLEVEL -le 0 ]]; then
+        local FUN=$(${GREP} '^ *function .*()' "${TOOL_SH}" | ${SED} -e 's@function @@g' -e 's@().*$@|@g' | ${GREP} -vE '(_lock|_no_more_locking|_prepare_locking|exlock_now|exlock|shlock|unlock|DEBUG|INFO|WARNING|ERROR|DRYRUN|_which_ext|_service_get_)' | ${XARGS} | ${SED} -e 's@| @|@g' -e 's@|$@@g' )
+        ${CAT} << EOF
+Call tree for internal commands supported by this tool:
+
+$(${GREP} -E "(${FUN})" "${TOOL_SH}" | ${GREP} -vE '^ *\#')
+
+EOF
+    fi
+}
+
 
 function cmd_usage() {         ## @fn Show CLI usage help
     ${CAT} << EOF
@@ -307,8 +327,8 @@ positional arguments:
    shutdown                shut down the system
 
 optional arguments:
-  -h                       show this help message and exit
-  -V                       show version info and exit
+  -h                       show this help message [+internal commands/call tree] and exit
+  -V                       show tool version [+internal info] and exit
   -v                       increase verbosity
   -q                       decrease verbosity
   -t                       turn on BASH tracing and verbosity
@@ -418,34 +438,73 @@ function cmd_native_autodetect() { ## @fn Native Auto-detections
    return ${ERR_CODE_SUCCESS}
 }
 
-## @fn cmd_info Show Station System INFO & Configuration
-function cmd_info() {
-    cat << EOF
-This tool:   [${TOOL}: ${TOOL_SH}: $(ls -l "${TOOL_SH}" 2>&1)]
+function _which_ext() {       ## @fn Determine and list external executable
+    local _t="$@"
+    _t="$(${ECHO} "${_t}" | ${SED} -e 's@^\s*@@g' -e 's@ .*$@@g' 2>&1)"
+    _t="$(${WHICH} "${_t}" 2>&1)"
+    ${LIST} -l "${_t}" 2>&1
+}
+
+function cmd_info() {         ## @fn Show Station System INFO & Configuration
+    ${CAT} << EOF
+This tool:   [${TOOL}: ${TOOL_SH}: $(${LIST} -l "${TOOL_SH}" 2>&1)]
 PID:         [$$]
-Lockfile:    [${LOCKFILE}: $(ls -l "${LOCKFILE}" 2>&1)]
 
-Config Base: [${HILBERT_CONFIG_BASEDIR}]
-Config Dir:  [${HILBERT_CONFIG_DIR}: $(readlink -f "${HILBERT_CONFIG_DIR}" 2>&1)]
-Config File: [${HILBERT_CONFIG_FILE}: $(readlink -f "${HILBERT_CONFIG_FILE}" 2>&1)]
-All Configs: [$(sh -c "cd ${HILBERT_CONFIG_DIR}/ && ls * | xargs" 2>&1)]
-
+INPUT_OPTS:  [${INPUT_OPT}]
 DRY_RUN:     [${DRY_RUN}]
 LOGLEVEL:    [${LOGLEVEL}]
 
-XSETROOT:    [${XSETROOT}]
+Lockfile:    [${LOCKFILE}: $(${LIST} -l "${LOCKFILE}" 2>&1)]
+Do locking:  [${LOCKING}]
+LOGGER:      [${LOGGER}: $(_which_ext "${LOGGER}")]
+FLOCK:       [${FLOCK}: $(_which_ext "${FLOCK}")]
+PIDOF:       [${PIDOF}: $(_which_ext "${PIDOF}")]
 
-OGL:         [${HILBERT_CONFIG_BASEDIR}/${OGL}: $(ls -l "${HILBERT_CONFIG_BASEDIR}/${OGL}" 2>&1)]
-HILBERT_OGL: [${HILBERT_OGL}: $(ls -l "${HILBERT_OGL}" 2>&1)]
+ENV:         [${ENV}: $(_which_ext "${ENV}")]
+SED:         [${SED}: $(_which_ext "${SED}")]
+CAT:         [${CAT}: $(_which_ext "${CAT}")]
+GREP:        [${GREP}: $(_which_ext "${GREP}")]
+ECHO:        [${ECHO}: $(_which_ext "${ECHO}")]
+TAIL:        [${TAIL}: $(_which_ext "${TAIL}")]
+DIFF:        [${DIFF}: $(_which_ext "${DIFF}")]
+LIST:        [${LIST}: $(_which_ext "${LIST}")]
+COPY:        [${COPY}: $(_which_ext "${COPY}")]
+MOVE:        [${MOVE}: $(_which_ext "${MOVE}")]
+SUDO:        [${SUDO}: $(_which_ext "${SUDO}")]
+SORT:        [${SORT}: $(_which_ext "${SORT}")]
+UNIQ:        [${UNIQ}: $(_which_ext "${UNIQ}")]
+RSYNC:       [${RSYNC} ($(${RSYNC} --version 2>&1 | ${GREP} version)): $(_which_ext "${RSYNC}")]
+WHICH:       [${WHICH}: $(_which_ext "${WHICH}")]
+MKDIR:       [${MKDIR}: $(_which_ext "${MKDIR}")]
+CHMOD:       [${CHMOD}: $(_which_ext "${CHMOD}")]
+XARGS:       [${XARGS}: $(_which_ext "${XARGS}")]
+XAUTH:       [${XAUTH}: $(_which_ext "${XAUTH}")]
+XHOST:       [${XHOST}: $(_which_ext "${XHOST}")]
+MKTEMP:      [${MKTEMP}: $(_which_ext "${MKTEMP}")]
+PRINTF:      [${PRINTF}: $(_which_ext "${PRINTF}")]
+REMOVE:      [${REMOVE}: $(_which_ext "${REMOVE}")]
+UNLINK:      [${UNLINK}: $(_which_ext "${UNLINK}")]
+DIRNAME:     [${DIRNAME}: $(_which_ext "${DIRNAME}")]
+BASENAME:    [${BASENAME}: $(_which_ext "${BASENAME}")]
+READLINK:    [${READLINK}: $(_which_ext "${READLINK}")]
+XSETROOT:    [${XSETROOT}: $(_which_ext "${XSETROOT}")]
 
-DOCKER:      [${DOCKER}: $(${DOCKER} --version 2>&1)]
-DOCKER_GC:   [${DOCKER_GC}: $(ls -l "$(which "${DOCKER_GC}" 2>&1)" 2>&1)]
+Config Base: [${HILBERT_CONFIG_BASEDIR}]
+Config Dir:  [${HILBERT_CONFIG_DIR} -> $(${READLINK} -f "${HILBERT_CONFIG_DIR}" 2>&1)]
+Config File: [${HILBERT_CONFIG_FILE}: $(${READLINK} -f "${HILBERT_CONFIG_DIR}/${HILBERT_CONFIG_FILE}" 2>&1)]
+All Configs: [$(sh -c "cd ${HILBERT_CONFIG_DIR}/ && ${LIST} * | xargs" 2>&1)]
 
-DOCKER_COMPOSE:       [${DOCKER_COMPOSE}: $(${DOCKER_COMPOSE} --version 2>&1)]
+OGL:         [${HILBERT_CONFIG_BASEDIR}/${OGL}: $(${LIST} -l "${HILBERT_CONFIG_BASEDIR}/${OGL}" 2>&1)]
+HILBERT_OGL: [${HILBERT_OGL}: $(${LIST} -l "${HILBERT_OGL}" 2>&1)]
+
+DOCKER:      [${DOCKER} ($(${DOCKER} --version 2>&1)): $(_which_ext "${DOCKER}")]
+DOCKER_GC:   [${DOCKER_GC}: $(_which_ext "${DOCKER_GC}")]
+
+DOCKER_COMPOSE:       [${DOCKER_COMPOSE} ($(${DOCKER_COMPOSE} --version 2>&1)): $(_which_ext "${DOCKER_COMPOSE}")]
 COMPOSE_PROJECT_NAME: [${COMPOSE_PROJECT_NAME}]
 
 HILBERT_CUSTOMIZATIONS:     [${HILBERT_CUSTOMIZATIONS}]
-HILBERT_COMPOSE_CUSTOMIZER: [$(ls -l "$(which "${HILBERT_COMPOSE_CUSTOMIZER}" 2>&1)" 2>&1)]
+HILBERT_COMPOSE_CUSTOMIZER: [${HILBERT_COMPOSE_CUSTOMIZER}: $(_which_ext "${HILBERT_COMPOSE_CUSTOMIZER}")]
 
 HOME:        [${HOME}]
 PWD:         [${PWD}]
@@ -504,6 +563,7 @@ while getopts ":hqtTdDviVL" opt; do   # NOTE: removed 'p' for now
         ;;
     h )
         cmd_usage
+        cmd_internal_usage
         exit ${ERR_CODE_SUCCESS}
         ;;
     V )
