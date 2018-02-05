@@ -40,6 +40,9 @@ def subcmd_fxn(cmd_fxn, name, kwargs):
     if name is None:
         name = cmd_fxn.__name__
 
+    if (name in registered_subcommands) or (name in registered_subcommands_help):
+        raise Exception("Duplicated sub-command [{0}]! Old handler: [{1}], new one: [{2}]".format(name, registered_subcommands[name].__name__, cmd_fxn.__name__))
+
     registered_subcommands[name] = cmd_fxn
     registered_subcommands_help[name] = kwargs.pop('help', '')
 
