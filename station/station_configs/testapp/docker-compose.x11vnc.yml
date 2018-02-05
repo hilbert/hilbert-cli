@@ -18,4 +18,6 @@ services:
      - --skip-startup-files
      - --
     command:
-     - /usr/local/bin/x11vnc.sh
+     - /bin/bash
+     - -c 
+     - 'setup_ogl.sh; x11vnc.sh'
