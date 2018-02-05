@@ -703,8 +703,6 @@ function _service_get_info() {
 
 function cmd_install_station_config() { ## @fn Try to Install new station configuration instead of the current one (to be backuped)
     local arg="$*"
-    local base
-    local new_cfg_dir
 
     if [[ -z "${arg}" ]]; then
         ERROR "Wrong argument [${arg}]!"
@@ -712,68 +710,68 @@ function cmd_install_station_config() { ## @fn Try to Install new station config
         exit ${ERR_CODE_EXT_ERROR}
     fi
 
-    base=$(basename "${arg}")
-
-    new_cfg_dir=$(mktemp -u -d --tmpdir="${HILBERT_CONFIG_BASEDIR}" "$base.XXXXXXXXXX")
-    DEBUG "NOTE: new config is '${base}' => new_cfg_dir: '${new_cfg_dir}'"
-
     # TODO: what about further resources? Maybe a .tar.gz and unpack it into ${new_cfg_dir}? rsync?!
-    if [[ -d "${arg}" ]]; then
+    if [[ -d "${arg}" && -x "${arg}" && -r "${arg}" ]]; then
+        INFO "Directory with a new-configuration: [${arg}]"  # is not yet fully supported!!!?
 
-        WARNING "New configuration directory: '${arg}'"  # is not yet fully supported!!!?
-
-        if [[ ! -r "${arg}/station.cfg" ]]; then
-            ERROR "Station configuration file '${arg}/station.cfg' is not readable or missing!"
+        if [[ ! -r "${arg}/${HILBERT_CONFIG_FILE}" ]]; then
+            ERROR "Station configuration file [${arg}/${HILBERT_CONFIG_FILE}] is not readable or missing!"
             cmd_usage
-            exit 1
+            exit ${ERR_CODE_EXT_ERROR}
         fi
-
-        # NOTE: take over the deployed station configurations
-        DEBUG "Moving ${arg} => ${new_cfg_dir}..."
-        mv "${arg}" "${new_cfg_dir}"
-
-    elif [[ -r "${arg}" ]]; then
-
-        # NOTE: New station's configuration file
-        # TODO: make sure there is no such dir yet!
-
-        WARNING "Deprecated init method!!!"
-        INFO "Initializing with a single station-config file: [${arg}]... Unique base name: $base"
-
-        # NOTE: take over the deployed station configuration file!
-        DEBUG "Moving ${arg} => ${new_cfg_dir}/station.cfg"
-
-        mkdir -p "${new_cfg_dir}"  ## TODO: add mode?
-        mv "${arg}" "${new_cfg_dir}/station.cfg"
-
-        # NOTE: the rest of resources must be installed manually by hand:
-        ln -s '../docker-compose.yml' "${new_cfg_dir}/docker-compose.yml"
     else
-        ERROR "Cannot Install configuration specified by '${arg}'!"
+        ERROR "Cannot Install configuration specified by [${arg}]!"
         cmd_usage
-        exit 1
+        exit ${ERR_CODE_EXT_ERROR}
     fi
 
 
-    if [[ -L "${HILBERT_CONFIG_DIR}" ]]; then
-        DEBUG "${HILBERT_CONFIG_DIR} -> $(readlink -f "${HILBERT_CONFIG_DIR}")"
-        # TODO: remove older config?
-        unlink "${HILBERT_CONFIG_DIR}"
-    elif [[ -d "${HILBERT_CONFIG_DIR}" ]]; then
-        ERROR "Directory ${HILBERT_CONFIG_DIR} exists and it is not a link!"
-        exit 2
+    ### TODO: check beforehand and if necessary pre stop everything ++ post start anew,
+    ### forget the currently running application choice??
+    ###    cmd_detect_changes
+    local _old="$(${READLINK} -f "${HILBERT_CONFIG_DIR}")"
+    # rsync -zavc src/ dest/ --dry-run # -zaic
+
+    local base=$(${BASENAME} "${arg}")
+    local new_cfg_dir=$(${MKTEMP} -u -d --tmpdir="${HILBERT_CONFIG_BASEDIR}" "$base.XXXXXXXXXX") # dry run: just output it!
+    DEBUG "NOTE: new config is [${base}] => new_cfg_dir: [${new_cfg_dir}]"
+
+    # NOTE: take over the deployed station configurations
+    DEBUG "Moving ${arg} => ${new_cfg_dir}..."
+    DRYRUN ${MOVE} "${arg}" "${new_cfg_dir}" # rsync --backup --backup-dir
+    if [[ $? -ne 0 ]]; then
+        ERROR "Failed to move temporary configuration directory [${arg}] to [${new_cfg_dir}]!"
+        exit ${ERR_CODE_EXT_ERROR}
     fi
 
-    ## NOTE: atomic configuration update!
-    ## NOTE: full path in symbolic link => may interfere when volume-mounted...
-    ln -sf "$(basename "${new_cfg_dir}")" "${HILBERT_CONFIG_DIR}"
-
-    if [[ ! -L "${HILBERT_CONFIG_DIR}" ]]; then
-        ERROR "${HILBERT_CONFIG_DIR} is not a link!"
-        exit 2
+    ## NOTE: All deployed docker-compose.yml files will be previously prepared & simplified due to the following:
+    HILBERT_CONFIG_DIR=${new_cfg_dir} cmd_tool_subcall -L cmd_init_services
+    if [[ $? -ne 0 ]]; then
+        ERROR "Could not initialize/prepare in new Hilbert dir [${new_cfg_dir}]!"
+        # TODO: remove this temporary dir?
+        exit ${ERR_CODE_INT_ERROR}
     fi
 
-    ## TODO: FIXME: All deployed docker-compose.yml files should be previously pre-peared & simplified!
+    cmd_set_station_config_reference "$(${BASENAME} "${new_cfg_dir}")"
+    # TODO: any non-zero return codes?
+
+    # TODO: backup older config for a while. FIXME: limited number of backups?
+    DRYRUN ${MOVE} --backup=numbered -T "${_old}" "${HILBERT_CONFIG_BACKUP}"
+
+    # Max 10 backups!
+    local _max_backup="10"
+    if [[ -d "${HILBERT_CONFIG_BACKUP}.~${_max_backup}~" ]]; then
+        local _i=1
+
+        DRYRUN ${REMOVE} -Rf "${HILBERT_CONFIG_BACKUP}.~${_i}~"
+
+        for ((;;_i++)); do
+            [[ ${_i} -ge ${_max_backup} ]] && break
+
+            DRYRUN ${MOVE} -f "${HILBERT_CONFIG_BACKUP}.~$((${_i} + 1))~" "${HILBERT_CONFIG_BACKUP}.~${_i}~"
+        done
+    fi
+
     return ${ERR_CODE_SUCCESS}
 }
 
@@ -827,31 +825,308 @@ function cmd_read_configuration() { ## @fn Read current station configuration
 
 function cmd_init() {         ## @fn Install/Initialize/Prepare Station configuration
     local _arg="$*"
+    local _hilbert_is_running
+    local _ret
 
-    if [[ ! -w "/dev/pts/ptmx" ]]; then
-        if [[ -n "${DRY_RUN}" ]]; then
-            echo "[${DRY_RUN}] Simulating: [chmod a+rw /dev/pts/ptmx]..."
+    # Current configuration:
+    local _old="$(${READLINK} -f "${HILBERT_CONFIG_DIR}")"
+
+    # by default: only rerun all possible initialization/preparation routines!
+    if [[ -z "${_arg}" ]]; then # no new config. Just check current, refresh it [and restart]
+
+        # -L "${HILBERT_CONFIG_DIR}" &&  ??
+        if [[ -d "${_old}" && -x "${_old}" && -r "${_old}" ]]; then
+            if [[ ! -r "${_old}/${HILBERT_CONFIG_FILE}" ]]; then
+                ERROR "Current station config file [${_old}/${HILBERT_CONFIG_FILE}] is not readable or missing!"
+                exit ${ERR_CODE_INT_ERROR}
+            fi
+
+            INFO "Current configuration: [${HILBERT_CONFIG_DIR}] -> [${_old}]"
+
+            cmd_detect_running_hilbert # 0 - nothing! 1 => Hilbert is running!
+            _hilbert_is_running=$?
+
+            # refreshing:
+            cmd_prepare
+
+            cmd_init_services
+            _ret=$?
+            if [[ ${_ret} -ne 0 ]]; then
+                ERROR "Failed to initialize/prepare current configuration!"
+                exit ${_ret}
+            fi
+
+            # TODO: check for differences in caches!?
+
+            _ret=${ERR_CODE_SUCCESS}
+
+            # restarting if Hilbert is currently running
+            if [[ ${_hilbert_is_running} -ne 0 ]]; then
+                cmd_start
+                _ret=$?
+            else
+                DEBUG "Hilbert was not running: no restart is performed!"
+            fi
+
+            DEBUG "Preparation/initialization is done! Ret code: [${_ret}]."
+            exit ${_ret}
         else
-            DEBUG "Trying to fix '/dev/pts/ptmx'-permissions:"
-
-            chmod a+rw /dev/pts/ptmx 1>/dev/null 2>&1 || \
-            sudo -n -P chmod a+rw /dev/pts/ptmx 1>/dev/null 2>&1 || \
-            WARNING "Could not run: 'chmod a+rw /dev/pts/ptmx'!"
+            ERROR "No current configuration [${HILBERT_CONFIG_DIR}] -> [${_old}]!"
+            ERROR "Wrong usage: please install/deploy a station configuration first!"
+            exit ${ERR_CODE_EXT_ERROR}
         fi
     fi
 
-    cmd_native_autodetect
-    if [[ -n "${arg}" && -r "${arg}" ]]; then
-        cmd_install_station_config "${arg}"
+    # new config!?
+    local new_cfg
+
+    cmd_compare_station_configs "${_arg}"
+    ## ret: 0 same config dirs - no changes!
+    ## ret: 1 init (update cached files + restart)
+    ## ret: 2 whole restart! (e.g. if no configuration is present or new config file is different)
+    new_cfg=$?
+
+    cmd_detect_running_hilbert # 0 - nothing! 1 => Hilbert is running!
+    _hilbert_is_running=$?
+
+    # Start with general station preparation
+    cmd_prepare
+
+    ############################################################
+    if [[ ${new_cfg} -eq 0 ]]; then  # Identical configuration?
+
+        # Refreshing current configuration:
+        cmd_init_services
+        _ret=$?
+        if [[ ${_ret} -ne 0 ]]; then
+            ERROR "Failed to initialize/prepare current configuration!"
+            exit ${_ret}
+        fi
+
+        _ret=${ERR_CODE_SUCCESS}
+
+        # restarting if Hilbert is currently running
+        if [[ ${_hilbert_is_running} -ne 0 ]]; then
+            cmd_start
+            _ret=$?
+        else
+            DEBUG "Hilbert was not running: no restart is performed!"
+        fi
+
+        DEBUG "Preparation/initialization is done! Ret code: [${_ret}]."
+        return ${_ret}
     fi
 
-    local s
+    ############################################################
+    local _app=""
+    if [[ ${hilbert_is_running} -ne 0 ]]; then
+        _app="$(cmd_tool_subcall -qqqL cmd_get_current_application 2>/dev/null)"
+        DEBUG "Hilbert is currently running! Query for the current application returned: [${_app}], with ret. status: [$?]."
+    fi
+
+    ############################################################
+    # similar configurations : (${new_cfg} == 1), or whole new configuration (${new_cfg} == 2)
+
+    ## NOTE: try to do preparation/initialization in temporary location before updating the global symbolic link!
+    cmd_install_station_config "${_arg}"
+    _ret=$?
+
+    if [[ ${_ret} -ne 0 ]]; then
+        ERROR "Failed to install new configuration from [${_arg}]!"
+        exit ${_ret}
+    fi
+
+    _ret=${ERR_CODE_SUCCESS}
+
+    # restarting if Hilbert is currently running
+    if [[ ${_hilbert_is_running} -ne 0 ]]; then
+
+        HILBERT_CONFIG_DIR="${HILBERT_CONFIG_BACKUP}" cmd_tool_subcall -L stop
+        _ret=$?
+
+        if [[ ${_ret} -ne 0 ]]; then
+            ERROR "Failed to stop services from [${HILBERT_CONFIG_BACKUP}]! Reverting and restarting..."
+            # reverting:
+            cmd_set_station_config_reference "$(${BASENAME} "${HILBERT_CONFIG_BACKUP}")"
+            DEBUG "Note that [cmd_set_station_config_reference \"$(${BASENAME} "${HILBERT_CONFIG_BACKUP}")\"] finished with exit code: [$?]..."
+
+            # restarting from old configuration:
+            HILBERT_CONFIG_DIR=${HILBERT_CONFIG_BACKUP} cmd_tool_subcall -L start "${_app}"
+            DEBUG "Note that [HILBERT_CONFIG_DIR=${HILBERT_CONFIG_BACKUP} cmd_tool_subcall -L start \"${_app}\"] finished with exit code: [$?]..."
+
+            exit ${_ret}
+        fi
+
+        # starting from new configuration:
+
+        # checking for same AppID:
+        cmd_tool_subcall -qqqqdL app_change "${_app}" 2>/dev/null 1>&2
+        if [[ $? -ne 0 ]]; then
+            # no such application in the new configuration! opting for the default one!
+            cmd_tool_subcall -L start
+        else
+            cmd_tool_subcall -L start "${_app}"
+        fi
+        _ret=$?
+
+        if [[ ${_ret} -ne 0 ]]; then
+            ERROR "Failed to stop services from [${HILBERT_CONFIG_DIR}]! Stopping, reverting and restarting..."
+
+            # stopping...
+            cmd_tool_subcall -L stop
+            DEBUG "Note that [cmd_tool_subcall -L stop] finished with exit code: [$?]..."
+
+            # reverting:
+            cmd_set_station_config_reference "$(${BASENAME} "${HILBERT_CONFIG_BACKUP}")"
+            DEBUG "Note that [cmd_set_station_config_reference \"$(${BASENAME} "${HILBERT_CONFIG_BACKUP}")\"] finished with exit code: [$?]..."
+
+            # restarting from old configuration:
+            HILBERT_CONFIG_DIR=${HILBERT_CONFIG_BACKUP} cmd_tool_subcall -L start "${_app}"
+            DEBUG "Note that [HILBERT_CONFIG_DIR=${HILBERT_CONFIG_BACKUP} cmd_tool_subcall -L start \"${_app}\"] finished with exit code: [$?]..."
+
+            exit ${_ret}
+        fi
+
+        return ${_ret}
+
+    else
+        DEBUG "Hilbert was not running: no restart is performed!"
+    fi
+
+    DEBUG "Preparation/initialization/installation/restart are all done! Ret code: [${_ret}]."
+    return ${_ret}
+}
+
+function cmd_tool_subcall() { ## @fn Execute this tool recursively. Add [-L] to avoid lock-guards for sub-process!
+    # LOGLEVEL=${LOGLEVEL} DRY_RUN=${DRY_RUN} HILBERT_CONFIG_DIR=...?!
+    local _cmd="${ENV} ${TOOL_SH} ${INPUT_OPT} $@"
+    DEBUG "Running [$TOOL $@] via [${_cmd}]"
+    eval "${_cmd}"
+    return $?
+}
+
+function cmd_compare_station_configs() { ## @fn compare some station configuration with the current one
+    ## NOTE: requires diff! ($DIFF)
+    ## NOTE: return-codes have special meanings!
+    ## ret: 0 same config dirs - no changes!
+    ## ret: 1 init (update cached files + restart)
+    ## ret: 2 whole restart! (e.g. if no configuration is present or new config file is different)
+    local arg="$1"
+
+    if [[ -z "${arg}" ]]; then
+        ERROR "Please specify a path to a configuration folder!"
+        exit ${ERR_CODE_INT_ERROR}
+    fi
+
+    # TODO: what about further resources? Maybe a .tar.gz and unpack it into ${new_cfg_dir}? rsync?!
+    if [[ -d "${arg}" && -x "${arg}" && -r "${arg}" ]]; then
+        INFO "New directory with configuration: [${arg}]"  # is not yet fully supported!!!?
+
+        if [[ ! -r "${arg}/${HILBERT_CONFIG_FILE}" ]]; then
+            ERROR "Station configuration file [${arg}/${HILBERT_CONFIG_FILE}] is not readable or missing!"
+            exit ${ERR_CODE_INT_ERROR}
+        fi
+    else
+        ERROR "Wrong configuration folder: [${arg}]!"
+        exit ${ERR_CODE_INT_ERROR}
+    fi
+
+    local _old="$(${READLINK} -f "${HILBERT_CONFIG_DIR}")"
+
+    # -L "${HILBERT_CONFIG_DIR}" && # ??
+    if [[ -d "${_old}" && -x "${_old}" && -r "${_old}" ]]; then
+        if [[ ! -r "${_old}/${HILBERT_CONFIG_FILE}" ]]; then
+            WARNING "Current station config file [${_old}/${HILBERT_CONFIG_FILE}] is not readable or missing!"
+            return 2
+        fi
+
+        INFO "Current configuration: [${HILBERT_CONFIG_DIR}] -> [${_old}]"
+    else
+        DEBUG "No current configuration [${HILBERT_CONFIG_DIR}] -> [${_old}]!"
+        return 2
+    fi
+
+    local _ret
+    ${DIFF} -aq "${_old}/${HILBERT_CONFIG_FILE}" "${arg}/${HILBERT_CONFIG_FILE}"
+    _ret=$?
+    if [[ ${_ret} -eq 0 ]]; then
+        DEBUG "Station Configs are the same! Only preparation/initialization may be required!"
+#        return 1
+    elif [[ ${_ret} -eq 1 ]]; then
+        DEBUG "Station Configs are different! Complete update is required!"
+        return 2
+    else
+        ERROR "Could not compare Station Configs: [${_old}/${HILBERT_CONFIG_FILE}] [${arg}/${HILBERT_CONFIG_FILE}]!"
+        exit ${ERR_CODE_EXT_ERROR}
+    fi
+
+    ### TODO: check beforehand and if necessary pre stop everything ++ post start anew,
+    ### forget the currently running application choice??
+    DEBUG "Comparison of the current configuration [${_old}] with the one in [$arg]: [diff -aqr -x 'cache_*.yaml' -x \"${HILBERT_CONFIG_FILE}\" \"${_old}\" \"$arg\"]..."
+#    ${RSYNC} -zaic "${_old}" "${arg}" --dry-run
+    ${DIFF} -aqr -x 'cache_*.yaml' -x "${HILBERT_CONFIG_FILE}" "${_old}" "${arg}"
+    _ret=$?
+
+    if [[ ${_ret} -eq 0 ]]; then
+        DEBUG "Same Configuration directories: nothing to update!!"
+        return 0
+    elif [[ ${_ret} -eq 1 ]]; then
+        DEBUG "Configs are different: configuration has to be updated!!"
+        return 1
+    else
+        ERROR "Could not compare configs!"
+        exit ${ERR_CODE_EXT_ERROR}
+    fi
+}
+
+function cmd_set_station_config_reference() { ## @fn Set station config reference
+    local new_cfg_dir="$@"
+
+    if [[ -L "${HILBERT_CONFIG_DIR}" ]]; then
+        DEBUG "Current latest configuration: ${HILBERT_CONFIG_DIR}: $(${LIST} -l "${HILBERT_CONFIG_DIR}")"
+
+#        DRYRUN ${UNLINK} "${HILBERT_CONFIG_DIR}"
+#        if [[ $? -ne 0 ]]; then
+#            ERROR "Failed to unlink [${HILBERT_CONFIG_DIR}]!"
+#            exit ${ERR_CODE_EXT_ERROR}
+#        fi
+
+    elif [[ -d "${HILBERT_CONFIG_DIR}" ]]; then
+        ERROR "Directory ${HILBERT_CONFIG_DIR} exists and it is not a link!"
+        exit ${ERR_CODE_INT_ERROR}
+    fi
+
+    ## NOTE: atomic configuration update!
+    ## NOTE: full path in symbolic link => may interfere when volume-mounted...
+    DRYRUN ${LINK} -snf "${new_cfg_dir}" "${HILBERT_CONFIG_DIR}"
+    if [[ $? -ne 0 ]]; then
+        ERROR "Failed to create a link [${HILBERT_CONFIG_DIR}] for [${new_cfg_dir}]!"
+        exit ${ERR_CODE_EXT_ERROR}
+    fi
+
+    # post-setup self-test
+    if [[ ! -L "${HILBERT_CONFIG_DIR}" ]]; then
+        ERROR "${HILBERT_CONFIG_DIR} is not a link!"
+        exit ${ERR_CODE_INT_ERROR}
+    fi
+
+    return ${ERR_CODE_SUCCESS}
+}
+
+function cmd_init_services() {         ## @fn Initialize/Prepare Station configuration
+    cmd_native_autodetect
     cmd_read_configuration
 
+    local s
     if [[ ${#hilbert_station_profile_services[@]} -ne 0 ]]; then
         for s in "${hilbert_station_profile_services[@]}"; do
             DEBUG "Initializing service [$s]"
             cmd_init_service "${s}"
+            _ret=$?
+            if [[ ${_ret} -ne 0 ]]; then
+                ERROR "Could not prepare/init service [${s}] due to some error (ret. code: ${_ret})!"
+                exit ${ERR_CODE_INT_ERROR}
+            fi
         done
     fi
 
@@ -859,25 +1134,55 @@ function cmd_init() {         ## @fn Install/Initialize/Prepare Station configur
         for s in "${hilbert_station_compatible_applications[@]}"; do
             DEBUG "Initializing application [$s]"
             cmd_init_service "${s}"
+            _ret=$?
+            if [[ ${_ret} -ne 0 ]]; then
+                ERROR "Could not prepare/init service [${s}] due to some error (ret. code: ${_ret})!"
+                exit ${ERR_CODE_INT_ERROR}
+            fi
         done
     fi
+}
 
-    ## TODO: hilbert_cleanup==true? =>
+function cmd_prepare() {         ## @fn Prepare Station
+    if [[ ! -w "/dev/pts/ptmx" ]]; then
+        DEBUG "Trying to fix permissions for [/dev/pts/ptmx]: [$(${LIST} -l /dev/pts/ptmx)]"
+        DRYRUN ${CHMOD} a+rw /dev/pts/ptmx 2>&1
+        DRYRUN ${SUDO} -n -P ${CHMOD} a+rw /dev/pts/ptmx 2>&1
+        #1>/dev/null )
+        if [[ ! -w "/dev/pts/ptmx" ]]; then
+            WARNING "Could not fix [/dev/pts/ptmx] yet!"
+        else
+            DEBUG "Successfully fixed permissions of [/dev/pts/ptmx]!"
+        fi
+    fi
+
+
+    ## TODO: hilbert_cleanup==true?  Cleanup/Prepare policy?
     if [[ -n "${DOCKER_GC}" ]]; then
         if hash "${DOCKER_GC}" 2>/dev/null; then
             if [[ -n "${DRY_RUN}" ]]; then # TODO: switch to using DRYRUN
                 DRYRUN_ECHO "${DOCKER_GC}"
             else
-                INFO "Not running: [${DOCKER_GC}]... TODO!" # NOTE: actually run this in production!
+                DEBUG "Dry-running: [${DOCKER_GC}]...!" # NOTE: make sure to use docker_gc in production!
+                DRY_RUN=1 ${DOCKER_GC}
             fi
         fi
     fi
 
     if [[ ! -r "${HILBERT_CONFIG_BASEDIR}/${OGL}" ]]; then
-        INFO "Missing/unreadable '${HILBERT_CONFIG_BASEDIR}/${OGL}'! Please regenerate it for OpenGL apps!"
+        DEBUG "Missing/unreadable [${HILBERT_CONFIG_BASEDIR}/${OGL}]! NOTE: It might be necessary for OpenGL apps!"
+    else
+        ## NOTE: Specific for GPU/OpenGL related apps:
+        if [[ ! -f "${HILBERT_OGL}" ]]; then
+            if [[ -f "${HILBERT_CONFIG_BASEDIR}/${OGL}" ]]; then
+                ${COPY} -fp "${HILBERT_CONFIG_BASEDIR}/${OGL}" "${HILBERT_OGL}" || ${SUDO} -n -P ${COPY} -fp "${HILBERT_CONFIG_BASEDIR}/${OGL}" "${HILBERT_OGL}"
+            fi
+        fi
     fi
 
-    return $?
+    if [[ ! -f "${HILBERT_OGL}" ]]; then
+        DEBUG "Missing [${HILBERT_OGL}]! Please regenerate and place to [${HILBERT_CONFIG_BASEDIR}]!"
+    fi
 }
 
 
@@ -1362,6 +1667,31 @@ function cmd_detect_top_application() {  ## @fn Detect the currently running Hil
     return ${ERR_CODE_SUCCESS}
 }
 
+function cmd_detect_running_hilbert() {  ## @fn Detect the currently running Hilbert service(s)/application(s)
+## NOTE: special meaning for return codes!
+### ret: 0 if there are no currently running Hilbert service(s)/application(s)
+### ret: 1 if something is running!
+    local current_hilbert_ids=$(${DOCKER} ps -a -q --filter "label=is_top_app" \
+      --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" \
+      --filter "status=running" 2>/dev/null | ${XARGS} --no-run-if-empty)
+
+    if [[ $? -ne 0 ]]; then
+        ERROR "Could not query Docker Engine via ${DOCKER}!"
+        exit ${ERR_CODE_EXT_ERROR}
+    fi
+
+    if [[ -z "${current_hilbert_ids[@]}" ]]; then
+        DEBUG "There are no currently running Hilbert service(s) or application(s)!"
+        return 0 # nothing detected!
+    else
+        DEBUG "Currently running Hilbert service(s)/application(s) IDs: [${current_hilbert_ids[@]}]!"
+        return 1 # something is running!
+    fi
+    #    DEBUG "[${#current_hilbert_ids[@]}]: [${current_hilbert_ids[@]}]"
+}
+
+
+
 function cmd_list_applications() { ## @fn List Applications
     local data
 
@@ -1541,16 +1871,9 @@ function cmd_start() {         ## @fn (re)start services and top application [pr
 #    DEBUG "Sleeping for [${hilbert_autostart_delay}] sec (due to 'hilbert_autostart_delay' from [${HILBERT_CONFIG_DIR}/${HILBERT_CONFIG_FILE}])..."
 #    sleep "${hilbert_autostart_delay}"
 
-    ## NOTE: Specific for GPU/OpenGL related apps:
-    if [[ ! -f "${HILBERT_OGL}" ]]; then
-        if [[ -f "${HILBERT_CONFIG_BASEDIR}/${OGL}" ]]; then
-            cp -fp "${HILBERT_CONFIG_BASEDIR}/${OGL}" "${HILBERT_OGL}" || sudo -n -P cp -fp "${HILBERT_CONFIG_BASEDIR}/${OGL}" "${HILBERT_OGL}"
-        fi
-    fi
 
-    if [[ ! -f "${HILBERT_OGL}" ]]; then
-        WARNING "Missing '${HILBERT_OGL}'! Please regenerate and place to '${HILBERT_CONFIG_BASEDIR}'!"
-    fi
+    # Start with general station preparation
+    cmd_prepare
 
     local indices=( ${!hilbert_station_profile_services[@]} )  # Array of indices
     local N=${#indices[@]}
@@ -1718,6 +2041,18 @@ function cmd_subcommand_handle() { ## @fn Main CLI parser, sub-command handler
         ## TODO: arguments?
         cmd_start "$*"
         exit $?
+        ;;
+    cmd_usage|cmd_xsetroot|cmd_detect_running_hilbert|cmd_tool_subcall|cmd_native_autodetect|cmd_start_locking|cmd_subcommand_handle)
+        ${subcommand} "$@"
+        _ret=$?
+
+        if [[ ${_ret} -ne 0 ]]; then
+            ERROR "Something went wrong in subcommand handler: [${subcommand} \"$@\"]. Exit code: ${_ret}!"
+            exit ${_ret}
+        else
+            DEBUG "Script successfully handled hidden subcommand: [${subcommand} \"$@\"]!"
+            exit ${ERR_CODE_SUCCESS}
+        fi
         ;;
     cmd_*) ## NOTE: hidden subcommand-s (for testing)
         ## NOTE: lock to be sure...
