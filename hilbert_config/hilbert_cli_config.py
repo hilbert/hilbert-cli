@@ -13,7 +13,7 @@ from ruamel.yaml.composer import Composer
 from ruamel.yaml.constructor import RoundTripConstructor  # Constructor, SafeConstructor,
 from ruamel.yaml.resolver import VersionedResolver  # Resolver,
 # from ruamel.yaml.nodes import MappingNode
-from ruamel.yaml.compat import PY2, PY3, text_type, string_types, ordereddict
+from ruamel.yaml.compat import PY2, PY3, text_type, string_types, ordereddict, integer_types
 
 import semantic_version  # supports partial versions
 
@@ -38,7 +38,7 @@ from abc import *
 log = logging.getLogger(__name__)
 # log.setLevel(logging.DEBUG)
 
-_pp = PP.PrettyPrinter(indent=4)
+_pp = PP.PrettyPrinter(indent=2, width=80)
 
 ###############################################################
 # NOTE: Global variables
@@ -649,6 +649,7 @@ class BaseValidator(AbstractValidator):
 
         if h in _d:
             d = _d[h]
+
             if isinstance(d, BaseValidator):
                 return d.query(t, _default)  # TODO: FIXME: avoid recursion...
 
@@ -661,18 +662,18 @@ class BaseValidator(AbstractValidator):
             if (t == '') or (t == 'all') or (t == 'data'):
                 return d
 
-            assert not isinstance(d, BaseValidator)
+            if isinstance(d, BaseValidator):
+                return d.query(t, _default)  # TODO: FIXME: avoid recursion...
+
+#            assert not isinstance(d, BaseValidator)
 #                return d.query(t, _default)  # TODO: FIXME: avoid recursion...
 #            if (t == 'id') || (t == '')
-            raise Exception("Cannot continue object query: wrong tail: [{0}] or synthetic data! Currently found data: [{1}: {2}]".format(t, h, d))
+            log.warning("Wrong/unknown tail: [{0}] or synthetic data ! Currently found data: [{1}: {2}]".format(t, h, d))
+#        else:
 
-        if _default is None:
-            raise ConfigurationError(u"{}: {}".format("ERROR:",
-                                                  "Sorry cannot query '{0}' of {1}!".format(what, type(self))))
-        else:
-            log.warning(u"{}: {}".format("ERROR:",
-                                                  "Sorry cannot query '{0}' of {1}!".format(what, type(self))))
-            return _default
+        log.warning("Sorry cannot query [{0}] of current object [{2}] of type [{1}]!".format(what, type(self), self.get_id()))
+
+        return _default
 
 ###############################################################
 class BaseRecordValidator(BaseValidator):
@@ -3409,6 +3410,38 @@ def parse_hilbert(d, parent=None):
 
 ###############################################################
 def yaml_dump(*args, **kwargs):
+    pretty = kwargs.pop('pretty', True)
+    kwargs['allow_unicode'] = kwargs.pop('allow_unicode', True)
+    kwargs['encoding'] = kwargs.pop('encoding', 'utf-8')
+
+
+    kwargs['explicit_start'] = kwargs.pop('explicit_start', False)
+    kwargs['explicit_end'] = kwargs.pop('explicit_end', False)
+#    kwargs['tags'] = kwargs.pop('tags', False)
+
+    kwargs['canonical'] = kwargs.pop('canonical', False)
+
+    if pretty:
+        kwargs['version'] = kwargs.pop('version', (1,2))
+        kwargs['default_flow_style'] = kwargs.pop('default_flow_style', False)
+
+        kwargs['indent'] = kwargs.pop('indent', 2)
+        kwargs['width'] = kwargs.pop('width', 80)
+
+        kwargs['line_break'] = kwargs.pop('line_break', True)
+        kwargs['block_seq_indent'] = kwargs.pop('block_seq_indent', 2)
+
+        if isinstance(args[0], dict):
+            kwargs['top_level_colon_align'] = kwargs.pop('top_level_colon_align', True)
+        kwargs['prefix_colon'] = kwargs.pop('prefix_colon', '\t')
+    else:
+        kwargs['default_flow_style'] = kwargs.pop('default_flow_style', True)
+        kwargs['default_style'] = kwargs.pop('default_style', 'json-like-with-type-!!tags')
+        kwargs['indent'] = kwargs.pop('indent', 0)
+        kwargs['width'] = kwargs.pop('width', 99999)
+        kwargs['line_break'] = kwargs.pop('line_break', False)
+        kwargs['block_seq_indent'] = kwargs.pop('block_seq_indent', 0)
+
     # def round_trip_dump(data, stream=None, Dumper=RoundTripDumper,
     #                     default_style=None, default_flow_style=None,
     #                     canonical=None, indent=None, width=None,
@@ -3423,13 +3456,25 @@ def yaml_dump(*args, **kwargs):
     # Any, Union[None, bool], Union[None, bool],
     # VersionType, Any, Any,
     # Any, Any) -> Union[None, str]   # NOQA
-    #        if isinstance(data, (list, dict, tuple, set)):
     return yaml.round_trip_dump(*args, **kwargs)
 
 
 ###############################################################
 def json_dump(*args, **kwargs):
-#    skipkeys = False, ensure_ascii = True, check_circular = True,
+    pretty = kwargs.pop('pretty', True)
+    kwargs['check_circular'] = kwargs.pop('check_circular', False)
+    kwargs['allow_nan'] = kwargs.pop('allow_nan', True)
+    if pretty:
+        kwargs['ensure_ascii'] = kwargs.pop('ensure_ascii', False)
+        kwargs['encoding'] = kwargs.pop('encoding', 'utf-8')
+        kwargs['indent'] = kwargs.pop('indent', 2)
+        kwargs['sort_keys'] = kwargs.pop('sort_keys', True)
+        kwargs['separators'] = kwargs.pop('separators', (',', ': '))
+    else:  # compact?!
+        kwargs['indent'] = kwargs.pop('indent', None)
+        kwargs['separators'] = kwargs.pop('separators', (',', ':'))
+
+    #    skipkeys = False, ensure_ascii = True, check_circular = True,
 #    allow_nan = True, cls = None, indent = None, separators = None,
 #    encoding = 'utf-8', default = None, sort_keys = False, ** kw):
     return json.dumps(*args, **kwargs)
@@ -3447,12 +3492,14 @@ def apply_str(d):
             _d[apply_str(k)] = apply_str(v)
         return _d
     elif isinstance(d, list):
-        return map(apply_str, d)
+        _d = []
+        for idx, v in enumerate(d):
+            _d.insert(idx, apply_str(v))
+        return _d
+    #        return map(apply_str, d)
     elif isinstance(d, string_types):
         return str(d)
     else:
         #        assert not isinstance(d, set)
         #        assert not isinstance(d, tuple)
         return d
-
-

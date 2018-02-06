@@ -203,46 +203,62 @@ def cmd_list(parser, context, args, obj):
     return cfg.query(obj)
 
 
-def print_query_result(data, obj, mode):
+def print_query_result(data, obj, mode, pretty=True):
+    if data is None:
+        if pretty:
+            print('')
+        return
+
     assert data is not None
 
     if isinstance(data, BaseValidator):
         log.debug("Referred object [{}] is stored in a Validator object".format(obj))
         data = data.data_dump()
         log.debug("Internal data is now of type: [{}]".format(type(data)))
+    else:
+        log.debug("Referred object [{0}] is of type: [{1}]".format(obj, type(data)))
 
-    if mode == 'list': # one item per line
+    if mode == 'list':  # one item per line
+        if pretty:
+            data = apply_str(data)
+
         if isinstance(data, list):
+            if pretty:
+                log.debug("Referred list [{0}] is printed one entry per line!".format(obj))
+                for idx, d in enumerate(data):
+                    print_query_result(d, obj + '/[{}]'.format(idx), mode='plain', pretty=False)
+            else:
+                log.debug("Referred list [{0}] is printed one entry per line!".format(obj))
+                f = False
+                for idx, d in enumerate(data):
+                    f = True
+                    print(d, end=' ')
+                if f:
+                    print('')
+#            print(*apply_str(data), sep='\n')
+        elif isinstance(data, string_types) or isinstance(data, integer_types):
             log.debug("Referred list [{0}] is printed one entry per line!".format(obj))
-            print(*apply_str(data), sep='\n')
-            return
+            print_query_result(data, obj, mode='plain', pretty=False)
         else:
-            log.debug("Referred list [{0}] cannot be printed one entry per line since it is not a list! Trying to printing it in [plain] mode instead!".format(obj))
-            mode = 'plain'
-
+            raise Exception("Referred query data [{0}] must be a list of items! Obtained data type: [{1}]!".format(obj, type(data)))
+        return
     if mode == 'plain':
         log.debug("Referred object [{0}] is printed in as plain text data!".format(obj))
-        print(apply_str(data))  # same as RAW but without annoying unicode prefix on Python2
-        return
-    elif mode == 'pp':
-        log.debug("Referred object [{0}] is printed in a pretty text format!".format(obj))
-        pprint(apply_str(data))
+        if pretty:
+            pprint(apply_str(data))
+        else:
+            print(data)  # same as RAW but without annoying unicode prefix on Python2
         return
     elif mode == 'json':
         log.debug("Referred object [{0}] is printed in a JSON format!".format(obj))
-        print(json_dump(data))
+        print(json_dump(data, pretty=pretty))
         return
     elif mode == 'yaml':
         log.debug("Referred object [{0}] is printed in a YAML format!".format(obj))
-        print(yaml_dump(data, allow_unicode=True, canonical=False, indent=False, explicit_start=False,
-                        explicit_end=False))
+        print(yaml_dump(data, pretty=pretty), end='')
         return
-    else: # if mode == 'raw':
-        log.debug("Referred object [{0}] is printed in as raw data!".format(obj))
-        print(data)
-        return
-    return
-
+#    else:  # if mode == 'raw':
+    raise Exception("Referred object [{0}] is to be printed in unhandled mode: [{1}])".format(obj, mode))
 
 @subcmd('cfg_query', help='query some part of configuration. possibly dump it to a file')
 def cmd_cfg_query(parser, context, args):
@@ -253,9 +269,12 @@ def cmd_cfg_query(parser, context, args):
     parser.add_argument('-od', '--outputdump', default=argparse.SUPPRESS,
                         help="specify output dump file")
 
-    parser.add_argument('-f', '--format', choices=['raw', 'list', 'pp', 'plain', 'yaml', 'json'],
+    parser.add_argument('-f', '--format', choices=['list', 'plain', 'yaml', 'json'],
                         default='plain', required=False,
-                        help="output format. Raw, list, plain, pretty, YAML, JSON")
+                        help="output format (default: 'plain')")
+
+    parser.add_argument('-c', '--compact', action='store_true',
+                         required=False, help="switch to compact output (default: pretty)")
 
     group = parser.add_mutually_exclusive_group(required=False)
 
@@ -268,26 +287,27 @@ def cmd_cfg_query(parser, context, args):
 
     _args = vars(args)
 
-    obj = 'all'
-    if 'object' in _args:
-        obj = _args['object']
+    assert 'format' in _args
+    assert 'compact' in _args
+    assert 'object' in _args
 
-    data = None
+    obj = _args['object']
+
     try:
         log.info("Querring object: '{}'... ".format(obj))
+
         data = cmd_list(parser, context, args, obj)
-    except:
-        log.exception("Sorry cannot query '{}' yet!".format(obj))
+
+        print_query_result(data, obj, _args['format'], pretty=(not _args.get('compact', False)))
+
+        od = output_handler(parser, vars(context), args)
+        if od is not None:
+            log.info("Writing the configuration into '{}'...".format(od))
+            pickle_dump(od, data)
+
+    except BaseException as err:
+        log.exception("Sorry there was an exception while querying [{0}]: [{1}]".format(obj, err))
         sys.exit(1)
-
-    mode = _args.get('format', 'plain')
-    print_query_result(data, obj, mode)
-
-    od = output_handler(parser, vars(context), args)
-
-    if od is not None:
-        log.info("Writing the configuration into '{}'...".format(od))
-        pickle_dump(od, data)
 
     return args
 
@@ -327,6 +347,62 @@ def cmd_list_applications(parser, context, args):
 
     return args
 
+    # log.debug("Loading/parsing configuration...")
+    # cfg = input_handler(parser, vars(context), args)
+    # assert cfg is not None
+    # assert isinstance(cfg, Hilbert)
+    #
+    # obj = None
+    # log.debug("Listing all Applications for Dashboard...")
+    # try:
+    #     obj = cfg.query('Applications/data')
+    # except:
+    #     log.exception("Sorry could not query Applications's details from the given configuration!")
+    #     sys.exit(1)
+    #
+    # assert obj is not None
+    # if isinstance(obj, BaseValidator):
+    #     obj = obj.data_dump()
+    #
+    # first = True
+    # print('[')
+    #
+    #
+    # for k in obj:
+    #     o = obj.get(k, None)
+    #     assert o is not None
+    #
+    #     sts = ""
+    #     if 'compatible_stations' in o:
+    #         try:
+    #             sts = o.get('compatible_stations', None)
+    #             if isinstance(sts, BaseValidator):
+    #                 sts = sts.data_dump()
+    #             sts = '"' + '", "'.join(sts) + '"'
+    #             if sts.strip() == '""':
+    #                 sts = ""
+    #         except:
+    #             log.debug("No [compatible_stations] for application [{0}]".format(k))
+    #
+    #     if not first:
+    #         print(',')
+    #
+    #     print('{')
+    #     for f in ['name', 'description', 'icon']:
+    #         if f in o:
+    #             print('"{0}": "{1}",'.format(f, o[f]))
+    #
+    #     if 'compatible_stations' in o:
+    #         print('"{0}": [{1}],'.format('compatible_stations', sts))
+    #
+    #     print('"{0}": "{1}"'.format('id', k))
+    #     print('}')
+    #
+    #     first = False
+    #
+    # print(']')
+    #
+    # return args
 
 @subcmd('list_stations', help='list station IDs')
 def cmd_list_stations(parser, context, args):
@@ -468,6 +544,63 @@ def cmd_list_profiles(parser, context, args):
 
     return args
 
+    # assert mode == 'dashboard'
+    #
+    # log.debug("Loading/parsing configuration...")
+    # cfg = input_handler(parser, vars(context), args)
+    # assert cfg is not None
+    # assert isinstance(cfg, Hilbert)
+    #
+    # obj = None
+    # log.debug("Listing all Profiles for Dashboard...")
+    # try:
+    #     obj = cfg.query('Profiles/data')
+    # except:
+    #     log.exception("Sorry could not query Profiles's details from the given configuration!")
+    #     sys.exit(1)
+    #
+    # assert obj is not None
+    # if isinstance(obj, BaseValidator):
+    #     obj = obj.data_dump()
+    #
+    # first = True
+    # print('[')
+    #
+    # for k in obj:
+    #     o = obj.get(k, None)
+    #     assert o is not None
+    #
+    #     sts = ""
+    #     if 'station_list' in o:
+    #         try:
+    #             sts = o.get('station_list', None)
+    #             if isinstance(sts, BaseValidator):
+    #                 sts = sts.data_dump()
+    #             sts = '"' + '", "'.join(sts) + '"'
+    #             if sts.strip() == '""':
+    #                 sts = ""
+    #         except:
+    #             log.debug("No [station_list] for profile [{0}]".format(k))
+    #
+    #     if not first:
+    #         print(',')
+    #
+    #     print('{')
+    #     for f in ['name', 'description', 'icon']:
+    #         if f in o:
+    #             print('"{0}": "{1}",'.format(f, o[f]))
+    #
+    #     if 'station_list' in o:
+    #         print('"{0}": [{1}],'.format('station_list', sts))
+    #
+    #     print('"{0}": "{1}"'.format('id', k))
+    #     print('}')
+    #
+    #     first = False
+    #
+    # print(']')
+    #
+    # return args
 
 
 @subcmd('list_groups', help='list (named) group IDs')
@@ -584,7 +717,6 @@ def cmd_action(parser, context, args, Action=None, appIdRequired=False):
 
     if stationId not in stations.get_data():
         log.error("Invalid StationID (%s)!", stationId)
-        print()
         sys.exit(1)
 
     station = stations.get_data()[stationId]

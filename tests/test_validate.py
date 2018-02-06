@@ -40,7 +40,7 @@ FIXTURE_DIR = os.path.abspath(os.path.join(
             ))
 
 
-def hilbert_query(capsys, input_yaml_file, data_query, test_err, test_output, output_format):
+def hilbert_query(capsys, input_yaml_file, data_query, test_err, test_output, output_format, pretty=False):
     input_file = os.path.join(FIXTURE_DIR, input_yaml_file)
     assert os.path.exists(input_file)
 
@@ -56,7 +56,7 @@ def hilbert_query(capsys, input_yaml_file, data_query, test_err, test_output, ou
         try:
             os.chdir(get_INPUT_DIRNAME())
             data = cfg.query(data_query)
-            print_query_result(data, data_query, output_format)
+            print_query_result(data, data_query, output_format, pretty=pretty)
         finally:
             set_INPUT_DIRNAME(old)
             os.chdir(cwd)
