@@ -28,7 +28,7 @@ import subprocess  # See also https://pymotw.com/2/subprocess/
 import shlex
 import shutil
 # import paramiko  # TODO: use instead of simple .call('ssh ...') ? Check for Pros and Cons!
-
+import json
 
 import pprint as PP
 from abc import *
@@ -3409,4 +3409,50 @@ def parse_hilbert(d, parent=None):
 
 ###############################################################
 def yaml_dump(*args, **kwargs):
+    # def round_trip_dump(data, stream=None, Dumper=RoundTripDumper,
+    #                     default_style=None, default_flow_style=None,
+    #                     canonical=None, indent=None, width=None,
+    #                     allow_unicode=None, line_break=None,
+    #                     encoding=enc, explicit_start=None, explicit_end=None,
+    #                     version=None, tags=None, block_seq_indent=None,
+    #                     top_level_colon_align=None, prefix_colon=None):
+    # type: (Any, StreamType, Any,
+    # Any, Any,
+    # bool, Union[None, int], Union[None, int],
+    # bool, Any,
+    # Any, Union[None, bool], Union[None, bool],
+    # VersionType, Any, Any,
+    # Any, Any) -> Union[None, str]   # NOQA
+    #        if isinstance(data, (list, dict, tuple, set)):
     return yaml.round_trip_dump(*args, **kwargs)
+
+
+###############################################################
+def json_dump(*args, **kwargs):
+#    skipkeys = False, ensure_ascii = True, check_circular = True,
+#    allow_nan = True, cls = None, indent = None, separators = None,
+#    encoding = 'utf-8', default = None, sort_keys = False, ** kw):
+    return json.dumps(*args, **kwargs)
+
+
+###############################################################
+#class unicode(unicode):
+#    def __repr__(self):
+#        return unicode.__repr__(self).lstrip("u")
+
+def apply_str(d):
+    if isinstance(d, dict):
+        _d = {}
+        for k,v in d.items():
+            _d[apply_str(k)] = apply_str(v)
+        return _d
+    elif isinstance(d, list):
+        return map(apply_str, d)
+    elif isinstance(d, string_types):
+        return str(d)
+    else:
+        #        assert not isinstance(d, set)
+        #        assert not isinstance(d, tuple)
+        return d
+
+

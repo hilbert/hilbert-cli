@@ -203,46 +203,59 @@ def cmd_list(parser, context, args, obj):
     return cfg.query(obj)
 
 
-def print_query_result(data, obj):
+def print_query_result(data, obj, mode):
     assert data is not None
 
     if isinstance(data, BaseValidator):
         log.debug("Referred object [{}] is stored in a Validator object".format(obj))
         data = data.data_dump()
-        log.debug("Internal data: [{0}] of type: [{1}]".format(data, type(data)))
+        log.debug("Internal data is now of type: [{}]".format(type(data)))
 
-        # def round_trip_dump(data, stream=None, Dumper=RoundTripDumper,
-        #                     default_style=None, default_flow_style=None,
-        #                     canonical=None, indent=None, width=None,
-        #                     allow_unicode=None, line_break=None,
-        #                     encoding=enc, explicit_start=None, explicit_end=None,
-        #                     version=None, tags=None, block_seq_indent=None,
-        #                     top_level_colon_align=None, prefix_colon=None):
-        # type: (Any, StreamType, Any,
-        # Any, Any,
-        # bool, Union[None, int], Union[None, int],
-        # bool, Any,
-        # Any, Union[None, bool], Union[None, bool],
-        # VersionType, Any, Any,
-        # Any, Any) -> Union[None, str]   # NOQA
-        #        if isinstance(data, (list, dict, tuple, set)):
+    if mode == 'list': # one item per line
+        if isinstance(data, list):
+            log.debug("Referred list [{0}] is printed one entry per line!".format(obj))
+            print(*apply_str(data), sep='\n')
+            return
+        else:
+            log.debug("Referred list [{0}] cannot be printed one entry per line since it is not a list! Trying to printing it in [plain] mode instead!".format(obj))
+            mode = 'plain'
+
+    if mode == 'plain':
+        log.debug("Referred object [{0}] is printed in as plain text data!".format(obj))
+        print(apply_str(data))  # same as RAW but without annoying unicode prefix on Python2
+        return
+    elif mode == 'pp':
+        log.debug("Referred object [{0}] is printed in a pretty text format!".format(obj))
+        pprint(apply_str(data))
+        return
+    elif mode == 'json':
+        log.debug("Referred object [{0}] is printed in a JSON format!".format(obj))
+        print(json_dump(data))
+        return
+    elif mode == 'yaml':
+        log.debug("Referred object [{0}] is printed in a YAML format!".format(obj))
         print(yaml_dump(data, allow_unicode=True, canonical=False, indent=False, explicit_start=False,
                         explicit_end=False))
-    #        else:
-    #       print(data)
-    else:
-        log.debug("Referred object [{0}] is stored as a plane data: [{1}]".format(obj, data))
+        return
+    else: # if mode == 'raw':
+        log.debug("Referred object [{0}] is printed in as raw data!".format(obj))
         print(data)
+        return
+    return
 
 
 @subcmd('cfg_query', help='query some part of configuration. possibly dump it to a file')
-def cmd_query(parser, context, args):
+def cmd_cfg_query(parser, context, args):
     log.debug("Running '{}'".format('cfg_query'))
 
     parser.add_argument('-o', '--object', required=False, default='all',
                         help="specify the object in the config (default: 'all')")
     parser.add_argument('-od', '--outputdump', default=argparse.SUPPRESS,
                         help="specify output dump file")
+
+    parser.add_argument('-f', '--format', choices=['raw', 'list', 'pp', 'plain', 'yaml', 'json'],
+                        default='plain', required=False,
+                        help="output format. Raw, list, plain, pretty, YAML, JSON")
 
     group = parser.add_mutually_exclusive_group(required=False)
 
@@ -267,7 +280,8 @@ def cmd_query(parser, context, args):
         log.exception("Sorry cannot query '{}' yet!".format(obj))
         sys.exit(1)
 
-    print_query_result(data, obj)
+    mode = _args.get('format', 'plain')
+    print_query_result(data, obj, mode)
 
     od = output_handler(parser, vars(context), args)
 
@@ -282,6 +296,10 @@ def cmd_query(parser, context, args):
 def cmd_list_applications(parser, context, args):
     log.debug("Running '{}'".format('list_applications'))
 
+    parser.add_argument('-f', '--format', choices=['list', 'yaml'],
+                        default='yaml', required=False,
+                        help="output format")
+
     group = parser.add_mutually_exclusive_group()
 
     group.add_argument('--configfile', required=False,
@@ -289,91 +307,23 @@ def cmd_list_applications(parser, context, args):
     group.add_argument('--configdump', required=False,
                        help="specify input dump file")
 
-    parser.add_argument('-f', '--format', choices=['list', 'dashboard'],
-                        default='list', required=False,
-                        help="output format")
 
     args = parser.parse_args(args)
 
     _args = vars(args)
+    mode = _args['format']
 
-    mode = _args.get('format', 'list')
+    assert mode != 'dashboard'
 
-    if mode == "list":
-        log.debug("Listing all Application ID...")
+    log.debug("Listing all Application IDs...")
 
-        obj = None
-        try:
-            obj = cmd_list(parser, context, args, 'Applications/keys')
-        except:
-            log.exception("Sorry could not get the list of '{}' from the input file!".format('applications'))
-            sys.exit(1)
-
-        assert obj is not None
-
-        if isinstance(obj, BaseValidator):
-            print(yaml_dump(obj.data_dump()))
-        else:
-            print(yaml_dump(obj))
-
-        return args
-
-    assert mode == 'dashboard'
-
-    log.debug("Loading/parsing configuration...")
-    cfg = input_handler(parser, vars(context), args)
-    assert cfg is not None
-    assert isinstance(cfg, Hilbert)
-
-    obj = None
-    log.debug("Listing all Applications for Dashboard...")
     try:
-        obj = cfg.query('Applications/data')
+        q = 'Applications/keys'
+        obj = cmd_list(parser, context, args, q)
+        print_query_result(obj, q, mode)
     except:
-        log.exception("Sorry could not query Applications's details from the given configuration!")
+        log.exception("Sorry could not get the list of '{}' from the input file!".format('applications'))
         sys.exit(1)
-
-    assert obj is not None
-    if isinstance(obj, BaseValidator):
-        obj = obj.data_dump()
-
-    first = True
-    print('[')
-
-
-    for k in obj:
-        o = obj.get(k, None)
-        assert o is not None
-
-        sts = ""
-        if 'compatible_stations' in o:
-            try:
-                sts = o.get('compatible_stations', None)
-                if isinstance(sts, BaseValidator):
-                    sts = sts.data_dump()
-                sts = '"' + '", "'.join(sts) + '"'
-                if sts.strip() == '""':
-                    sts = ""
-            except:
-                log.debug("No [compatible_stations] for application [{0}]".format(k))
-
-        if not first:
-            print(',')
-
-        print('{')
-        for f in ['name', 'description', 'icon']:
-            if f in o:
-                print('"{0}": "{1}",'.format(f, o[f]))
-
-        if 'compatible_stations' in o:
-            print('"{0}": [{1}],'.format('compatible_stations', sts))
-
-        print('"{0}": "{1}"'.format('id', k))
-        print('}')
-
-        first = False
-
-    print(']')
 
     return args
 
@@ -382,6 +332,10 @@ def cmd_list_applications(parser, context, args):
 def cmd_list_stations(parser, context, args):
     log.debug("Running '{}'".format('list_stations'))
 
+    parser.add_argument('-f', '--format', choices=['list', 'yaml', 'dashboard'],
+                        default='yaml', required=False,
+                        help="output format")
+
     group = parser.add_mutually_exclusive_group()
 
     group.add_argument('--configfile', required=False,
@@ -389,32 +343,21 @@ def cmd_list_stations(parser, context, args):
     group.add_argument('--configdump', required=False,
                        help="specify input dump file")
 
-    parser.add_argument('-f', '--format', choices=['list', 'dashboard'],
-                        default='list', required=False,
-                        help="output format")
-
     args = parser.parse_args(args)
 
     _args = vars(args)
+    mode = _args['format']
 
-    mode = _args.get('format', 'list')
+    if mode != 'dashboard':
+        log.debug("Listing all Station IDs...")
 
-    if mode == "list":
-        log.debug("Listing all Station ID...")
-
-        obj = None
         try:
-            obj = cmd_list(parser, context, args, 'Stations/keys')
+            q = 'Stations/keys'
+            obj = cmd_list(parser, context, args, q)
+            print_query_result(obj, q, mode)
         except:
             log.exception("Sorry could not get the list of '{}' from the input file!".format('stations'))
             sys.exit(1)
-
-        assert obj is not None
-
-        if isinstance(obj, BaseValidator):
-            print(yaml_dump(obj.data_dump()))
-        else:
-            print(yaml_dump(obj))
 
         return args
 
@@ -497,6 +440,10 @@ def cmd_list_stations(parser, context, args):
 def cmd_list_profiles(parser, context, args):
     log.debug("Running '{}'".format('list_profiles'))
 
+    parser.add_argument('-f', '--format', choices=['list', 'yaml'],
+                        default='yaml', required=False,
+                        help="output format")
+
     group = parser.add_mutually_exclusive_group()
 
     group.add_argument('--configfile', required=False,
@@ -504,100 +451,33 @@ def cmd_list_profiles(parser, context, args):
     group.add_argument('--configdump', required=False,
                        help="specify input dump file")
 
-    parser.add_argument('-f', '--format', choices=['list', 'dashboard'],
-                        default='list', required=False,
-                        help="output format")
-
     args = parser.parse_args(args)
 
     _args = vars(args)
+    mode = _args['format']
 
-    mode = _args.get('format', 'list')
+    log.debug("Listing all Profile IDs...")
 
-    if mode == "list":
-
-        log.debug("Listing all Profile ID...")
-
-        obj = None
-        try:
-            obj = cmd_list(parser, context, args, 'Profiles/keys')
-        except:
-            log.exception("Sorry could not get the list of '{}' from the input file!".format('profiles'))
-            sys.exit(1)
-
-        assert obj is not None
-
-        if isinstance(obj, BaseValidator):
-            print(yaml_dump(obj.data_dump()))
-        else:
-            print(yaml_dump(obj))
-
-        return args
-        return args
-
-    assert mode == 'dashboard'
-
-    log.debug("Loading/parsing configuration...")
-    cfg = input_handler(parser, vars(context), args)
-    assert cfg is not None
-    assert isinstance(cfg, Hilbert)
-
-    obj = None
-    log.debug("Listing all Profiles for Dashboard...")
     try:
-        obj = cfg.query('Profiles/data')
+        q = 'Profiles/keys'
+        obj = cmd_list(parser, context, args, q)
+        print_query_result(obj, q, mode)
     except:
-        log.exception("Sorry could not query Profiles's details from the given configuration!")
+        log.exception("Sorry could not get the list of '{}' from the input file!".format('profiles'))
         sys.exit(1)
 
-    assert obj is not None
-    if isinstance(obj, BaseValidator):
-        obj = obj.data_dump()
-
-    first = True
-    print('[')
-
-    for k in obj:
-        o = obj.get(k, None)
-        assert o is not None
-
-        sts = ""
-        if 'station_list' in o:
-            try:
-                sts = o.get('station_list', None)
-                if isinstance(sts, BaseValidator):
-                    sts = sts.data_dump()
-                sts = '"' + '", "'.join(sts) + '"'
-                if sts.strip() == '""':
-                    sts = ""
-            except:
-                log.debug("No [station_list] for profile [{0}]".format(k))
-
-        if not first:
-            print(',')
-
-        print('{')
-        for f in ['name', 'description', 'icon']:
-            if f in o:
-                print('"{0}": "{1}",'.format(f, o[f]))
-
-        if 'station_list' in o:
-            print('"{0}": [{1}],'.format('station_list', sts))
-
-        print('"{0}": "{1}"'.format('id', k))
-        print('}')
-
-        first = False
-
-    print(']')
-
     return args
+
 
 
 @subcmd('list_groups', help='list (named) group IDs')
 def cmd_list_groups(parser, context, args):
     log.debug("Running '{}'".format('list_groups'))
 
+    parser.add_argument('-f', '--format', choices=['list', 'yaml'],
+                        default='yaml', required=False,
+                        help="output format")
+
     group = parser.add_mutually_exclusive_group()
 
     group.add_argument('--configfile', required=False,
@@ -607,21 +487,18 @@ def cmd_list_groups(parser, context, args):
 
     args = parser.parse_args(args)
 
-    log.debug("Listing all Group ID...")
+    _args = vars(args)
+    mode = _args['format']
 
-    obj = None
+    log.debug("Listing all Group IDs...")
+
     try:
-        obj = cmd_list(parser, context, args, 'Groups/keys')
+        q = 'Groups/keys'
+        obj = cmd_list(parser, context, args, q)
+        print_query_result(obj, q, mode)
     except:
         log.exception("Sorry could not get the list of '{}' from the input file!".format('groups'))
         sys.exit(1)
-
-    assert obj is not None
-
-    if isinstance(obj, BaseValidator):
-        print(yaml_dump(obj.data_dump()))
-    else:
-        print(yaml_dump(obj))
 
     return args
 
@@ -630,6 +507,10 @@ def cmd_list_groups(parser, context, args):
 def cmd_list_services(parser, context, args):
     log.debug("Running '{}'".format('list_services'))
 
+    parser.add_argument('-f', '--format', choices=['list', 'yaml'],
+                        default='yaml', required=False,
+                        help="output format")
+
     group = parser.add_mutually_exclusive_group()
 
     group.add_argument('--configfile', required=False,
@@ -638,22 +519,18 @@ def cmd_list_services(parser, context, args):
                        help="specify input dump file")
 
     args = parser.parse_args(args)
+    _args = vars(args)
+    mode = _args['format']
 
     log.debug("Listing all Service ID...")
 
-    obj = None
     try:
-        obj = cmd_list(parser, context, args, 'Services/keys')
+        q = 'Services/keys'
+        obj = cmd_list(parser, context, args, q)
+        print_query_result(obj, q, mode)
     except:
         log.exception("Sorry could not get the list of '{}' from the input file!".format('services'))
         sys.exit(1)
-
-    assert obj is not None
-
-    if isinstance(obj, BaseValidator):
-        print(yaml_dump(obj.data_dump()))
-    else:
-        print(yaml_dump(obj))
 
     return args
 
