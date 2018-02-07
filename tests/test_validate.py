@@ -148,14 +148,14 @@ class TestValidate:
     def test_sample(self, capsys):
         hilbert_validation('Hilbert.yml', 'Hilbert.yml.data.pickle')
 
-    def test_Hilbert_testhost1_address_query_plain(self, capsys):
+    def test_Hilbert_testhost1_address_query(self, capsys):
         test_err = ''
         test_output = """\
 test1.host.dns.name
 """
-        hilbert_query(capsys, 'Hilbert.yml', '/Stations/testhost1/address', test_err, test_output, 'plain')
-        hilbert_query(capsys, 'Hilbert.yml', '/Stations/testhost1/address/', test_err, test_output, 'plain')
-        hilbert_query(capsys, 'Hilbert.yml', '/Stations/testhost1/address/data', test_err, test_output, 'plain')
+        hilbert_query(capsys, 'Hilbert.yml', '/Stations/testhost1/address', test_err, test_output, 'raw')
+        hilbert_query(capsys, 'Hilbert.yml', '/Stations/testhost1/address/', test_err, test_output, 'raw')
+        hilbert_query(capsys, 'Hilbert.yml', '/Stations/testhost1/address/data', test_err, test_output, 'raw')
 
 #    def test_Hilbert_testhost1_address_query_yaml(self, capsys):
 #        test_err = ''

@@ -224,11 +224,11 @@ def print_query_result(data, obj, mode, pretty=True):
 
         if isinstance(data, list):
             if pretty:
-                log.debug("Referred list [{0}] is printed one entry per line!".format(obj))
+                log.info("Referred list [{0}] is printed one entry per line!".format(obj))
                 for idx, d in enumerate(data):
-                    print_query_result(d, obj + '/[{}]'.format(idx), mode='plain', pretty=False)
+                    print(d) # print_query_result(d, obj + '/[{}]'.format(idx), mode='raw', pretty=False)
             else:
-                log.debug("Referred list [{0}] is printed one entry per line!".format(obj))
+                log.info("Referred list [{0}] is printed one entry per line!".format(obj))
                 f = False
                 for idx, d in enumerate(data):
                     f = True
@@ -237,24 +237,24 @@ def print_query_result(data, obj, mode, pretty=True):
                     print('')
 #            print(*apply_str(data), sep='\n')
         elif isinstance(data, string_types) or isinstance(data, integer_types):
-            log.debug("Referred list [{0}] is printed one entry per line!".format(obj))
-            print_query_result(data, obj, mode='plain', pretty=False)
+            log.info("Referred list [{0}] is printed one entry per line!".format(obj))
+            print(data) # print_query_result(data, obj, mode='raw', pretty=False)
         else:
             raise Exception("Referred query data [{0}] must be a list of items! Obtained data type: [{1}]!".format(obj, type(data)))
         return
-    if mode == 'plain':
-        log.debug("Referred object [{0}] is printed in as plain text data!".format(obj))
+    if mode == 'raw':
+        log.info("Referred object [{0}] is printed in as raw text data!".format(obj))
         if pretty:
             pprint(apply_str(data))
         else:
             print(data)  # same as RAW but without annoying unicode prefix on Python2
         return
     elif mode == 'json':
-        log.debug("Referred object [{0}] is printed in a JSON format!".format(obj))
+        log.info("Referred object [{0}] is printed in a JSON format!".format(obj))
         print(json_dump(data, pretty=pretty))
         return
     elif mode == 'yaml':
-        log.debug("Referred object [{0}] is printed in a YAML format!".format(obj))
+        log.info("Referred object [{0}] is printed in a YAML format!".format(obj))
         print(yaml_dump(data, pretty=pretty), end='')
         return
 #    else:  # if mode == 'raw':
@@ -269,9 +269,9 @@ def cmd_cfg_query(parser, context, args):
     parser.add_argument('-od', '--outputdump', default=argparse.SUPPRESS,
                         help="specify output dump file")
 
-    parser.add_argument('-f', '--format', choices=['list', 'plain', 'yaml', 'json'],
-                        default='plain', required=False,
-                        help="output format (default: 'plain')")
+    parser.add_argument('-f', '--format', choices=['list', 'raw', 'yaml', 'json'],
+                        default='yaml', required=False,
+                        help="output format (default: 'yaml')")
 
     parser.add_argument('-c', '--compact', action='store_true',
                          required=False, help="switch to compact output (default: pretty)")
@@ -294,7 +294,7 @@ def cmd_cfg_query(parser, context, args):
     obj = _args['object']
 
     try:
-        log.info("Querring object: '{}'... ".format(obj))
+        log.info("Loading data and querying it for the data specified by [{}]:".format(obj))
 
         data = cmd_list(parser, context, args, obj)
 

@@ -3422,7 +3422,7 @@ def yaml_dump(*args, **kwargs):
     kwargs['canonical'] = kwargs.pop('canonical', False)
 
     if pretty:
-        kwargs['version'] = kwargs.pop('version', (1,2))
+#        kwargs['version'] = kwargs.pop('version', (1,2))
         kwargs['default_flow_style'] = kwargs.pop('default_flow_style', False)
 
         kwargs['indent'] = kwargs.pop('indent', 2)
