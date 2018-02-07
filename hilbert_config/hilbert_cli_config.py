@@ -3411,9 +3411,8 @@ def parse_hilbert(d, parent=None):
 ###############################################################
 def yaml_dump(*args, **kwargs):
     pretty = kwargs.pop('pretty', True)
-    kwargs['allow_unicode'] = kwargs.pop('allow_unicode', True)
-    kwargs['encoding'] = kwargs.pop('encoding', 'utf-8')
-
+#    kwargs['allow_unicode'] = kwargs.pop('allow_unicode', True)
+#    kwargs['encoding'] = kwargs.pop('encoding', 'utf-8')
 
     kwargs['explicit_start'] = kwargs.pop('explicit_start', False)
     kwargs['explicit_end'] = kwargs.pop('explicit_end', False)
@@ -3431,7 +3430,7 @@ def yaml_dump(*args, **kwargs):
         kwargs['line_break'] = kwargs.pop('line_break', True)
         kwargs['block_seq_indent'] = kwargs.pop('block_seq_indent', 2)
 
-        if isinstance(args[0], dict):
+        if isinstance(args[0], dict) and (len(args[0]) > 0):
             kwargs['top_level_colon_align'] = kwargs.pop('top_level_colon_align', True)
         kwargs['prefix_colon'] = kwargs.pop('prefix_colon', '\t')
     else:
@@ -3465,8 +3464,8 @@ def json_dump(*args, **kwargs):
     kwargs['check_circular'] = kwargs.pop('check_circular', False)
     kwargs['allow_nan'] = kwargs.pop('allow_nan', True)
     if pretty:
-        kwargs['ensure_ascii'] = kwargs.pop('ensure_ascii', False)
-        kwargs['encoding'] = kwargs.pop('encoding', 'utf-8')
+#        kwargs['ensure_ascii'] = kwargs.pop('ensure_ascii', False)
+#        kwargs['encoding'] = kwargs.pop('encoding', 'utf-8')
         kwargs['indent'] = kwargs.pop('indent', 2)
         kwargs['sort_keys'] = kwargs.pop('sort_keys', True)
         kwargs['separators'] = kwargs.pop('separators', (',', ': '))
