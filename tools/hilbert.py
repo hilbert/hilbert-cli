@@ -914,29 +914,27 @@ def _version():
     import semantic_version
 
     log.debug("Running '--{}'".format('version'))
+    print("Hilbert Configuration API:      [{}]".format(Hilbert(None).get_api_version()))
 
-    log.debug("Python (platform) version: {}".format(platform.python_version()))
-    log.debug("ruamel.yaml       version: {}".format(yaml.__version__))
-    log.debug("dill              version: {}".format(dill.__version__))
-    log.debug("logging           version: {}".format(logging.__version__))
-    log.debug("semantic_version  version: {}".format(semantic_version.__version__))
+    log.info("Python (platform) version: {}".format(platform.python_version()))
+    log.info("ruamel.yaml       version: {}".format(yaml.__version__))
+    log.info("dill              version: {}".format(dill.__version__))
+    log.info("logging           version: {}".format(logging.__version__))
+    log.info("semantic_version  version: {}".format(semantic_version.__version__))
 
     # TODO: check for openssh client. E.g. via `ssh -V`
     # sample output: OpenSSH_7.2p2 Ubuntu-4ubuntu2.4, OpenSSL 1.0.2g  1 Mar 2016
 
-    print("Hilbert Configuration API:     {}".format(Hilbert(None).get_api_version()))
-    print("Root Logging Level:            {}".format(logging.getLevelName(logging.getLogger().level)))
-    print("PEDANTIC mode:                 {}".format(get_PEDANTIC()))
-    print("DRY_RUN mode:                  {}".format(get_DRY_RUN_MODE()))
-    print("HILBERT_STATION_OPTIONS:       {}".format(get_HILBERT_STATION_OPTIONS()))
+    log.info("Root Logging Level:             [{}]".format(logging.getLevelName(logging.getLogger().level)))
+    log.info("PEDANTIC mode:                  [{}]".format(get_PEDANTIC()))
+    log.info("DRY_RUN mode:                   [{}]".format(get_DRY_RUN_MODE()))
+    log.info("HILBERT_STATION_OPTIONS:        [{}]".format(get_HILBERT_STATION_OPTIONS()))
 
-    d = os.environ.get('HILBERT_SERVER_CONFIG_PATH', None)
-    if d is not None:
-        print("HILBERT_SERVER_CONFIG_PATH:  {}".format(d))
+    d = os.environ.get('HILBERT_SERVER_CONFIG_PATH', '')
+    log.info("HILBERT_SERVER_CONFIG_PATH:     [{}]".format(d))
 
-    d = os.environ.get('HILBERT_SERVER_CONFIG_SSH_PATH', None)
-    if d is not None:
-        print("HILBERT_SERVER_CONFIG_SSH_PATH:  {}".format(d))
+    d = os.environ.get('HILBERT_SERVER_CONFIG_SSH_PATH', '')
+    log.info("HILBERT_SERVER_CONFIG_SSH_PATH: [{}]".format(d))
 
 
 # print("INPUT_DIRNAME:                 {}".format(get_INPUT_DIRNAME()))
