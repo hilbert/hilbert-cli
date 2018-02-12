@@ -35,3 +35,6 @@ epydoc: ${SRC} # Build API Documentation with epydoc
 
 clean: # Clean Project
 	rm -rf *~ docs/doxy docs/epydoc docs/pylint_*.html docs/pep8.report.txt
+
+dist/hilbert: hilbert.spec
+	pyinstaller hilbert.spec
