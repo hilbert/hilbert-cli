@@ -6,18 +6,23 @@ __SELFDIR=`cd "${__SELFDIR}" && pwd`
 declare -r station_id="$1"
 declare -r app_id="$2"
 
+if [[ -r /etc/container_environment.sh ]]; then 
+  source /etc/container_environment.sh
+fi
+
+export HOME="${HOME:-/root}"
+export HILBERT_CLI_PATH="${HILBERT_CLI_PATH:-${__SELFDIR}}"
+export HILBERT_SERVER_CONFIG_PATH="${HILBERT_SERVER_CONFIG_PATH:-/HILBERT/Hilbert.yml}"
+
 if [ -z "${HILBERT_CLI_PATH}" ]; then
     >&2 echo "The HILBERT_CLI_PATH environment variable is not set. Set it to the directory where 'hilbert' is installed!".
-#    exit 1
+    exit 1
 fi
 
 if [ -z "${HILBERT_SERVER_CONFIG_PATH}" ]; then
     >&2 echo "The HILBERT_SERVER_CONFIG_PATH environment variable is not set. Set it to the path of 'Hilbert.yml'!".
-#    exit 1
+    exit 1
 fi
-
-export HILBERT_CLI_PATH="${HILBERT_CLI_PATH:-${__SELFDIR}}"
-export HILBERT_SERVER_CONFIG_PATH="${HILBERT_SERVER_CONFIG_PATH:-${__SELFDIR}/Hilbert.yml}"
 
 if [ ! -d "${HILBERT_CLI_PATH}" ]; then
     >&2 echo "'${HILBERT_CLI_PATH}' directory not found!"
@@ -56,7 +61,7 @@ fi
 
 echo "Changing top app of station $station_id to $app_id"
 
-"${HILBERT_CLI_PATH}/hilbert" -q app_change --configfile "${HILBERT_SERVER_CONFIG_PATH}" "${station_id}" "${app_id}"
+"${HILBERT_CLI_PATH}/hilbert" -v app_change --configfile "${HILBERT_SERVER_CONFIG_PATH}" "${station_id}" "${app_id}"
 declare -r last_rc=$?
 
 if [ "$last_rc" -ne "0" ]; then
@@ -65,3 +70,20 @@ if [ "$last_rc" -ne "0" ]; then
 fi
 
 echo "Finished changing top app of $station_id"
+station_address=$("${HILBERT_CLI_PATH}/hilbert" -q cfg_query --configfile "${HILBERT_SERVER_CONFIG_PATH}" -c -f plain -o "Stations/${station_id}/address" | head -n 1)
+
+## NOTE: Try to force OMD/CheckMK recheck of the altered station
+sleep 2
+echo "COMMAND [$(date +%s)] START_EXECUTING_SVC_CHECKS" | nc localhost 6557
+sleep 2
+echo "COMMAND [$(date +%s)] SCHEDULE_FORCED_SVC_CHECK;${station_id};Check_MK inventory;$(date +%s)" | nc localhost 6557
+sleep 2
+echo "COMMAND [$(date +%s)] SCHEDULE_FORCED_SVC_CHECK;${station_address};Check_MK inventory;$(date +%s)" | nc localhost 6557
+#sleep 2
+#echo "COMMAND [$(date +%s)] START_EXECUTING_SVC_CHECKS" | nc localhost 6557
+sleep 2
+echo "COMMAND [$(date +%s)] SCHEDULE_FORCED_SVC_CHECK;${station_id};Check_MK inventory;$(date +%s)" | nc localhost 6557
+sleep 2
+echo "COMMAND [$(date +%s)] SCHEDULE_FORCED_SVC_CHECK;${station_address};Check_MK inventory;$(date +%s)" | nc localhost 6557
+
+exit 0

@@ -5,19 +5,23 @@ __SELFDIR=`cd "${__SELFDIR}" && pwd`
 
 declare -r station_id="$1"
 
-if [ -z "${HILBERT_CLI_PATH}" ]; then
-    >&2 echo "The HILBERT_CLI_PATH environment variable is not set. Set it to the directory where 'hilbert' is installed!".
-#    exit 1
+if [[ -r /etc/container_environment.sh ]]; then 
+  source /etc/container_environment.sh
 fi
 
+export HOME="${HOME:-/root}"
 export HILBERT_CLI_PATH="${HILBERT_CLI_PATH:-${__SELFDIR}}"
+export HILBERT_SERVER_CONFIG_PATH="${HILBERT_SERVER_CONFIG_PATH:-/HILBERT/Hilbert.yml}"
+
+if [ -z "${HILBERT_CLI_PATH}" ]; then
+    >&2 echo "The HILBERT_CLI_PATH environment variable is not set. Set it to the directory where 'hilbert' is installed!".
+    exit 1
+fi
 
 if [ -z "${HILBERT_SERVER_CONFIG_PATH}" ]; then
     >&2 echo "The HILBERT_SERVER_CONFIG_PATH environment variable is not set. Set it to the path of 'Hilbert.yml'!".
     exit 1
 fi
-
-# export HILBERT_SERVER_CONFIG_PATH="${HILBERT_SERVER_CONFIG_PATH:-${__SELFDIR}/Hilbert.yml}"
 
 if [ ! -d "${HILBERT_CLI_PATH}" ]; then
     >&2 echo "'${HILBERT_CLI_PATH}' directory not found!"
@@ -49,7 +53,7 @@ fi
 
 echo "Stopping station $station_id"
 
-"${HILBERT_CLI_PATH}/hilbert" -q stop --configfile "${HILBERT_SERVER_CONFIG_PATH}" "${station_id}"
+"${HILBERT_CLI_PATH}/hilbert" -v poweroff --configfile "${HILBERT_SERVER_CONFIG_PATH}" "${station_id}"
 declare -r last_rc=$?
 
 if [ "$last_rc" -ne "0" ]; then
