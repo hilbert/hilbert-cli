@@ -1,0 +1,6 @@
+pytest>=2.8.7
+#2.9.2
+#coverage==4.4.2
+#pytest-cov==2.5.1
+##flake8==3.5.0
+##mock>=1.0.1

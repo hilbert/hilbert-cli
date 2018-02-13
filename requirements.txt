@@ -1,18 +1,18 @@
-dill >= 0.2.5
-semantic_version >= 2.6.0
-argparse >= 1.4.0
-argcomplete >= 1.6.0
-ruamel.yaml >= 0.14.2
-# logging; python_version < 2.8
-
-#pprint
-##tempfile # ?
-#urllib
-#urllib2
-#urlparse
+dill>=0.2.5
+semantic_version>=2.6.0
+argparse>=1.4.0
+argcomplete>=1.6.0
+ruamel.yaml>=0.14.2,<0.15.0
+# logging>=0.4.9.6; python_version < '3.0'
 
 #unittest
 #unittest2; python_version < 2.7
 #mock ; python_version < 2.7
 #tox
 #pytest
+
+#pprint
+##tempfile # ?
+#urllib
+#urllib2
+#urlparse

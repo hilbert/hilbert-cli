@@ -18,7 +18,7 @@ setup(name='hilbert_config',
           "semantic_version>=2.6.0",
           "argparse>=1.4.0",
           "argcomplete>=1.6.0",
-          "ruamel.yaml>=0.14.2",
+          "ruamel.yaml>=0.14.2,<0.15.0",
       ],
       extras_require={
           ':python_version == "2.7"': [
