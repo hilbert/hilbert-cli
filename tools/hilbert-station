@@ -41,36 +41,38 @@ declare -rg ERR_CODE_INT_ERROR=2 # error due to wrong usage of scripts (bad argu
 
 
 
-export RSYNC=${RSYNC:-rsync}
-export GREP=${GREP:-grep}
-export SORT=${SORT:-sort}
-export UNIQ=${UNIQ:-uniq}
-export ENV=${ENV:-env}
-export SED=${SED:-sed}
-export CAT=${CAT:-cat}
-export ECHO=${ECHO:-echo}
-export TAIL=${TAIL:-tail}
-export LIST=${LIST:-ls}
-export LINK=${LINK:-ln}
-export PRINTF=${PRINTF:-printf}
-export UNLINK=${UNLINK:-unlink}
-export DIRNAME=${DIRNAME:-dirname}
-export READLINK=${READLINK:-readlink}
-export BASENAME=${BASENAME:-basename}
-export XSETROOT=${XSETROOT:-xsetroot -solid black}
-export MKTEMP=${MKTEMP:-mktemp}
-export WHICH=${WHICH:-which}
-export XAUTH=${XAUTH:-xauth}
-export XHOST=${XHOST:-xhost}
-export SUDO=${SUDO:-sudo}
-export COPY=${COPY:-cp}
-export MOVE=${MOVE:-mv}
-export XARGS=${XARGS:-xargs}
-export MKDIR=${MKDIR:-mkdir}
-export REMOVE=${REMOVE:-rm}
-export CHMOD=${CHMOD:-chmod}
-export FLOCK=${FLOCK:-flock}
-export PIDOF=${PIDOF:-pidof}
+export RSYNC=${HILBERT_DEPENDENCY_RSYNC:-rsync}
+export GREP=${HILBERT_DEPENDENCY_GREP:-grep}
+export SORT=${HILBERT_DEPENDENCY_SORT:-sort}
+export UNIQ=${HILBERT_DEPENDENCY_UNIQ:-uniq}
+export ENV=${HILBERT_DEPENDENCY_ENV:-env}
+export SED=${HILBERT_DEPENDENCY_SED:-sed}
+export SH=${HILBERT_DEPENDENCY_SH:-sh}
+export CAT=${HILBERT_DEPENDENCY_CAT:-cat}
+export TPUT=${HILBERT_DEPENDENCY_TPUT:-tput}
+export ECHO=${HILBERT_DEPENDENCY_ECHO:-echo}
+export TAIL=${HILBERT_DEPENDENCY_TAIL:-tail}
+export LIST=${HILBERT_DEPENDENCY_LIST:-ls}
+export LINK=${HILBERT_DEPENDENCY_LINK:-ln}
+export PRINTF=${HILBERT_DEPENDENCY_PRINTF:-printf}
+export UNLINK=${HILBERT_DEPENDENCY_UNLINK:-unlink}
+export DIRNAME=${HILBERT_DEPENDENCY_DIRNAME:-dirname}
+export READLINK=${HILBERT_DEPENDENCY_READLINK:-readlink}
+export BASENAME=${HILBERT_DEPENDENCY_BASENAME:-basename}
+export XSETROOT=${HILBERT_DEPENDENCY_XSETROOT:-xsetroot -solid black}
+export MKTEMP=${HILBERT_DEPENDENCY_MKTEMP:-mktemp}
+export WHICH=${HILBERT_DEPENDENCY_WHICH:-which}
+export XAUTH=${HILBERT_DEPENDENCY_XAUTH:-xauth}
+export XHOST=${HILBERT_DEPENDENCY_XHOST:-xhost}
+export SUDO=${HILBERT_DEPENDENCY_SUDO:-sudo}
+export COPY=${HILBERT_DEPENDENCY_COPY:-cp}
+export MOVE=${HILBERT_DEPENDENCY_MOVE:-mv}
+export XARGS=${HILBERT_DEPENDENCY_XARGS:-xargs}
+export MKDIR=${HILBERT_DEPENDENCY_MKDIR:-mkdir}
+export REMOVE=${HILBERT_DEPENDENCY_REMOVE:-rm}
+export CHMOD=${HILBERT_DEPENDENCY_CHMOD:-chmod}
+export FLOCK=${HILBERT_DEPENDENCY_FLOCK:-flock}
+export PIDOF=${HILBERT_DEPENDENCY_PIDOF:-pidof}
 
 declare -rg TOOL="$(${BASENAME} "${TOOL_SH}")"
 export PATH="${PATH}:$(${READLINK} -f "$(${DIRNAME} "${TOOL_SH}")")" # Add the tool' directory into the search PATH...
@@ -341,7 +343,16 @@ respected environment variables:
   HILBERT_CONFIG_BASEDIR   base configuration directory. Current: [${HILBERT_CONFIG_BASEDIR}]
   HILBERT_CONFIG_DIR       configuration directory. Current: [${HILBERT_CONFIG_DIR}]
   HILBERT_CONFIG_FILE      station config file. Current: [${HILBERT_CONFIG_FILE}]
+
 EOF
+
+# env | grep -i "^hilbert_.*="
+#    if [[ $LOGLEVEL -le 1 ]]; then
+    ${ECHO} "currently detected hilbert variables/values: "
+    ${ENV} | ${GREP} -E "^(hilbert|HILBERT)_.*=" | ${GREP} -vE "^(HILBERT_CONFIG_DIR|HILBERT_CONFIG_FILE|HILBERT_CONFIG_BASEDIR|HILBERT_OGL|HILBERT_CUSTOMIZATIONS|HILBERT_COMPOSE_CUSTOMIZER)=" | ${SED} 's@=@:  @' | ${XARGS} -L 1 ${ECHO} ' '
+    ${ECHO}
+#    fi
+
 }
 
 function cmd_native_autodetect() { ## @fn Native Auto-detections
@@ -439,10 +450,18 @@ function cmd_native_autodetect() { ## @fn Native Auto-detections
 }
 
 function _which_ext() {       ## @fn Determine and list external executable
-    local _t="$@"
-    _t="$(${ECHO} "${_t}" | ${SED} -e 's@^\s*@@g' -e 's@ .*$@@g' 2>&1)"
+    local _t
+    # NOTE: try to remove variable-assignments, like " A=B " to get the real command:
+    _t="$(${ECHO} "$@" | ${SED} -e 's@^ *\( *[^= ][^ =]*=[^ ]* \)* *@@g' -e 's@ .*$@@g' 2>&1)"
     _t="$(${WHICH} "${_t}" 2>&1)"
-    ${LIST} -l "${_t}" 2>&1
+    if [[ $? -eq 0 ]]; then
+      ${LIST} -l "${_t}" 2>&1
+      return $?
+    else
+      # No such command in the PATH?
+      ${ECHO} "?/$@/?"
+      return ${ERR_CODE_EXT_ERROR}
+    fi
 }
 
 function cmd_info() {         ## @fn Show Station System INFO & Configuration
@@ -460,11 +479,13 @@ LOGGER:      [${LOGGER}: $(_which_ext "${LOGGER}")]
 FLOCK:       [${FLOCK}: $(_which_ext "${FLOCK}")]
 PIDOF:       [${PIDOF}: $(_which_ext "${PIDOF}")]
 
+SH:          [${SH}: $(_which_ext "${SH}")]
 ENV:         [${ENV}: $(_which_ext "${ENV}")]
 SED:         [${SED}: $(_which_ext "${SED}")]
 CAT:         [${CAT}: $(_which_ext "${CAT}")]
 GREP:        [${GREP}: $(_which_ext "${GREP}")]
 ECHO:        [${ECHO}: $(_which_ext "${ECHO}")]
+TPUT:        [${TPUT}: $(_which_ext "${TPUT}")]
 TAIL:        [${TAIL}: $(_which_ext "${TAIL}")]
 DIFF:        [${DIFF}: $(_which_ext "${DIFF}")]
 LIST:        [${LIST}: $(_which_ext "${LIST}")]
@@ -488,11 +509,12 @@ DIRNAME:     [${DIRNAME}: $(_which_ext "${DIRNAME}")]
 BASENAME:    [${BASENAME}: $(_which_ext "${BASENAME}")]
 READLINK:    [${READLINK}: $(_which_ext "${READLINK}")]
 XSETROOT:    [${XSETROOT}: $(_which_ext "${XSETROOT}")]
+SHUTDOWN:    [${SHUTDOWN}: $(_which_ext "${SHUTDOWN}")]
 
 Config Base: [${HILBERT_CONFIG_BASEDIR}]
 Config Dir:  [${HILBERT_CONFIG_DIR} -> $(${READLINK} -f "${HILBERT_CONFIG_DIR}" 2>&1)]
 Config File: [${HILBERT_CONFIG_FILE}: $(${READLINK} -f "${HILBERT_CONFIG_DIR}/${HILBERT_CONFIG_FILE}" 2>&1)]
-All Configs: [$(sh -c "cd ${HILBERT_CONFIG_DIR}/ && ${LIST} * | xargs" 2>&1)]
+All Configs: [$(${SH} -c "cd ${HILBERT_CONFIG_DIR}/ && ${LIST} * | ${XARGS}" 2>&1)]
 
 OGL:         [${HILBERT_CONFIG_BASEDIR}/${OGL}: $(${LIST} -l "${HILBERT_CONFIG_BASEDIR}/${OGL}" 2>&1)]
 HILBERT_OGL: [${HILBERT_OGL}: $(${LIST} -l "${HILBERT_OGL}" 2>&1)]
@@ -511,15 +533,14 @@ PWD:         [${PWD}]
 PATH:        [${PATH}]
 
 date:        [$(date)]
+TERM:        [${TERM}]
 uname:       [$(uname -a)]
 hostname:    [$(hostname), $(hostname -I)]
 id:          [$(id)]
 
-SHUTDOWN:    [${SHUTDOWN}: $(${LIST} -l "${SHUTDOWN}")]
 PTMX:        [$(${LIST} -l /dev/pts/ptmx 2>&1)]
 
 EOF
-
     # TODO: indent the file contents for pretty-printing?
     ${CAT} << EOF
 Current Station Configuration [${HILBERT_CONFIG_DIR}/${HILBERT_CONFIG_FILE}]:
