@@ -37,4 +37,8 @@ clean: # Clean Project
 	rm -rf *~ docs/doxy docs/epydoc docs/pylint_*.html docs/pep8.report.txt
 
 dist/hilbert: hilbert.spec
-	pyinstaller hilbert.spec
+	pyinstaller hilbert.spec # may need to be run with a proper Python interpreter, if several are available
+
+dist: setup.py
+	python3 setup.py sdist
+	python3 setup.py bdist
