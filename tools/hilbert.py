@@ -203,46 +203,78 @@ def cmd_list(parser, context, args, obj):
     return cfg.query(obj)
 
 
-def print_query_result(data, obj):
+def print_query_result(data, obj, mode, pretty=True):
+    if data is None:
+        if pretty:
+            print('')
+        return
+
     assert data is not None
 
     if isinstance(data, BaseValidator):
         log.debug("Referred object [{}] is stored in a Validator object".format(obj))
         data = data.data_dump()
-        log.debug("Internal data: [{0}] of type: [{1}]".format(data, type(data)))
-
-        # def round_trip_dump(data, stream=None, Dumper=RoundTripDumper,
-        #                     default_style=None, default_flow_style=None,
-        #                     canonical=None, indent=None, width=None,
-        #                     allow_unicode=None, line_break=None,
-        #                     encoding=enc, explicit_start=None, explicit_end=None,
-        #                     version=None, tags=None, block_seq_indent=None,
-        #                     top_level_colon_align=None, prefix_colon=None):
-        # type: (Any, StreamType, Any,
-        # Any, Any,
-        # bool, Union[None, int], Union[None, int],
-        # bool, Any,
-        # Any, Union[None, bool], Union[None, bool],
-        # VersionType, Any, Any,
-        # Any, Any) -> Union[None, str]   # NOQA
-        #        if isinstance(data, (list, dict, tuple, set)):
-        print(yaml_dump(data, allow_unicode=True, canonical=False, indent=False, explicit_start=False,
-                        explicit_end=False))
-    #        else:
-    #       print(data)
+        log.debug("Internal data is now of type: [{}]".format(type(data)))
     else:
-        log.debug("Referred object [{0}] is stored as a plane data: [{1}]".format(obj, data))
-        print(data)
+        log.debug("Referred object [{0}] is of type: [{1}]".format(obj, type(data)))
 
+    if mode == 'list':  # one item per line
+        if pretty:
+            data = apply_str(data)
+
+        if isinstance(data, list):
+            if pretty:
+                log.info("Referred list [{0}] is printed one entry per line!".format(obj))
+                for idx, d in enumerate(data):
+                    print(d) # print_query_result(d, obj + '/[{}]'.format(idx), mode='raw', pretty=False)
+            else:
+                log.info("Referred list [{0}] is printed one entry per line!".format(obj))
+                f = False
+                for idx, d in enumerate(data):
+                    f = True
+                    print(d, end=' ')
+                if f:
+                    print('')
+#            print(*apply_str(data), sep='\n')
+        elif isinstance(data, string_types) or isinstance(data, integer_types):
+            log.info("Referred list [{0}] is printed one entry per line!".format(obj))
+            print(data) # print_query_result(data, obj, mode='raw', pretty=False)
+        else:
+            raise Exception("Referred query data [{0}] must be a list of items! Obtained data type: [{1}]!".format(obj, type(data)))
+        return
+    if mode == 'raw':
+        log.info("Referred object [{0}] is printed in as raw text data!".format(obj))
+        if pretty:
+            pprint(apply_str(data))
+        else:
+            print(data)  # same as RAW but without annoying unicode prefix on Python2
+        return
+    elif mode == 'json':
+        log.info("Referred object [{0}] is printed in a JSON format!".format(obj))
+        print(json_dump(data, pretty=pretty))
+        return
+    elif mode == 'yaml':
+        log.info("Referred object [{0}] is printed in a YAML format!".format(obj))
+        print(yaml_dump(data, pretty=pretty), end='')
+        return
+#    else:  # if mode == 'raw':
+    raise Exception("Referred object [{0}] is to be printed in unhandled mode: [{1}])".format(obj, mode))
 
 @subcmd('cfg_query', help='query some part of configuration. possibly dump it to a file')
-def cmd_query(parser, context, args):
+def cmd_cfg_query(parser, context, args):
     log.debug("Running '{}'".format('cfg_query'))
 
     parser.add_argument('-o', '--object', required=False, default='all',
                         help="specify the object in the config (default: 'all')")
     parser.add_argument('-od', '--outputdump', default=argparse.SUPPRESS,
                         help="specify output dump file")
+
+    parser.add_argument('-f', '--format', choices=['list', 'raw', 'yaml', 'json'],
+                        default='yaml', required=False,
+                        help="output format (default: 'yaml')")
+
+    parser.add_argument('-c', '--compact', action='store_true',
+                         required=False, help="switch to compact output (default: pretty)")
 
     group = parser.add_mutually_exclusive_group(required=False)
 
@@ -255,25 +287,27 @@ def cmd_query(parser, context, args):
 
     _args = vars(args)
 
-    obj = 'all'
-    if 'object' in _args:
-        obj = _args['object']
+    assert 'format' in _args
+    assert 'compact' in _args
+    assert 'object' in _args
 
-    data = None
+    obj = _args['object']
+
     try:
-        log.info("Querring object: '{}'... ".format(obj))
+        log.info("Loading data and querying it for the data specified by [{}]:".format(obj))
+
         data = cmd_list(parser, context, args, obj)
-    except:
-        log.exception("Sorry cannot query '{}' yet!".format(obj))
+
+        print_query_result(data, obj, _args['format'], pretty=(not _args.get('compact', False)))
+
+        od = output_handler(parser, vars(context), args)
+        if od is not None:
+            log.info("Writing the configuration into '{}'...".format(od))
+            pickle_dump(od, data)
+
+    except BaseException as err:
+        log.exception("Sorry there was an exception while querying [{0}]: [{1}]".format(obj, err))
         sys.exit(1)
-
-    print_query_result(data, obj)
-
-    od = output_handler(parser, vars(context), args)
-
-    if od is not None:
-        log.info("Writing the configuration into '{}'...".format(od))
-        pickle_dump(od, data)
 
     return args
 
@@ -282,6 +316,10 @@ def cmd_query(parser, context, args):
 def cmd_list_applications(parser, context, args):
     log.debug("Running '{}'".format('list_applications'))
 
+    parser.add_argument('-f', '--format', choices=['list', 'yaml'],
+                        default='yaml', required=False,
+                        help="output format")
+
     group = parser.add_mutually_exclusive_group()
 
     group.add_argument('--configfile', required=False,
@@ -289,31 +327,91 @@ def cmd_list_applications(parser, context, args):
     group.add_argument('--configdump', required=False,
                        help="specify input dump file")
 
+
     args = parser.parse_args(args)
 
-    log.debug("Listing all Application ID...")
+    _args = vars(args)
+    mode = _args['format']
 
-    obj = None
+    assert mode != 'dashboard'
+
+    log.debug("Listing all Application IDs...")
+
     try:
-        obj = cmd_list(parser, context, args, 'Applications/keys')
+        q = 'Applications/keys'
+        obj = cmd_list(parser, context, args, q)
+        print_query_result(obj, q, mode)
     except:
         log.exception("Sorry could not get the list of '{}' from the input file!".format('applications'))
         sys.exit(1)
 
-    assert obj is not None
-
-    if isinstance(obj, BaseValidator):
-        print(yaml_dump(obj.data_dump()))
-    else:
-        print(yaml_dump(obj))
-
     return args
 
+    # log.debug("Loading/parsing configuration...")
+    # cfg = input_handler(parser, vars(context), args)
+    # assert cfg is not None
+    # assert isinstance(cfg, Hilbert)
+    #
+    # obj = None
+    # log.debug("Listing all Applications for Dashboard...")
+    # try:
+    #     obj = cfg.query('Applications/data')
+    # except:
+    #     log.exception("Sorry could not query Applications's details from the given configuration!")
+    #     sys.exit(1)
+    #
+    # assert obj is not None
+    # if isinstance(obj, BaseValidator):
+    #     obj = obj.data_dump()
+    #
+    # first = True
+    # print('[')
+    #
+    #
+    # for k in obj:
+    #     o = obj.get(k, None)
+    #     assert o is not None
+    #
+    #     sts = ""
+    #     if 'compatible_stations' in o:
+    #         try:
+    #             sts = o.get('compatible_stations', None)
+    #             if isinstance(sts, BaseValidator):
+    #                 sts = sts.data_dump()
+    #             sts = '"' + '", "'.join(sts) + '"'
+    #             if sts.strip() == '""':
+    #                 sts = ""
+    #         except:
+    #             log.debug("No [compatible_stations] for application [{0}]".format(k))
+    #
+    #     if not first:
+    #         print(',')
+    #
+    #     print('{')
+    #     for f in ['name', 'description', 'icon']:
+    #         if f in o:
+    #             print('"{0}": "{1}",'.format(f, o[f]))
+    #
+    #     if 'compatible_stations' in o:
+    #         print('"{0}": [{1}],'.format('compatible_stations', sts))
+    #
+    #     print('"{0}": "{1}"'.format('id', k))
+    #     print('}')
+    #
+    #     first = False
+    #
+    # print(']')
+    #
+    # return args
 
 @subcmd('list_stations', help='list station IDs')
 def cmd_list_stations(parser, context, args):
     log.debug("Running '{}'".format('list_stations'))
 
+    parser.add_argument('-f', '--format', choices=['list', 'yaml', 'dashboard'],
+                        default='yaml', required=False,
+                        help="output format")
+
     group = parser.add_mutually_exclusive_group()
 
     group.add_argument('--configfile', required=False,
@@ -321,97 +419,95 @@ def cmd_list_stations(parser, context, args):
     group.add_argument('--configdump', required=False,
                        help="specify input dump file")
 
-    parser.add_argument('-f', '--format', choices=['list', 'dashboard'],
-                        default='list', required=False,
-                        help="output format")
-
     args = parser.parse_args(args)
 
     _args = vars(args)
+    mode = _args['format']
 
-    mode = _args.get('format', 'list')
+    if mode != 'dashboard':
+        log.debug("Listing all Station IDs...")
 
-    if mode == "list":
-        log.debug("Listing all Station ID...")
-
-        obj = None
         try:
-            obj = cmd_list(parser, context, args, 'Stations/keys')
+            q = 'Stations/keys'
+            obj = cmd_list(parser, context, args, q)
+            print_query_result(obj, q, mode)
         except:
             log.exception("Sorry could not get the list of '{}' from the input file!".format('stations'))
             sys.exit(1)
 
-        assert obj is not None
+        return args
 
-        if isinstance(obj, BaseValidator):
-            print(yaml_dump(obj.data_dump()))
-        else:
-            print(yaml_dump(obj))
-    else:
-        assert mode == 'dashboard'
+    assert mode == 'dashboard'
 
-        log.debug("Loading/parsing configuration...")
-        cfg = input_handler(parser, vars(context), args)
-        assert cfg is not None
-        assert isinstance(cfg, Hilbert)
+    log.debug("Loading/parsing configuration...")
+    cfg = input_handler(parser, vars(context), args)
+    assert cfg is not None
+    assert isinstance(cfg, Hilbert)
 
-        obj = None
-        log.debug("Listing all Stations for Dashboard...")
+    obj = None
+    log.debug("Listing all Stations for Dashboard...")
+    try:
+        obj = cfg.query('Stations/data')
+    except:
+        log.exception("Sorry could not query Stations's details from the given configuration!")
+        sys.exit(1)
+
+    assert obj is not None
+    if isinstance(obj, BaseValidator):
+        obj = obj.data_dump()
+
+    first = True
+    print('[')
+    for k in obj:
+        o = obj.get(k, None)
+        assert o is not None
+
+        if (o.get('hidden', '') == 'true') or (o.get('hidden', False) == True):
+            continue
+
+        assert 'name' in o
+        assert 'profile' in o
+
+        s = o.get('client_settings', None)
+        d = ''
+        if s is not None:
+            assert isinstance(s, dict)
+            d = s.get('hilbert_station_default_application', '')
+
+        assert 'compatible_applications' in o
+        apps = None
         try:
-            obj = cfg.query('Stations/data')
+            apps = o.get('compatible_applications', None)
         except:
-            log.exception("Sorry could not query Stations's details from the given configuration!")
+            log.exception("Sorry could not query compatible_applications for a station [%s]!", k)
             sys.exit(1)
 
-        assert obj is not None
-        if isinstance(obj, BaseValidator):
-            obj = obj.data_dump()
+        if isinstance(apps, BaseValidator):
+            apps = apps.data_dump()
 
-        first = True
-        print('[')
-        for k in obj:
-            o = obj.get(k, None)
-            assert o is not None
+        apps = '"' + '", "'.join(apps) + '"'
 
-            if (o.get('hidden', '') == 'true') or (o.get('hidden', False) == True):
-                continue
+        if apps.strip() == '""':
+            apps = ""
 
-            assert 'name' in o
-            assert 'profile' in o
+        if not first:
+            print(',')
 
-            s = o.get('client_settings', None)
-            d = ''
-            if s is not None:
-                assert isinstance(s, dict)
-                d = s.get('hilbert_station_default_application', '')
+        print('{')
+        for f in ['name', 'description', 'icon']:
+            if f in o:
+                print('"{0}": "{1}",'.format(f, o[f]))
 
-            assert 'compatible_applications' in o
-            apps = None
-            try:
-                apps = o.get('compatible_applications', None)
-            except:
-                log.exception("Sorry could not query compatible_applications for a station [%s]!", k)
-                sys.exit(1)
+        print('"{0}": "{1}",'.format('type', o['profile']))
+        print('"{0}": "{1}",'.format('default_app', d))
+        print('"{0}": [{1}],'.format('possible_apps', apps))
 
-            if isinstance(apps, BaseValidator):
-                apps = apps.data_dump()
+        print('"{0}": "{1}"'.format('id', k))
+        print('}')
 
-            apps = '\n"' + '",\n"'.join(apps) + '"\n'
+        first = False
 
-            if not first:
-                print(',')
-
-            print('{')
-            print('"{0}": "{1}",'.format('id', k))
-            print('"{0}": "{1}",'.format('name', o['name']))
-            print('"{0}": "{1}",'.format('type', o['profile']))
-            print('"{0}": "{1}",'.format('default_app', d))
-            print('"{0}": [{1}]'.format('possible_apps', apps))
-            print('}')
-
-            first = False
-
-        print(']')
+    print(']')
 
     return args
 
@@ -420,6 +516,10 @@ def cmd_list_stations(parser, context, args):
 def cmd_list_profiles(parser, context, args):
     log.debug("Running '{}'".format('list_profiles'))
 
+    parser.add_argument('-f', '--format', choices=['list', 'yaml'],
+                        default='yaml', required=False,
+                        help="output format")
+
     group = parser.add_mutually_exclusive_group()
 
     group.add_argument('--configfile', required=False,
@@ -429,29 +529,88 @@ def cmd_list_profiles(parser, context, args):
 
     args = parser.parse_args(args)
 
-    log.debug("Listing all Profile ID...")
+    _args = vars(args)
+    mode = _args['format']
 
-    obj = None
+    log.debug("Listing all Profile IDs...")
+
     try:
-        obj = cmd_list(parser, context, args, 'Profiles/keys')
+        q = 'Profiles/keys'
+        obj = cmd_list(parser, context, args, q)
+        print_query_result(obj, q, mode)
     except:
         log.exception("Sorry could not get the list of '{}' from the input file!".format('profiles'))
         sys.exit(1)
 
-    assert obj is not None
-
-    if isinstance(obj, BaseValidator):
-        print(yaml_dump(obj.data_dump()))
-    else:
-        print(yaml_dump(obj))
-
     return args
+
+    # assert mode == 'dashboard'
+    #
+    # log.debug("Loading/parsing configuration...")
+    # cfg = input_handler(parser, vars(context), args)
+    # assert cfg is not None
+    # assert isinstance(cfg, Hilbert)
+    #
+    # obj = None
+    # log.debug("Listing all Profiles for Dashboard...")
+    # try:
+    #     obj = cfg.query('Profiles/data')
+    # except:
+    #     log.exception("Sorry could not query Profiles's details from the given configuration!")
+    #     sys.exit(1)
+    #
+    # assert obj is not None
+    # if isinstance(obj, BaseValidator):
+    #     obj = obj.data_dump()
+    #
+    # first = True
+    # print('[')
+    #
+    # for k in obj:
+    #     o = obj.get(k, None)
+    #     assert o is not None
+    #
+    #     sts = ""
+    #     if 'station_list' in o:
+    #         try:
+    #             sts = o.get('station_list', None)
+    #             if isinstance(sts, BaseValidator):
+    #                 sts = sts.data_dump()
+    #             sts = '"' + '", "'.join(sts) + '"'
+    #             if sts.strip() == '""':
+    #                 sts = ""
+    #         except:
+    #             log.debug("No [station_list] for profile [{0}]".format(k))
+    #
+    #     if not first:
+    #         print(',')
+    #
+    #     print('{')
+    #     for f in ['name', 'description', 'icon']:
+    #         if f in o:
+    #             print('"{0}": "{1}",'.format(f, o[f]))
+    #
+    #     if 'station_list' in o:
+    #         print('"{0}": [{1}],'.format('station_list', sts))
+    #
+    #     print('"{0}": "{1}"'.format('id', k))
+    #     print('}')
+    #
+    #     first = False
+    #
+    # print(']')
+    #
+    # return args
 
 
 @subcmd('list_groups', help='list (named) group IDs')
 def cmd_list_groups(parser, context, args):
     log.debug("Running '{}'".format('list_groups'))
 
+    parser.add_argument('-f', '--format', choices=['list', 'yaml'],
+                        default='yaml', required=False,
+                        help="output format")
+
     group = parser.add_mutually_exclusive_group()
 
     group.add_argument('--configfile', required=False,
@@ -461,21 +620,18 @@ def cmd_list_groups(parser, context, args):
 
     args = parser.parse_args(args)
 
-    log.debug("Listing all Group ID...")
+    _args = vars(args)
+    mode = _args['format']
 
-    obj = None
+    log.debug("Listing all Group IDs...")
+
     try:
-        obj = cmd_list(parser, context, args, 'Groups/keys')
+        q = 'Groups/keys'
+        obj = cmd_list(parser, context, args, q)
+        print_query_result(obj, q, mode)
     except:
         log.exception("Sorry could not get the list of '{}' from the input file!".format('groups'))
         sys.exit(1)
-
-    assert obj is not None
-
-    if isinstance(obj, BaseValidator):
-        print(yaml_dump(obj.data_dump()))
-    else:
-        print(yaml_dump(obj))
 
     return args
 
@@ -484,6 +640,10 @@ def cmd_list_groups(parser, context, args):
 def cmd_list_services(parser, context, args):
     log.debug("Running '{}'".format('list_services'))
 
+    parser.add_argument('-f', '--format', choices=['list', 'yaml'],
+                        default='yaml', required=False,
+                        help="output format")
+
     group = parser.add_mutually_exclusive_group()
 
     group.add_argument('--configfile', required=False,
@@ -492,22 +652,18 @@ def cmd_list_services(parser, context, args):
                        help="specify input dump file")
 
     args = parser.parse_args(args)
+    _args = vars(args)
+    mode = _args['format']
 
     log.debug("Listing all Service ID...")
 
-    obj = None
     try:
-        obj = cmd_list(parser, context, args, 'Services/keys')
+        q = 'Services/keys'
+        obj = cmd_list(parser, context, args, q)
+        print_query_result(obj, q, mode)
     except:
         log.exception("Sorry could not get the list of '{}' from the input file!".format('services'))
         sys.exit(1)
-
-    assert obj is not None
-
-    if isinstance(obj, BaseValidator):
-        print(yaml_dump(obj.data_dump()))
-    else:
-        print(yaml_dump(obj))
 
     return args
 
@@ -561,7 +717,6 @@ def cmd_action(parser, context, args, Action=None, appIdRequired=False):
 
     if stationId not in stations.get_data():
         log.error("Invalid StationID (%s)!", stationId)
-        print()
         sys.exit(1)
 
     station = stations.get_data()[stationId]
@@ -759,26 +914,27 @@ def _version():
     import semantic_version
 
     log.debug("Running '--{}'".format('version'))
+    print("Hilbert Configuration API:      [{}]".format(Hilbert(None).get_api_version()))
 
-    log.debug("Python (platform) version: {}".format(platform.python_version()))
-    log.debug("ruamel.yaml       version: {}".format(yaml.__version__))
-    log.debug("dill              version: {}".format(dill.__version__))
-    log.debug("logging           version: {}".format(logging.__version__))
-    log.debug("semantic_version  version: {}".format(semantic_version.__version__))
+    log.info("Python (platform) version: {}".format(platform.python_version()))
+    log.info("ruamel.yaml       version: {}".format(yaml.__version__))
+    log.info("dill              version: {}".format(dill.__version__))
+    log.info("logging           version: {}".format(logging.__version__))
+    log.info("semantic_version  version: {}".format(semantic_version.__version__))
 
-    print("Hilbert Configuration API:     {}".format(Hilbert(None).get_api_version()))
-    print("Root Logging Level:            {}".format(logging.getLevelName(logging.getLogger().level)))
-    print("PEDANTIC mode:                 {}".format(get_PEDANTIC()))
-    print("DRY_RUN mode:                  {}".format(get_DRY_RUN_MODE()))
-    print("HILBERT_STATION_OPTIONS:       {}".format(get_HILBERT_STATION_OPTIONS()))
+    # TODO: check for openssh client. E.g. via `ssh -V`
+    # sample output: OpenSSH_7.2p2 Ubuntu-4ubuntu2.4, OpenSSL 1.0.2g  1 Mar 2016
 
-    d = os.environ.get('HILBERT_SERVER_CONFIG_PATH', None)
-    if d is not None:
-        print("HILBERT_SERVER_CONFIG_PATH:  {}".format(d))
+    log.info("Root Logging Level:             [{}]".format(logging.getLevelName(logging.getLogger().level)))
+    log.info("PEDANTIC mode:                  [{}]".format(get_PEDANTIC()))
+    log.info("DRY_RUN mode:                   [{}]".format(get_DRY_RUN_MODE()))
+    log.info("HILBERT_STATION_OPTIONS:        [{}]".format(get_HILBERT_STATION_OPTIONS()))
 
-    d = os.environ.get('HILBERT_SERVER_CONFIG_SSH_PATH', None)
-    if d is not None:
-        print("HILBERT_SERVER_CONFIG_SSH_PATH:  {}".format(d))
+    d = os.environ.get('HILBERT_SERVER_CONFIG_PATH', '')
+    log.info("HILBERT_SERVER_CONFIG_PATH:     [{}]".format(d))
+
+    d = os.environ.get('HILBERT_SERVER_CONFIG_SSH_PATH', '')
+    log.info("HILBERT_SERVER_CONFIG_SSH_PATH: [{}]".format(d))
 
 
 # print("INPUT_DIRNAME:                 {}".format(get_INPUT_DIRNAME()))

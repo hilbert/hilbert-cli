@@ -40,7 +40,7 @@ FIXTURE_DIR = os.path.abspath(os.path.join(
             ))
 
 
-def hilbert_query(capsys, input_yaml_file, data_query, test_err, test_output):
+def hilbert_query(capsys, input_yaml_file, data_query, test_err, test_output, output_format, pretty=False):
     input_file = os.path.join(FIXTURE_DIR, input_yaml_file)
     assert os.path.exists(input_file)
 
@@ -56,7 +56,7 @@ def hilbert_query(capsys, input_yaml_file, data_query, test_err, test_output):
         try:
             os.chdir(get_INPUT_DIRNAME())
             data = cfg.query(data_query)
-            print_query_result(data, data_query)
+            print_query_result(data, data_query, output_format, pretty=pretty)
         finally:
             set_INPUT_DIRNAME(old)
             os.chdir(cwd)
@@ -148,14 +148,14 @@ class TestValidate:
     def test_sample(self, capsys):
         hilbert_validation('Hilbert.yml', 'Hilbert.yml.data.pickle')
 
-    def test_Hilbert_testhost1_address_query_plain(self, capsys):
+    def test_Hilbert_testhost1_address_query(self, capsys):
         test_err = ''
         test_output = """\
 test1.host.dns.name
 """
-        hilbert_query(capsys, 'Hilbert.yml', '/Stations/testhost1/address', test_err, test_output)
-        hilbert_query(capsys, 'Hilbert.yml', '/Stations/testhost1/address/', test_err, test_output)
-        hilbert_query(capsys, 'Hilbert.yml', '/Stations/testhost1/address/data', test_err, test_output)
+        hilbert_query(capsys, 'Hilbert.yml', '/Stations/testhost1/address', test_err, test_output, 'raw')
+        hilbert_query(capsys, 'Hilbert.yml', '/Stations/testhost1/address/', test_err, test_output, 'raw')
+        hilbert_query(capsys, 'Hilbert.yml', '/Stations/testhost1/address/data', test_err, test_output, 'raw')
 
 #    def test_Hilbert_testhost1_address_query_yaml(self, capsys):
 #        test_err = ''
