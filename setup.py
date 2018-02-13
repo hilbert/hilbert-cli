@@ -1,4 +1,13 @@
-from distutils.core import setup
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+# from distutils.core import setup # no support for install_requires!
+from setuptools import setup # supports install_requires!
+
+from pip.req import parse_requirements
+# See: https://stackoverflow.com/a/16624700
+install_reqs = parse_requirements('requirements.txt', session='hack')
+tests_reqs = parse_requirements('requirements-dev.txt', session='hack')
 
 setup(name='hilbert_config',
       version='0.3.0',
@@ -9,23 +18,26 @@ setup(name='hilbert_config',
       packages=['hilbert_config'],
       package_dir={'hilbert_config': 'hilbert_config'},  # package_data={'...': ['data/*.dat']},
       # py_modules=['tools/hilbert.py'],
-      scripts=['tools/hilbert', 'tools/hilbert.py', 'server/list_stations.sh', 'server/stop_station.sh', 'server/start_station.sh', 'server/appchange_station.sh'],
-      license='',
-      classifiers=[''],
-      platforms=[''],  # data_files=[('config/templates', ['docker-compose.yml'])],
-      install_requires=[
-          "dill>=0.2.5",
-          "semantic_version>=2.6.0",
-          "argparse>=1.4.0",
-          "argcomplete>=1.6.0",
-          "ruamel.yaml>=0.14.2,<0.15.0",
+      scripts=['tools/hilbert', 'tools/hilbert.py', 'server/list_stations.sh', 'server/stop_station.sh', 'server/start_station.sh', 'server/appchange_station.sh', 'server/list_applications.sh', 'server/list_profiles.sh'],
+      license='Apache License 2.0',
+      classifiers=[
+        'Development Status :: 4 - Beta',
+        'Environment :: Console',
+        'Intended Audience :: System Administrators',
+        'License :: OSI Approved :: Apache Software License',
+        'Natural Language :: English',
+        'Operating System :: POSIX :: Linux',
+        'Topic :: Utilities',
+        'Programming Language :: Unix Shell',
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.4',
+        'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.6',
       ],
-      extras_require={
-          ':python_version == "2.7"': [
-              'logging',  # TODO: check whether this is really required!?!
-          ],
-      },
-      )  # TODO: add testing!?
+      platforms=[''],  # data_files=[('config/templates', ['docker-compose.yml'])],
+      install_requires=[str(ir.req) for ir in install_reqs],
+      tests_require=[str(ir.req) for ir in tests_reqs]
+      )
 # glob.glob(os.path.join('mydir', 'subdir', '*.html'))
 # os.listdir(os.path.join('mydir', 'subdir'))
 
