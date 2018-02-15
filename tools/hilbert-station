@@ -925,6 +925,19 @@ function cmd_init() {         ## @fn Install/Initialize/Prepare Station configur
     cmd_detect_running_hilbert # 0 - nothing! 1 => Hilbert is running!
     _hilbert_is_running=$?
 
+    ############################################################
+    local _app=""
+    if [[ ${_hilbert_is_running} -ne 0 ]]; then
+        cmd_detect_top_application
+        _ret=$?
+        if [[ ${_ret} -ne 0 ]]; then
+            ERROR "Failed to detect the currently running application!"
+            exit ${_ret}
+        fi
+        _app="${APP_ID}"
+        DEBUG "Hilbert is currently running! Query for the current application returned: [${_app}], with ret. status: [$?]."
+    fi
+
     # Start with general station preparation
     cmd_prepare
 
@@ -953,12 +966,6 @@ function cmd_init() {         ## @fn Install/Initialize/Prepare Station configur
         return ${_ret}
     fi
 
-    ############################################################
-    local _app=""
-    if [[ ${hilbert_is_running} -ne 0 ]]; then
-        _app="$(cmd_tool_subcall -qqqL cmd_get_current_application 2>/dev/null)"
-        DEBUG "Hilbert is currently running! Query for the current application returned: [${_app}], with ret. status: [$?]."
-    fi
 
     ############################################################
     # similar configurations : (${new_cfg} == 1), or whole new configuration (${new_cfg} == 2)
