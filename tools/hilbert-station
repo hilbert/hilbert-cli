@@ -194,7 +194,7 @@ function DRYRUN_ECHO() {
     if [[ $LOGLEVEL -le 2 ]]; then ## like a WARNING!
         local MSG=" ${DRY_RUN} [${TOOL}:${FUNCNAME[1]}] Simulating: [${_cmd}]"
         ${PRINTF} "${COLOR_DRYRUN}${MSG}${COLOR_NONE}\n" 1>&2
-        ${LOGGER} -p user.debug "${MSG}" 1>/dev/null 2>&1
+        ${LOGGER} -p user.debug "${MSG}" &>/dev/null
     fi
     return ${ERR_CODE_SUCCESS}
 }
@@ -212,7 +212,7 @@ function DRYRUN() {
         if [[ $LOGLEVEL -le 2 ]]; then ## like a WARNING!
             local MSG=" ${DRY_RUN} [${TOOL}:${FUNCNAME[1]}] Simulating: [${_cmd}]"
             ${PRINTF} "${COLOR_DRYRUN}${MSG}${COLOR_NONE}\n" 1>&2
-            ${LOGGER} -p user.debug "${MSG}" 1>/dev/null 2>&1
+            ${LOGGER} -p user.debug "${MSG}" &>/dev/null
         fi
     fi
     return $?
@@ -222,7 +222,7 @@ function DEBUG() {
     if [[ $LOGLEVEL -le 0 ]]; then
         local MSG="DEBUG   [${TOOL}:${FUNCNAME[1]}] $*"
         ${PRINTF} "${COLOR_DEBUG}${MSG}${COLOR_NONE}\n"
-        ${LOGGER} -p user.debug "${MSG}" 1>/dev/null 2>&1
+        ${LOGGER} -p user.debug "${MSG}" &>/dev/null
     fi
     return ${ERR_CODE_SUCCESS}
 }
@@ -230,7 +230,7 @@ function INFO() {
     if [[ $LOGLEVEL -le 1 ]]; then
         local MSG="INFO    [${TOOL}:${FUNCNAME[1]}] $*"
         ${PRINTF} "${COLOR_INFO}${MSG}${COLOR_NONE}\n"
-        ${LOGGER} -p user.info "${MSG}" 1>/dev/null 2>&1
+        ${LOGGER} -p user.info "${MSG}" &>/dev/null
     fi
     return ${ERR_CODE_SUCCESS}
 }
@@ -238,7 +238,7 @@ function WARNING() {
     if [[ $LOGLEVEL -le 2 ]]; then
         local MSG="WARNING [${TOOL}:${FUNCNAME[1]}] $*"
         ${PRINTF} "${COLOR_WARNING}${MSG}${COLOR_NONE}\n" 1>&2
-        ${LOGGER} -p user.warning "${MSG}" 1>/dev/null 2>&1
+        ${LOGGER} -p user.warning "${MSG}" &>/dev/null
     fi
     return ${ERR_CODE_SUCCESS}
 }
@@ -247,7 +247,7 @@ function ERROR() {
     if [[ $LOGLEVEL -le 3 ]]; then
         local MSG="ERROR   [${TOOL}:${FUNCNAME[1]}] $*"
         ${PRINTF} "${COLOR_ERROR}${MSG}${COLOR_NONE}\n" 1>&2
-        ${LOGGER} -p user.err "${MSG}" 1>/dev/null 2>&1
+        ${LOGGER} -p user.err "${MSG}" &>/dev/null
     fi
     return ${ERR_CODE_INT_ERROR}
 }
@@ -420,7 +420,7 @@ function cmd_native_autodetect() { ## @fn Native Auto-detections
         if [[ -f "${XAUTHORITY}" ]]; then
         # :  ${ECHO} "DISPLAY: [${DISPLAY}], XAUTHORITY: [${XAUTHORITY}] -> [${HILBERT_XAUTH}]"
         #   [ ! -f "${XAUTH???}" ] && touch "${XAUTH???}"
-            (${XAUTH} nlist "${DISPLAY}" | ${SED} -e 's/^..../ffff/' | ${SORT} | ${UNIQ} | ${XAUTH} -f "${HILBERT_XAUTH}" nmerge - ) 1> /dev/null 2>&1
+            (${XAUTH} nlist "${DISPLAY}" | ${SED} -e 's/^..../ffff/' | ${SORT} | ${UNIQ} | ${XAUTH} -f "${HILBERT_XAUTH}" nmerge - ) &>/dev/null
         #   [ ! -s "${HILBERT_XAUTH}" ] && ${ECHO} "WARNING: something is wrong with [${XAUTH}]: $(${LIST} -al ${XAUTH})"
         fi
 
@@ -429,7 +429,7 @@ function cmd_native_autodetect() { ## @fn Native Auto-detections
         fi
 
         ## Let root use our current X11... https://wiki.archlinux.org/index.php/Running_X_apps_as_root ?
-        (${XHOST} +; ${XHOST} "+si:localuser:${USER}"; ${XHOST} +si:localuser:root) 1> /dev/null 2>&1 # ${XHOST} + localhost;
+        (${XHOST} +; ${XHOST} "+si:localuser:${USER}"; ${XHOST} +si:localuser:root) &>/dev/null # ${XHOST} + localhost;
     fi
 
    DEBUG "DISPLAY: ${DISPLAY}, XAUTHORITY: ${XAUTHORITY}, HILBERT_XAUTH: ${HILBERT_XAUTH}"
@@ -807,19 +807,19 @@ function cmd_read_configuration() { ## @fn Read current station configuration
     fi
 
     # NOTE: try to read/check station configuration only once (if it is valid):
-    declare -p "hilbert_station_services_and_applications" 1>>/dev/null 2>&1
+    declare -p "hilbert_station_services_and_applications" &>/dev/null
     if [[ $? -eq 0 ]]; then
         DEBUG "Some configuration file has been loaded already!"
         return ${ERR_CODE_SUCCESS}
     fi
 
-    declare -p "hilbert_station_profile_services" 1>>/dev/null 2>&1
+    declare -p "hilbert_station_profile_services" &>/dev/null
     if [[ $? -eq 0 ]]; then
         DEBUG "Some configuration file has been loaded already!"
         return ${ERR_CODE_SUCCESS}
     fi
 
-    declare -p "hilbert_station_compatible_applications" 1>>/dev/null 2>&1
+    declare -p "hilbert_station_compatible_applications" &>/dev/null
     if [[ $? -eq 0 ]]; then
         DEBUG "Some configuration file has been loaded already!"
         return ${ERR_CODE_SUCCESS}
@@ -828,18 +828,18 @@ function cmd_read_configuration() { ## @fn Read current station configuration
     source "${HILBERT_CONFIG_DIR}/${HILBERT_CONFIG_FILE}"  ## TODO: FIXME: only pass declare ... key="...value..."!?
     local _ret=$?
 
-    declare -p "hilbert_station_services_and_applications" 1>>/dev/null 2>&1
+    declare -p "hilbert_station_services_and_applications" &>/dev/null
     if [[ $? -ne 0 ]]; then
         ERROR "Wrong local configuration file: [${HILBERT_CONFIG_DIR}/${HILBERT_CONFIG_FILE}]! NOTE: it should set at least [hilbert_station_services_and_applications]!"
         exit ${ERR_CODE_INT_ERROR}
     fi
 
-    declare -p "hilbert_station_profile_services" 1>>/dev/null 2>&1
+    declare -p "hilbert_station_profile_services" &>/dev/null
     if [[ $? -ne 0 ]]; then
         WARNING "Strange local station's config file: [${HILBERT_CONFIG_DIR}/${HILBERT_CONFIG_FILE}]: [hilbert_station_profile_services] is not set!"
     fi
 
-    declare -p "hilbert_station_compatible_applications" 1>>/dev/null 2>&1
+    declare -p "hilbert_station_compatible_applications" &>/dev/null
     if [[ $? -ne 0 ]]; then
         WARNING "Strange local station's config file: [${HILBERT_CONFIG_DIR}/${HILBERT_CONFIG_FILE}]: [hilbert_station_compatible_applications] is not set!"
     fi
@@ -984,7 +984,7 @@ function cmd_init() {         ## @fn Install/Initialize/Prepare Station configur
         # starting from new configuration:
 
         # checking for same AppID:
-        cmd_tool_subcall -qqqqdL app_change "${_app}" 2>/dev/null 1>&2
+        cmd_tool_subcall -qqqqdL app_change "${_app}" &>/dev/null
         if [[ $? -ne 0 ]]; then
             # no such application in the new configuration! opting for the default one!
             cmd_tool_subcall -L start
