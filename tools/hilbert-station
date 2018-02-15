@@ -1088,7 +1088,7 @@ function cmd_compare_station_configs() { ## @fn compare some station configurati
     ### forget the currently running application choice??
     DEBUG "Comparison of the current configuration [${_old}] with the one in [$arg]: [diff -aqr -x 'cache_*.yaml' -x \"${HILBERT_CONFIG_FILE}\" \"${_old}\" \"$arg\"]..."
 #    ${RSYNC} -zaic "${_old}" "${arg}" --dry-run
-    ${DIFF} -aqr -x 'cache_*.yaml' -x "${HILBERT_CONFIG_FILE}" "${_old}" "${arg}"
+    ${DIFF} -aqr -x 'cache_*.yaml' -x 'override_*.yaml' -x "${HILBERT_CONFIG_FILE}" "${_old}" "${arg}"
     _ret=$?
 
     if [[ ${_ret} -eq 0 ]]; then
