@@ -1188,7 +1188,7 @@ function cmd_prepare() {         ## @fn Prepare Station
                 DRYRUN_ECHO "${DOCKER_GC}"
             else
                 DEBUG "Dry-running: [${DOCKER_GC}]...!" # NOTE: make sure to use docker_gc in production!
-                DRY_RUN=1 ${DOCKER_GC}
+                DRY_RUN=1 ${DOCKER_GC} &>/dev/null
             fi
         fi
     fi
