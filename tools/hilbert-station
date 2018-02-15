@@ -269,6 +269,7 @@ declare -rg HILBERT_STATION_VERSION_ID="\$Id$"
 ## NOTE: the following is run-time  (docker/docker-compose) specific!
 
 ## TODO: FIXME: will be hilbert due to migration!
+export COMPOSE_PATH_SEPARATOR="${COMPOSE_PATH_SEPARATOR:-:}"
 export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-hilbert}"
 # export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-dockapp}"
 
@@ -295,7 +296,7 @@ fi
 
 
 function cmd_internal_usage() {         ## @fn Show CLI internal help
-    if [[ $LOGLEVEL -le 1 ]]; then
+    if [[ $LOGLEVEL -le 0 ]]; then
         ${CAT} << EOF
 Internal commands supported by this tool:
 
@@ -303,7 +304,7 @@ $(${GREP} -E '^function cmd_' "${TOOL_SH}" | ${SED} -e 's@function  *@@g' -e 's@
 EOF
     fi
 
-    if [[ $LOGLEVEL -le 0 ]]; then
+    if [[ $LOGLEVEL -le -2 ]]; then
         local FUN=$(${GREP} '^ *function .*()' "${TOOL_SH}" | ${SED} -e 's@function @@g' -e 's@().*$@|@g' | ${GREP} -vE '(_lock|_no_more_locking|_prepare_locking|exlock_now|exlock|shlock|unlock|DEBUG|INFO|WARNING|ERROR|DRYRUN|_which_ext|_service_get_)' | ${XARGS} | ${SED} -e 's@| @|@g' -e 's@|$@@g' )
         ${CAT} << EOF
 Call tree for internal commands supported by this tool:
@@ -317,7 +318,7 @@ EOF
 
 function cmd_usage() {         ## @fn Show CLI usage help
     ${CAT} << EOF
-usage: ${TOOL} [-v|-q] [-d|-D] [-t|-T] [-L] [-h|-V|subcommand] [sub-arguments/options]
+usage: ${TOOL} [-v|-q|-s] [-d|-D] [-t|-T] [-L] [-i|-h|-V|subcommand] [sub-arguments/options]
 
 Hilbert - client part for Linux systems
 
@@ -332,10 +333,12 @@ positional arguments:
    shutdown                shut down the system
 
 optional arguments:
-  -h                       show this help message [+internal commands/call tree] and exit
-  -V                       show tool version [+internal info] and exit
+  -h                       show this help message [+internal commands/call tree, depending on verbosity] and exit
+  -V                       show tool version [+internal info in verbose mode] and exit
+  -i                       show internal info and exit
   -v                       increase verbosity
   -q                       decrease verbosity
+  -s                       silent: minimal verbosity
   -t                       turn on BASH tracing and verbosity
   -T                       turn off BASH tracing and verbosity
   -d                       turn on dry-run mode
@@ -349,13 +352,9 @@ respected environment variables:
 
 EOF
 
-# env | grep -i "^hilbert_.*="
-#    if [[ $LOGLEVEL -le 1 ]]; then
     ${ECHO} "currently detected hilbert variables/values: "
     ${ENV} | ${GREP} -E "^(hilbert|HILBERT)_.*=" | ${GREP} -vE "^(HILBERT_CONFIG_DIR|HILBERT_CONFIG_FILE|HILBERT_CONFIG_BASEDIR|HILBERT_OGL|HILBERT_CUSTOMIZATIONS|HILBERT_COMPOSE_CUSTOMIZER)=" | ${SED} 's@=@:  @' | ${XARGS} -L 1 ${ECHO} ' '
     ${ECHO}
-#    fi
-
 }
 
 function cmd_native_autodetect() { ## @fn Native Auto-detections
@@ -474,7 +473,9 @@ PID:         [$$]
 
 INPUT_OPTS:  [${INPUT_OPT}]
 DRY_RUN:     [${DRY_RUN}]
+BASH_TRACE:  [${DO_BASH_TRACE}]
 LOGLEVEL:    [${LOGLEVEL}]
+SILENT MODE: [$((1-VERBOSITY_DELTA))]
 
 Lockfile:    [${LOCKFILE}: $(${LIST} -l "${LOCKFILE}" 2>&1)]
 Do locking:  [${LOCKING}]
@@ -527,6 +528,7 @@ DOCKER_GC:   [${DOCKER_GC}: $(_which_ext "${DOCKER_GC}")]
 
 DOCKER_COMPOSE:       [${DOCKER_COMPOSE} ($(${DOCKER_COMPOSE} --version 2>&1)): $(_which_ext "${DOCKER_COMPOSE}")]
 COMPOSE_PROJECT_NAME: [${COMPOSE_PROJECT_NAME}]
+COMPOSE_PATH_SEPARATOR: [${COMPOSE_PATH_SEPARATOR}]
 
 HILBERT_CUSTOMIZATIONS:     [${HILBERT_CUSTOMIZATIONS}]
 HILBERT_COMPOSE_CUSTOMIZER: [${HILBERT_COMPOSE_CUSTOMIZER}: $(_which_ext "${HILBERT_COMPOSE_CUSTOMIZER}")]
@@ -576,9 +578,11 @@ EOF
 
 declare -rg INPUT_ARGS=($@)
 declare -g INPUT_OPT=""
+declare -g VERBOSITY_DELTA=1
+declare -g DO_BASH_TRACE=0
 
 # NOTE: Custom argument/option handling only using 'getopts'!
-while getopts ":hqtTdDviVL" opt; do   # NOTE: removed 'p' for now
+while getopts ":hsqtTdDviVL" opt; do
     INPUT_OPT="${INPUT_OPT} -${opt}"
     case ${opt} in
     i )
@@ -596,34 +600,42 @@ while getopts ":hqtTdDviVL" opt; do   # NOTE: removed 'p' for now
         ;;
     t )
         # NOTE: see also http://tldp.org/LDP/Bash-Beginners-Guide/html/sect_02_03.html
-        DEBUG "Turning on tracing of bash command execution + verbosity..."
+#        DEBUG "Turning on tracing of bash command execution + verbosity..."
+        DO_BASH_TRACE=1
         set -v
         set -x
         ;;
     T )
         # NOTE: see also http://tldp.org/LDP/Bash-Beginners-Guide/html/sect_02_03.html
-        DEBUG "Turning off tracing of bash command execution + verbosity..."
+#        DEBUG "Turning off tracing of bash command execution + verbosity..."
         set +v
         set +x
+        DO_BASH_TRACE=0
         ;;
     L )
-        DEBUG "Disable locking..."
+#        DEBUG "Disable locking..."
         LOCKING="0"
         ;;
+    s )
+#        DEBUG "Going silent: no errors or warnings etc!"
+        LOGLEVEL=5
+        # no more changes of LOGLEVEL!
+        VERBOSITY_DELTA=0
+        ;;
     v )
-        DEBUG "Increase verbosity..."
-        LOGLEVEL=$((LOGLEVEL-1))
+#        DEBUG "Increase verbosity..."
+        LOGLEVEL=$((LOGLEVEL-VERBOSITY_DELTA))
         ;;
     q )
-        DEBUG "Decrease verbosity..."
-        LOGLEVEL=$((LOGLEVEL+1))
+#        DEBUG "Decrease verbosity..."
+        LOGLEVEL=$((LOGLEVEL+VERBOSITY_DELTA))
         ;;
     d )
-        DEBUG "Turning on dry-run mode..."
+#        DEBUG "Turning on dry-run mode..."
         DRY_RUN="DRYRUN"
         ;;
     D )
-        DEBUG "Turning off dry-run mode..."
+#        DEBUG "Turning off dry-run mode..."
         DRY_RUN=""
         ;;
     \? )
@@ -633,7 +645,7 @@ while getopts ":hqtTdDviVL" opt; do   # NOTE: removed 'p' for now
     esac
 done
 
-DEBUG "Input args: [${INPUT_ARGS[@]}]"
+DEBUG "Input args: [${INPUT_ARGS[@]}]. Processed options: [${INPUT_OPT}] => LOCKING: [${LOCKING}], LOGLEVEL: [${LOGLEVEL}], DRY_RUN: [${DRY_RUN}], DO_BASH_TRACE: [${DO_BASH_TRACE}].",
 
 if [[ ! -d "${HILBERT_CONFIG_BASEDIR}" ]]; then
     DEBUG "Base Configuration base directory [${HILBERT_CONFIG_BASEDIR}] is missing!"
@@ -792,7 +804,7 @@ function cmd_install_station_config() { ## @fn Try to Install new station config
         for ((;;_i++)); do
             [[ ${_i} -ge ${_max_backup} ]] && break
 
-            DRYRUN ${MOVE} -f "${HILBERT_CONFIG_BACKUP}.~$((${_i} + 1))~" "${HILBERT_CONFIG_BACKUP}.~${_i}~"
+            DRYRUN ${MOVE} -f "${HILBERT_CONFIG_BACKUP}.~$((_i+1))~" "${HILBERT_CONFIG_BACKUP}.~${_i}~"
         done
     fi
 
@@ -886,7 +898,7 @@ function cmd_init() {         ## @fn Install/Initialize/Prepare Station configur
 
             # restarting if Hilbert is currently running
             if [[ ${_hilbert_is_running} -ne 0 ]]; then
-                cmd_start
+                cmd_start # NOTE: means restart with the same current app.
                 _ret=$?
             else
                 DEBUG "Hilbert was not running: no restart is performed!"
