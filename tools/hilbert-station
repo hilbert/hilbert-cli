@@ -1271,17 +1271,18 @@ function cmd_app_change() {         ## @fn Change current application (to be sto
     cmd_detect_top_application
     if [[ $? -ne 0 ]]; then
         WARNING "Could not properly detect the current top application!"
-        if [[ -n "${current_top_application_id}" ]]; then
-            WARNING "Trying to stop (all) found top apps: ${current_top_application_id}..."
-            cmd_docker_stop "${current_top_application_id}"
-        fi
-    else
-        if [[ "${APP_ID}" != "$arg" ]]; then
-            cmd_stop_service "${APP_ID}"
-        else
-            cmd_stop_service "${APP_ID}"  #  cmd_restart_service "${APP_ID}" ; return 0 # Same Application ID => Same Env.Vars??? :-(
-        fi
     fi
+
+    if [[ -n "${current_top_application_id}" ]]; then
+        WARNING "Trying to stop (all) found top apps: ${current_top_application_id}..."
+        cmd_docker_stop "${current_top_application_id}"
+    elif [[ -n "${APP_ID}" ]]; then
+#    if [[ "${APP_ID}" != "$arg" ]]; then
+#    cmd_stop_service "${APP_ID}"
+#    else
+        cmd_stop_service "${APP_ID}"  #  cmd_restart_service "${APP_ID}" ; return 0 # Same Application ID => Same Env.Vars??? :-(
+    fi
+
 
     cmd_xsetroot "Paint X11 root desktop before starting [$arg]"
 
@@ -1797,15 +1798,18 @@ function cmd_list_applications() { ## @fn List Applications
 
     cmd_detect_top_application
     if [[ $? -ne 0 ]]; then
-        INFO "Could not properly detect previously started Hilbert's application!"
-        if [[ -n "${current_top_application_id}" ]]; then
-            ${ECHO} "Previously started Hilbert's applications detected: "
-            ${DOCKER} ps -a --filter "label=is_top_app=1" --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}"
-        else
-            ${ECHO} "No previously started applications detected!"
-        fi
-    else
+        WARNING "Could not properly detect the current Hilbert applications or services!"
+    fi
+
+    if [[ -n "${current_top_application_id}" ]]; then
+        ${ECHO} "Previously started Hilbert's applications detected: "
+        ${DOCKER} ps -a --filter "label=is_top_app=1" --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}"
+    fi
+
+    if [[ -n "${APP_ID}" || -n "${current_top_application}" || -n "${current_top_application_id}" ]]; then
         ${ECHO} "Previously started Hilbert's application(s) detected: [${APP_ID}] (ref: [${current_top_application}], id: [${current_top_application_id}])"
+    else
+        ${ECHO} "No previously started applications detected!"
     fi
 
     return ${ERR_CODE_SUCCESS}
@@ -1843,16 +1847,15 @@ function cmd_list_services() { ## @fn List Hilbert Services for the current stat
 }
 
 function cmd_get_current_application() { ## @fn output the currently running application or "" if no app. is currently running
-    cmd_native_autodetect
-    cmd_read_configuration
+    local ret #    cmd_native_autodetect #    cmd_read_configuration
     cmd_detect_top_application
-    if [[ -z "${APP_ID}" ]]; then
-        DEBUG "No application is currently running"
-        ${ECHO} ""
-    else
-        ${ECHO} "${APP_ID}"
+    ret=$?
+    if [[ ${ret} -ne 0 ]]; then
+        return ${ret}
     fi
-    exit ${ERR_CODE_SUCCESS}
+
+    ${ECHO} "${APP_ID}"
+    return ${ERR_CODE_SUCCESS}
 }
 
 function cmd_get_default_application() { ## @fn output the application which is started by default
