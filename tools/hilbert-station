@@ -1461,6 +1461,10 @@ function cmd_compose_start() { ## @fn Run Docker-Compose service
         export COMPOSE_FILE="${PLAIN_COMPOSE_FILE}"
     else
         export COMPOSE_FILE="${HILBERT_APPLICATION_FILE:-docker-compose.yml}"  # Default value
+        local DOCKER_COMPOSE_OVERRIDE="override_for_${HILBERT_APPLICATION_ID}.yaml"
+        if [[ -r "${HILBERT_CONFIG_DIR}/${DOCKER_COMPOSE_OVERRIDE}" ]]; then
+            export COMPOSE_FILE="${COMPOSE_FILE}${COMPOSE_PATH_SEPARATOR}${DOCKER_COMPOSE_OVERRIDE}"
+        fi
     fi
 
     DEBUG "Starting service/application: ${HILBERT_APPLICATION_ID} (${HILBERT_APPLICATION_REF} from ${COMPOSE_FILE})..."
@@ -1495,15 +1499,13 @@ function cmd_compose_init() { ## @fn Initialize/prepare/cache a Docker-Compose s
 
     local DOCKER_COMPOSE_OVERRIDE="override_for_${HILBERT_APPLICATION_ID}.yaml"
 
-    DRYRUN ${REMOVE} -f "${HILBERT_CONFIG_DIR}/${DOCKER_COMPOSE_OVERRIDE}"
-
     if hash "${HILBERT_COMPOSE_CUSTOMIZER}" 2>/dev/null; then
         DEBUG "Customizing for service/application: [${arg}]..."
         ${HILBERT_COMPOSE_CUSTOMIZER} --formatversion "2.1" --services "${HILBERT_APPLICATION_REF}" --output "${HILBERT_CONFIG_DIR}/${DOCKER_COMPOSE_OVERRIDE}"
     fi
 
     if [[ -r "${HILBERT_CONFIG_DIR}/${DOCKER_COMPOSE_OVERRIDE}" ]]; then
-        export COMPOSE_FILE="${COMPOSE_FILE}:${DOCKER_COMPOSE_OVERRIDE}"
+        export COMPOSE_FILE="${COMPOSE_FILE}${COMPOSE_PATH_SEPARATOR}${DOCKER_COMPOSE_OVERRIDE}"
     fi
 
     local PLAIN_COMPOSE_FILE="cache_for_${HILBERT_APPLICATION_ID}.yaml"
@@ -1511,16 +1513,16 @@ function cmd_compose_init() { ## @fn Initialize/prepare/cache a Docker-Compose s
 
     DRYRUN ${REMOVE} -f "${HILBERT_CONFIG_DIR}/${PLAIN_COMPOSE_FILE}"
 
-    cmd_docker_compose config > "${HILBERT_CONFIG_DIR}/${PLAIN_COMPOSE_FILE}"
+    cmd_docker_compose config 1> "${HILBERT_CONFIG_DIR}/${PLAIN_COMPOSE_FILE}"
     ret=$?
 
     if [[ ${ret} -eq 0 && -s "${HILBERT_CONFIG_DIR}/${PLAIN_COMPOSE_FILE}" ]]; then
         export COMPOSE_FILE="${PLAIN_COMPOSE_FILE}"
-    else
-        DRYRUN ${REMOVE} -f "${HILBERT_CONFIG_DIR}/${DOCKER_COMPOSE_OVERRIDE}" # !?
+        DRYRUN ${REMOVE} -f "${HILBERT_CONFIG_DIR}/${DOCKER_COMPOSE_OVERRIDE}"
     fi
 
-    cmd_docker_compose pull --ignore-pull-failures "${HILBERT_APPLICATION_REF}" | cat
+
+    cmd_docker_compose pull --ignore-pull-failures "${HILBERT_APPLICATION_REF}"
     ret=$?
 
     if [[ ${ret} -ne 0 ]]; then
@@ -1549,6 +1551,10 @@ function cmd_compose_restart() { ## @fn Restart Docker-Compose service. DEPRECAT
         export COMPOSE_FILE="${PLAIN_COMPOSE_FILE}"
     else
         export COMPOSE_FILE="${HILBERT_APPLICATION_FILE:-docker-compose.yml}"  # Default value
+        local DOCKER_COMPOSE_OVERRIDE="override_for_${HILBERT_APPLICATION_ID}.yaml"
+        if [[ -r "${HILBERT_CONFIG_DIR}/${DOCKER_COMPOSE_OVERRIDE}" ]]; then
+            export COMPOSE_FILE="${COMPOSE_FILE}${COMPOSE_PATH_SEPARATOR}${DOCKER_COMPOSE_OVERRIDE}"
+        fi
     fi
 
     DEBUG "Restarting service/application: ${HILBERT_APPLICATION_ID} (${HILBERT_APPLICATION_REF} from ${COMPOSE_FILE})..."
@@ -1576,6 +1582,10 @@ function cmd_compose_stop() { ## @fn Stop Docker-Compose service
         export COMPOSE_FILE="${PLAIN_COMPOSE_FILE}"
     else
         export COMPOSE_FILE="${HILBERT_APPLICATION_FILE:-docker-compose.yml}"  # Default value
+        local DOCKER_COMPOSE_OVERRIDE="override_for_${HILBERT_APPLICATION_ID}.yaml"
+        if [[ -r "${HILBERT_CONFIG_DIR}/${DOCKER_COMPOSE_OVERRIDE}" ]]; then
+            export COMPOSE_FILE="${COMPOSE_FILE}${COMPOSE_PATH_SEPARATOR}${DOCKER_COMPOSE_OVERRIDE}"
+        fi
     fi
 
     DEBUG "Stopping service/application: ${HILBERT_APPLICATION_ID} (${HILBERT_APPLICATION_REF} from ${COMPOSE_FILE})..."
