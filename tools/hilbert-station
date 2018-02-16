@@ -3,24 +3,91 @@
 
 ## TODO: add some more description here?
 
+declare -rg TOOL_SH="$0"
+
 ## NOTE: Exit codes may be as follows (see status.sh, others will be updated):
-##  - 0: success (no error detected). There maybe warnings
-##  - 1: detected error which is not our fault (e.g. network / HW etc): user can try again
-##  - 2: error due to wrong usage of scripts (bad arguments) / in config files or some assumption was violated.
+declare -rg ERR_CODE_SUCCESS=0   # success (no error detected). There maybe warnings
+declare -rg ERR_CODE_EXT_ERROR=1 # detected error which is not our fault (e.g. network / HW etc): user can try again
+declare -rg ERR_CODE_INT_ERROR=2 # error due to wrong usage of scripts (bad arguments) / in config files or some assumption was violated.
 ##      NOTE: in PEDANTIC mode some non-critical issues may be treated this way.
 ##  - any other value: something unexpected has happened!
 
-## NOTE: see also http://tldp.org/LDP/abs/html/exitcodes.html
-declare -rg TOOL_SH="$0"
-declare -rg TOOL="$(basename "${TOOL_SH}")" # script_name=`basename "$0"` # script_name="${script_name%.*}"
-export PATH="${PATH}:$(readlink -f "$(dirname "${TOOL_SH}")")" # Add the tool' directory into the search PATH...
+## NOTE: the following explanation is from [http://tldp.org/LDP/abs/html/exitcodes.html]
+#Code   Meaning                                                               [Example]
+##NOTE: Comments
+#1	    Catchall for general errors                                           [let "var1 = 1/0"]
+##NOTE: Miscellaneous errors, such as "divide by zero" and other impermissible operations
+#2	    Misuse of shell builtins (according to Bash documentation)            [empty_function() {}]
+##NOTE: Missing keyword or command, or permission problem (and diff return code on a failed binary file comparison).
+#126	Command invoked cannot execute                                        [/dev/null]
+##NOTE: Permission problem or command is not an executable
+#127	"command not found"                                                   [illegal_command]
+##NOTE: Possible problem with $PATH or a typo
+#128	Invalid argument to exit                                              [exit 3.14159]
+##NOTE: exit takes only integer args in the range 0 - 255 (see first footnote)
+#128+n	Fatal error signal "n"                                                [kill -9 $PPID of script]
+##NOTE: $? returns 137 (128 + 9)
+#130	Script terminated by Control-C                                        [Ctl-C]
+##NOTE: Control-C is fatal error signal 2, (130 = 128 + 2, see above)
+#255*	Exit status out of range                                              [exit -1]
+##NOTE: exit takes only integer args in the range 0 - 255
+
+# According to the above table, exit codes 1 - 2, 126 - 165, and 255 have special meanings,
+# and should therefore be avoided for user-specified exit parameters.
+# Ending a script with exit 127 would certainly cause confusion when troubleshooting
+# (is the error code a "command not found" or a user-defined one?).
+# However, many scripts use an exit 1 as a general bailout-upon-error.
+# Since exit code 1 signifies so many possible errors, it is not particularly useful in debugging.
+
+
+
+export RSYNC=${HILBERT_DEPENDENCY_RSYNC:-rsync}
+export GREP=${HILBERT_DEPENDENCY_GREP:-grep}
+export SORT=${HILBERT_DEPENDENCY_SORT:-sort}
+export UNIQ=${HILBERT_DEPENDENCY_UNIQ:-uniq}
+export ENV=${HILBERT_DEPENDENCY_ENV:-env}
+export SED=${HILBERT_DEPENDENCY_SED:-sed}
+export SH=${HILBERT_DEPENDENCY_SH:-sh}
+export CAT=${HILBERT_DEPENDENCY_CAT:-cat}
+export TPUT=${HILBERT_DEPENDENCY_TPUT:-tput}
+export ECHO=${HILBERT_DEPENDENCY_ECHO:-echo}
+export TAIL=${HILBERT_DEPENDENCY_TAIL:-tail}
+export LIST=${HILBERT_DEPENDENCY_LIST:-ls}
+export LINK=${HILBERT_DEPENDENCY_LINK:-ln}
+export PRINTF=${HILBERT_DEPENDENCY_PRINTF:-printf}
+export UNLINK=${HILBERT_DEPENDENCY_UNLINK:-unlink}
+export DIRNAME=${HILBERT_DEPENDENCY_DIRNAME:-dirname}
+export READLINK=${HILBERT_DEPENDENCY_READLINK:-readlink}
+export BASENAME=${HILBERT_DEPENDENCY_BASENAME:-basename}
+export XSETROOT=${HILBERT_DEPENDENCY_XSETROOT:-xsetroot -solid black}
+export MKTEMP=${HILBERT_DEPENDENCY_MKTEMP:-mktemp}
+export WHICH=${HILBERT_DEPENDENCY_WHICH:-which}
+export XAUTH=${HILBERT_DEPENDENCY_XAUTH:-xauth}
+export XHOST=${HILBERT_DEPENDENCY_XHOST:-xhost}
+export SUDO=${HILBERT_DEPENDENCY_SUDO:-sudo}
+export COPY=${HILBERT_DEPENDENCY_COPY:-cp}
+export MOVE=${HILBERT_DEPENDENCY_MOVE:-mv}
+export XARGS=${HILBERT_DEPENDENCY_XARGS:-xargs}
+export MKDIR=${HILBERT_DEPENDENCY_MKDIR:-mkdir}
+export REMOVE=${HILBERT_DEPENDENCY_REMOVE:-rm}
+export CHMOD=${HILBERT_DEPENDENCY_CHMOD:-chmod}
+export FLOCK=${HILBERT_DEPENDENCY_FLOCK:-flock}
+export PIDOF=${HILBERT_DEPENDENCY_PIDOF:-pidof}
+
+declare -rg TOOL="$(${BASENAME} "${TOOL_SH}")"
+export PATH="${PATH}:$(${READLINK} -f "$(${DIRNAME} "${TOOL_SH}")")" # Add the tool' directory into the search PATH...
+
+# TODO: FIXME: detect available "logger"!
 declare -rg LOGGER="logger --id=$$ -t ${TOOL} "
 
-declare -g LOGLEVEL=2  # WARNING-LEVEL
-declare -g DRY_RUN=""  # NOTE: turn on dry mode (not actual service-runtime action execution) if non-empty
-declare -g hibert_station_process_kill_timeout=8
-declare -g XSETROOT=${XSETROOT:-xsetroot -solid black}
+declare -g LOGLEVEL=${LOGLEVEL:-2}  # Default setting: show WARNINGs and ERRORs (but not DEBUG/INFO messages)
+declare -g DRY_RUN="${DRY_RUN:-}"  # NOTE: turn on dry mode (not actual service-runtime action execution) if non-empty
 
+# required for comparing config-dirs:
+export DIFF=${DIFF:-diff}
+
+# delays during stopping/killing/removing docker containers
+declare -g hibert_station_process_kill_timeout=${hibert_station_process_kill_timeout:-8}
 
 ## NOTE: locking following: http://stackoverflow.com/a/1985512 by Przemyslaw Pawelczyk <przemoc@gmail.com>
 ## NOTE: uses flock from util-linux[-ng]
@@ -46,8 +113,8 @@ fi
 declare -ir LOCKFD=99
 
 ## PRIVATE flock WRAPPER API
-function _lock()             { flock "-$1" ${LOCKFD}; }
-function _no_more_locking()  { _lock u; _lock xn && rm -f "${LOCKFILE}"; exec 2>&4 1>&3; }
+function _lock()             { ${FLOCK} "-$1" ${LOCKFD}; }
+function _no_more_locking()  { _lock u; _lock xn && ${REMOVE} -f "${LOCKFILE}"; exec 2>&4 1>&3; }
 function _prepare_locking()  { eval "exec $LOCKFD>\"$LOCKFILE\""; trap _no_more_locking EXIT; }
 
 ## PUBLIC flock WRAPPER API
@@ -64,12 +131,19 @@ trap 'exec 2>&4 1>&3 ' SIGHUP SIGINT SIGQUIT SIGPIPE SIGTERM EXIT RETURN
 exec 2>&1
 # 1>log.out
 
-function cmd_start_locking() {
+declare -g LOCKING=1
+
+function cmd_start_locking() { ## @fn Start a lock to avoid parallel execution of this tool
+    if [[ "x${LOCKING}" = "x0" ]]; then
+        DEBUG "Avoiding locking or related checks on demand!"
+        return ${ERR_CODE_SUCCESS}
+    fi
+
     local pid
-    for pid in $(pidof -s "${TOOL}"); do
+    for pid in $(${PIDOF} -s "${TOOL}"); do
         if [[ $pid != $$ ]]; then
             ERROR "Process is already running with PID $pid"
-            exit 1
+            exit ${ERR_CODE_EXT_ERROR}
         fi
     done
 
@@ -77,19 +151,69 @@ function cmd_start_locking() {
 
     # ON START:
     _prepare_locking
-    # Simplest example is avoiding running multiple instances of script: `exlock_now || exit 1`
+    # Simplest example is avoiding running multiple instances of script: `exlock_now || exit ${ERR_CODE_EXT_ERROR}`
     # Remember! Lock file is removed when one of the scripts exits and it is
     #           the only script holding the lock or lock is not acquired at all.
     local l
     if exlock_now
     then
-        l="$(ls -l "${LOCKFILE}" 2>&1)"
+        l="$(${LIST} -l "${LOCKFILE}" 2>&1)"
         DEBUG "Obtained exclusive lock of [$l]"
     else
-        l="$(ls -l "${LOCKFILE}" 2>&1)"
+        l="$(${LIST} -l "${LOCKFILE}" 2>&1)"
         DEBUG "Lockfile: [$l]"
         ERROR "Another user is already running ${TOOL}: please try again later!"
-        exit 2
+        exit ${ERR_CODE_EXT_ERROR}
+    fi
+    return $?
+}
+
+## The following is due to https://en.wikipedia.org/wiki/ANSI_escape_code
+## https://unix.stackexchange.com/questions/9957/how-to-check-if-bash-can-print-colors
+## https://linux.101hacks.com/ps1-examples/prompt-color-using-tput/
+if [[ -t 1 && -n "$(${TPUT} colors 2>/dev/null)" && "$(${TPUT} colors 2>/dev/null)" -ge 8 ]]; then
+    declare -rg ANSI_NO_COLOR="$(${TPUT} sgr0)" # '\033[0m'
+    declare -rg ANSI_RED="$(${TPUT} setaf 1)" # '\033[1;31m'
+    declare -rg ANSI_YELLOW="$(${TPUT} setaf 3)" # '\033[1;33m'
+    declare -rg ANSI_BRIGHT_MAGENTA="$(${TPUT} setaf 5)" # '\033[1;95m'
+    declare -rg ANSI_CYAN="$(${TPUT} setaf 6)" # '\033[1;36m'
+    declare -rg ANSI_GRAY="$(${TPUT} dim)$(${TPUT} setaf 7)" # '\033[0;37m'
+#    declare -rg ANSI_BRIGHT_WHITE="$(${TPUT} setaf 7)" # '\033[1;97m'
+fi
+
+# default colors for the logging routines:
+declare -rg COLOR_DEBUG="${HILBERT_CONSOLE_COLOR_DEBUG:-${ANSI_GRAY:-=== }}"
+declare -rg COLOR_INFO="${HILBERT_CONSOLE_COLOR_INFO:-${ANSI_CYAN:-    }}"
+declare -rg COLOR_WARNING="${HILBERT_CONSOLE_COLOR_WARNING:-${ANSI_YELLOW:-!!! }}"
+declare -rg COLOR_ERROR="${HILBERT_CONSOLE_COLOR_ERROR:-${ANSI_RED:-??? }}"
+declare -rg COLOR_DRYRUN="${HILBERT_CONSOLE_COLOR_DRYRUN:-${ANSI_BRIGHT_MAGENTA:-DRY }}"
+declare -rg COLOR_NONE="${HILBERT_CONSOLE_COLOR_NONE:-${ANSI_NO_COLOR:-}}"
+
+function DRYRUN_ECHO() {
+    local _cmd="$@"
+    if [[ $LOGLEVEL -le 2 ]]; then ## like a WARNING!
+        local MSG=" ${DRY_RUN} [${TOOL}:${FUNCNAME[1]}] Simulating: [${_cmd}]"
+        ${PRINTF} "${COLOR_DRYRUN}${MSG}${COLOR_NONE}\n" 1>&2
+        ${LOGGER} -p user.debug "${MSG}" &>/dev/null
+    fi
+    return ${ERR_CODE_SUCCESS}
+}
+
+
+function DRYRUN() {
+    local _cmd="$@"
+
+    if [[ -z "${DRY_RUN}" ]]; then
+        DEBUG "Running: [${_cmd}]..."
+        eval "${_cmd}"
+    else
+        # DRYRUN_ECHO "${_cmd}"
+        # NOTE: the following is to get proper function name!
+        if [[ $LOGLEVEL -le 2 ]]; then ## like a WARNING!
+            local MSG=" ${DRY_RUN} [${TOOL}:${FUNCNAME[1]}] Simulating: [${_cmd}]"
+            ${PRINTF} "${COLOR_DRYRUN}${MSG}${COLOR_NONE}\n" 1>&2
+            ${LOGGER} -p user.debug "${MSG}" &>/dev/null
+        fi
     fi
     return $?
 }
@@ -97,53 +221,61 @@ function cmd_start_locking() {
 function DEBUG() {
     if [[ $LOGLEVEL -le 0 ]]; then
         local MSG="DEBUG   [${TOOL}:${FUNCNAME[1]}] $*"
-        echo "${MSG}"
-	${LOGGER} -p user.debug "${MSG}"
+        ${PRINTF} "${COLOR_DEBUG}${MSG}${COLOR_NONE}\n"
+        ${LOGGER} -p user.debug "${MSG}" &>/dev/null
     fi
-    return 0
+    return ${ERR_CODE_SUCCESS}
 }
 function INFO() {
     if [[ $LOGLEVEL -le 1 ]]; then
         local MSG="INFO    [${TOOL}:${FUNCNAME[1]}] $*"
-        echo "${MSG}"
-	${LOGGER} -p user.info "${MSG}"
+        ${PRINTF} "${COLOR_INFO}${MSG}${COLOR_NONE}\n"
+        ${LOGGER} -p user.info "${MSG}" &>/dev/null
     fi
-    return 0
+    return ${ERR_CODE_SUCCESS}
 }
 function WARNING() {
     if [[ $LOGLEVEL -le 2 ]]; then
         local MSG="WARNING [${TOOL}:${FUNCNAME[1]}] $*"
-	${LOGGER} --stderr -p user.warning "${MSG}"
+        ${PRINTF} "${COLOR_WARNING}${MSG}${COLOR_NONE}\n" 1>&2
+        ${LOGGER} -p user.warning "${MSG}" &>/dev/null
     fi
-    return 0
+    return ${ERR_CODE_SUCCESS}
 }
 
 function ERROR() {
     if [[ $LOGLEVEL -le 3 ]]; then
         local MSG="ERROR   [${TOOL}:${FUNCNAME[1]}] $*"
-	${LOGGER} --stderr -p user.err "${MSG}"
+        ${PRINTF} "${COLOR_ERROR}${MSG}${COLOR_NONE}\n" 1>&2
+        ${LOGGER} -p user.err "${MSG}" &>/dev/null
     fi
-    return 1
+    return ${ERR_CODE_INT_ERROR}
 }
 
-## TODO: read HILBERT_CONFIG_BASEDIR from '~/.hilbert-station' ?
-## TODO: use @configs!!!!
-export HILBERT_CONFIG_BASEDIR="${HILBERT_CONFIG_BASEDIR:-${HOME}/.config/${TOOL}}"
+## NOTE: maybe set HILBERT_CONFIG_BASEDIR in global profile?
+export HILBERT_CONFIG_BASEDIR="${HILBERT_CONFIG_BASEDIR:-${HOME}/.config/hilbert-station}"
 
-export HILBERT_CONFIG_DIR="${HILBERT_CONFIG_BASEDIR}/configs"
-export HILBERT_CONFIG_FILE="${HILBERT_CONFIG_DIR}/station.cfg"
+# current configuration:
+export HILBERT_CONFIG_DIR="${HILBERT_CONFIG_DIR:-${HILBERT_CONFIG_BASEDIR}/configs}"
 
-export HILBERT_STATION_VERSION_ID="\$Id$"
+# current latest backup:
+export HILBERT_CONFIG_BACKUP="${HILBERT_CONFIG_BACKUP:-${HILBERT_CONFIG_BASEDIR}/config_backup}"
+
+## NOTE: avoid inconsistencies vs HILBERT_CONFIG_DIR!
+export HILBERT_CONFIG_FILE="${HILBERT_CONFIG_FILE:-station.cfg}"
+
+declare -rg HILBERT_STATION_VERSION_ID="\$Id$"
 
 ## NOTE: the following is run-time  (docker/docker-compose) specific!
 
 ## TODO: FIXME: will be hilbert due to migration!
+export COMPOSE_PATH_SEPARATOR="${COMPOSE_PATH_SEPARATOR:-:}"
 export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-hilbert}"
 # export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-dockapp}"
 
 export HILBERT_OGL="${HILBERT_OGL:-/tmp/OGL.tgz}"
 # ${HILBERT_CONFIG_BASEDIR}/${OGL}
-declare -rg OGL="$(basename "${HILBERT_OGL}")"
+declare -rg OGL="$(${BASENAME} "${HILBERT_OGL}")"
 
 export DOCKER="${DOCKER:-docker}"
 export DOCKER_GC="${DOCKER_GC:-docker-gc}"
@@ -159,43 +291,73 @@ do
 done
 
 if [[ ! -v SHUTDOWN ]]; then
-    declare -rg SHUTDOWN=$(which shutdown 2>&1)
+    declare -rg SHUTDOWN=$(${WHICH} shutdown 2>&1)
 fi
 
-## @fn cmd_usage Show CLI usage help
-function cmd_usage() {
-    cat << EOF
-usage: ${TOOL} [-h] [-d|-D] [-t|-T] [-V] [-v|-q] subcommand
+
+function cmd_internal_usage() {         ## @fn Show CLI internal help
+    if [[ $LOGLEVEL -le 0 ]]; then
+        ${CAT} << EOF
+Internal commands supported by this tool:
+
+$(${GREP} -E '^function cmd_' "${TOOL_SH}" | ${SED} -e 's@function  *@@g' -e 's@() *[{#]@\t@g')
+EOF
+    fi
+
+    if [[ $LOGLEVEL -le -2 ]]; then
+        local FUN=$(${GREP} '^ *function .*()' "${TOOL_SH}" | ${SED} -e 's@function @@g' -e 's@().*$@|@g' | ${GREP} -vE '(_lock|_no_more_locking|_prepare_locking|exlock_now|exlock|shlock|unlock|DEBUG|INFO|WARNING|ERROR|DRYRUN|_which_ext|_service_get_)' | ${XARGS} | ${SED} -e 's@| @|@g' -e 's@|$@@g' )
+        ${CAT} << EOF
+Call tree for internal commands supported by this tool:
+
+$(${GREP} -E "(${FUN})" "${TOOL_SH}" | ${GREP} -vE '^ *\#')
+
+EOF
+    fi
+}
+
+
+function cmd_usage() {         ## @fn Show CLI usage help
+    ${CAT} << EOF
+usage: ${TOOL} [-v|-q|-s] [-d|-D] [-t|-T] [-L] [-i|-h|-V|subcommand] [sub-arguments/options]
 
 Hilbert - client part for Linux systems
 
 positional arguments:
- subcommand:
+ subcommands:
    init [<cfg>]            init station based on given or installed configuration
    list_applications       list of (supported) applications
    list_services           list of background services
    app_change <app_id>     change the currently running top application to specified
-   start                   start Hilbert on the system
+   start [app_id]          start Hilbert on the system
    stop                    stop Hilbert on the system
    shutdown                shut down the system
 
 optional arguments:
-  -h                       show this help message and exit
-  -V                       show version info and exit
+  -h                       show this help message [+internal commands/call tree, depending on verbosity] and exit
+  -V                       show tool version [+internal info in verbose mode] and exit
+  -i                       show internal info and exit
   -v                       increase verbosity
   -q                       decrease verbosity
+  -s                       silent: minimal verbosity
   -t                       turn on BASH tracing and verbosity
   -T                       turn off BASH tracing and verbosity
   -d                       turn on dry-run mode
   -D                       turn off dry-run mode
+  -L                       disable locking (e.g. for recursive sub-calls)
 
 respected environment variables:
-  HILBERT_CONFIG_BASEDIR   location of the base configuration directory of ${TOOL}. Default: '~/.config/${TOOL}'
+  HILBERT_CONFIG_BASEDIR   base configuration directory. Current: [${HILBERT_CONFIG_BASEDIR}]
+  HILBERT_CONFIG_DIR       configuration directory. Current: [${HILBERT_CONFIG_DIR}]
+  HILBERT_CONFIG_FILE      station config file. Current: [${HILBERT_CONFIG_FILE}]
+
 EOF
+
+    ${ECHO} "currently detected hilbert variables/values: "
+    ${ENV} | ${GREP} -E "^(hilbert|HILBERT)_.*=" | ${GREP} -vE "^(HILBERT_CONFIG_DIR|HILBERT_CONFIG_FILE|HILBERT_CONFIG_BASEDIR|HILBERT_OGL|HILBERT_CUSTOMIZATIONS|HILBERT_COMPOSE_CUSTOMIZER)=" | ${SED} 's@=@:  @' | ${XARGS} -L 1 ${ECHO} ' '
+    ${ECHO}
 }
 
-## @fn cmd_native_autodetect Native Auto-detections
-function cmd_native_autodetect() {
+function cmd_native_autodetect() { ## @fn Native Auto-detections
     ## Docker Engine
     export DOCKER_SOCKET=${DOCKER_SOCKET:-/var/run/docker.sock}
     if [[ -S "${DOCKER_SOCKET}" ]]; then
@@ -214,7 +376,7 @@ function cmd_native_autodetect() {
         # What about forwarded X11 Displays? e.g. localhost:10.0?
         if [[ -z "${XAUTHORITY}" ]]; then  # TODO: Cleanup the following mess!!!
             if [[ -r "$XID" ]]; then
-                N=$(grep 'DISPLAY_NUM:' "$XID" | tail -n 1 | sed s@DISPLAY_NUM:@@g)
+                N=$(${GREP} 'DISPLAY_NUM:' "$XID" | ${TAIL} -n 1 | ${SED} s@DISPLAY_NUM:@@g)
             fi
 
             if [[ -f "/tmp/.X${N}-lock" ]]; then
@@ -255,10 +417,10 @@ function cmd_native_autodetect() {
         # TODO: HILBERT_DISPLAY?
 
         if [[ -f "${XAUTHORITY}" ]]; then
-        # :  echo "DISPLAY: '${DISPLAY}', XAUTHORITY: '${XAUTHORITY}' -> '${HILBERT_XAUTH}'"
-        #   [ ! -f "${XAUTH}" ] && touch "${XAUTH}"
-            (xauth nlist "${DISPLAY}" | sed -e 's/^..../ffff/' | sort | uniq | xauth -f "${HILBERT_XAUTH}" nmerge - ) 1> /dev/null 2>&1
-        #   [ ! -s "${HILBERT_XAUTH}" ] && echo "WARNING: something is wrong with '${XAUTH}': `ls -al ${XAUTH}`"
+        # :  ${ECHO} "DISPLAY: [${DISPLAY}], XAUTHORITY: [${XAUTHORITY}] -> [${HILBERT_XAUTH}]"
+        #   [ ! -f "${XAUTH???}" ] && touch "${XAUTH???}"
+            (${XAUTH} nlist "${DISPLAY}" | ${SED} -e 's/^..../ffff/' | ${SORT} | ${UNIQ} | ${XAUTH} -f "${HILBERT_XAUTH}" nmerge - ) &>/dev/null
+        #   [ ! -s "${HILBERT_XAUTH}" ] && ${ECHO} "WARNING: something is wrong with [${XAUTH}]: $(${LIST} -al ${XAUTH})"
         fi
 
         if [[ ! -f "${HILBERT_XAUTH}" ]]; then
@@ -266,7 +428,7 @@ function cmd_native_autodetect() {
         fi
 
         ## Let root use our current X11... https://wiki.archlinux.org/index.php/Running_X_apps_as_root ?
-        (xhost +; xhost "+si:localuser:${USER}"; xhost +si:localuser:root) 1> /dev/null 2>&1 # xhost + localhost;
+        (${XHOST} +; ${XHOST} "+si:localuser:${USER}"; ${XHOST} +si:localuser:root) &>/dev/null # ${XHOST} + localhost;
     fi
 
    DEBUG "DISPLAY: ${DISPLAY}, XAUTHORITY: ${XAUTHORITY}, HILBERT_XAUTH: ${HILBERT_XAUTH}"
@@ -276,7 +438,7 @@ function cmd_native_autodetect() {
      unset PULSE_SERVER
      unset PULSE_COOKIE
      [[ -S "/var/run/pulse/native" ]] && export PULSE_SERVER="/var/run/pulse/native"
-     
+
      if [[ ! -S "${PULSE_SERVER}" ]]; then
        export PULSE_SERVER="/run/user/${UID}/pulse/native"
        export PULSE_COOKIE="${HOME}/.config/pulse/cookie"
@@ -286,163 +448,236 @@ function cmd_native_autodetect() {
    DEBUG "PULSE_SERVER: ${PULSE_SERVER}, PULSE_COOKIE: ${PULSE_COOKIE}"
 
    # Detect HILBERT_ALSA_CARD??
-   return 0
+   return ${ERR_CODE_SUCCESS}
 }
 
-## @fn cmd_info Show Station System INFO & Configuration
-function cmd_info() {
-    cat << EOF
-This tool:   [${TOOL}: ${TOOL_SH}: $(ls -l "${TOOL_SH}" 2>&1)]
+function _which_ext() {       ## @fn Determine and list external executable
+    local _t
+    # NOTE: try to remove variable-assignments, like " A=B " to get the real command:
+    _t="$(${ECHO} "$@" | ${SED} -e 's@^ *\( *[^= ][^ =]*=[^ ]* \)* *@@g' -e 's@ .*$@@g' 2>&1)"
+    _t="$(${WHICH} "${_t}" 2>&1)"
+    if [[ $? -eq 0 ]]; then
+      ${LIST} -l "${_t}" 2>&1
+      return $?
+    else
+      # No such command in the PATH?
+      ${ECHO} "?/$@/?"
+      return ${ERR_CODE_EXT_ERROR}
+    fi
+}
+
+function cmd_info() {         ## @fn Show Station System INFO & Configuration
+    ${CAT} << EOF
+This tool:   [${TOOL}: ${TOOL_SH}: $(${LIST} -l "${TOOL_SH}" 2>&1)]
 PID:         [$$]
-Lockfile:    [${LOCKFILE}: $(ls -l "${LOCKFILE}" 2>&1)]
+
+INPUT_OPTS:  [${INPUT_OPT}]
+DRY_RUN:     [${DRY_RUN}]
+BASH_TRACE:  [${DO_BASH_TRACE}]
+LOGLEVEL:    [${LOGLEVEL}]
+SILENT MODE: [$((1-VERBOSITY_DELTA))]
+
+Lockfile:    [${LOCKFILE}: $(${LIST} -l "${LOCKFILE}" 2>&1)]
+Do locking:  [${LOCKING}]
+LOGGER:      [${LOGGER}: $(_which_ext "${LOGGER}")]
+FLOCK:       [${FLOCK}: $(_which_ext "${FLOCK}")]
+PIDOF:       [${PIDOF}: $(_which_ext "${PIDOF}")]
+
+SH:          [${SH}: $(_which_ext "${SH}")]
+ENV:         [${ENV}: $(_which_ext "${ENV}")]
+SED:         [${SED}: $(_which_ext "${SED}")]
+CAT:         [${CAT}: $(_which_ext "${CAT}")]
+GREP:        [${GREP}: $(_which_ext "${GREP}")]
+ECHO:        [${ECHO}: $(_which_ext "${ECHO}")]
+TPUT:        [${TPUT}: $(_which_ext "${TPUT}")]
+TAIL:        [${TAIL}: $(_which_ext "${TAIL}")]
+DIFF:        [${DIFF}: $(_which_ext "${DIFF}")]
+LIST:        [${LIST}: $(_which_ext "${LIST}")]
+COPY:        [${COPY}: $(_which_ext "${COPY}")]
+MOVE:        [${MOVE}: $(_which_ext "${MOVE}")]
+SUDO:        [${SUDO}: $(_which_ext "${SUDO}")]
+SORT:        [${SORT}: $(_which_ext "${SORT}")]
+UNIQ:        [${UNIQ}: $(_which_ext "${UNIQ}")]
+RSYNC:       [${RSYNC} ($(${RSYNC} --version 2>&1 | ${GREP} version)): $(_which_ext "${RSYNC}")]
+WHICH:       [${WHICH}: $(_which_ext "${WHICH}")]
+MKDIR:       [${MKDIR}: $(_which_ext "${MKDIR}")]
+CHMOD:       [${CHMOD}: $(_which_ext "${CHMOD}")]
+XARGS:       [${XARGS}: $(_which_ext "${XARGS}")]
+XAUTH:       [${XAUTH}: $(_which_ext "${XAUTH}")]
+XHOST:       [${XHOST}: $(_which_ext "${XHOST}")]
+MKTEMP:      [${MKTEMP}: $(_which_ext "${MKTEMP}")]
+PRINTF:      [${PRINTF}: $(_which_ext "${PRINTF}")]
+REMOVE:      [${REMOVE}: $(_which_ext "${REMOVE}")]
+UNLINK:      [${UNLINK}: $(_which_ext "${UNLINK}")]
+DIRNAME:     [${DIRNAME}: $(_which_ext "${DIRNAME}")]
+BASENAME:    [${BASENAME}: $(_which_ext "${BASENAME}")]
+READLINK:    [${READLINK}: $(_which_ext "${READLINK}")]
+XSETROOT:    [${XSETROOT}: $(_which_ext "${XSETROOT}")]
+SHUTDOWN:    [${SHUTDOWN}: $(_which_ext "${SHUTDOWN}")]
 
 Config Base: [${HILBERT_CONFIG_BASEDIR}]
-Config Dir:  [${HILBERT_CONFIG_DIR}: $(readlink -f "${HILBERT_CONFIG_DIR}" 2>&1)]
-Config File: [${HILBERT_CONFIG_FILE}: $(readlink -f "${HILBERT_CONFIG_FILE}" 2>&1)]
-All Configs: [$(sh -c "cd ${HILBERT_CONFIG_DIR}/ && ls * | xargs" 2>&1)]
+Config Dir:  [${HILBERT_CONFIG_DIR} -> $(${READLINK} -f "${HILBERT_CONFIG_DIR}" 2>&1)]
+Config File: [${HILBERT_CONFIG_FILE}: $(${READLINK} -f "${HILBERT_CONFIG_DIR}/${HILBERT_CONFIG_FILE}" 2>&1)]
+All Configs: [$(${SH} -c "cd ${HILBERT_CONFIG_DIR}/ && ${LIST} * | ${XARGS}" 2>&1)]
 
-DRY_RUN:     [${DRY_RUN}]
-LOGLEVEL:    [${LOGLEVEL}]
+OGL:         [${HILBERT_CONFIG_BASEDIR}/${OGL}: $(${LIST} -l "${HILBERT_CONFIG_BASEDIR}/${OGL}" 2>&1)]
+HILBERT_OGL: [${HILBERT_OGL}: $(${LIST} -l "${HILBERT_OGL}" 2>&1)]
 
-XSETROOT:    [${XSETROOT}]
+DOCKER:      [${DOCKER} ($(${DOCKER} --version 2>&1)): $(_which_ext "${DOCKER}")]
+DOCKER_GC:   [${DOCKER_GC}: $(_which_ext "${DOCKER_GC}")]
 
-OGL:         [${HILBERT_CONFIG_BASEDIR}/${OGL}: $(ls -l "${HILBERT_CONFIG_BASEDIR}/${OGL}" 2>&1)]
-HILBERT_OGL: [${HILBERT_OGL}: $(ls -l "${HILBERT_OGL}" 2>&1)]
-
-DOCKER:      [${DOCKER}: $(${DOCKER} --version 2>&1)]
-DOCKER_GC:   [${DOCKER_GC}: $(ls -l "$(which "${DOCKER_GC}" 2>&1)" 2>&1)]
-
-DOCKER_COMPOSE:       [${DOCKER_COMPOSE}: $(${DOCKER_COMPOSE} --version 2>&1)]
+DOCKER_COMPOSE:       [${DOCKER_COMPOSE} ($(${DOCKER_COMPOSE} --version 2>&1)): $(_which_ext "${DOCKER_COMPOSE}")]
 COMPOSE_PROJECT_NAME: [${COMPOSE_PROJECT_NAME}]
+COMPOSE_PATH_SEPARATOR: [${COMPOSE_PATH_SEPARATOR}]
 
 HILBERT_CUSTOMIZATIONS:     [${HILBERT_CUSTOMIZATIONS}]
-HILBERT_COMPOSE_CUSTOMIZER: [$(ls -l "$(which "${HILBERT_COMPOSE_CUSTOMIZER}" 2>&1)" 2>&1)]
+HILBERT_COMPOSE_CUSTOMIZER: [${HILBERT_COMPOSE_CUSTOMIZER}: $(_which_ext "${HILBERT_COMPOSE_CUSTOMIZER}")]
 
 HOME:        [${HOME}]
 PWD:         [${PWD}]
 PATH:        [${PATH}]
 
 date:        [$(date)]
+TERM:        [${TERM}]
 uname:       [$(uname -a)]
 hostname:    [$(hostname), $(hostname -I)]
 id:          [$(id)]
 
-SHUTDOWN:    [${SHUTDOWN}: $(ls -l "${SHUTDOWN}")]
-PTMX:        [$(ls -l /dev/pts/ptmx 2>&1)]
+PTMX:        [$(${LIST} -l /dev/pts/ptmx 2>&1)]
 
 EOF
-    echo "Current Station Configuration [${HILBERT_CONFIG_FILE}]:
-"
-    cat "${HILBERT_CONFIG_FILE}"  # TODO: indent the file contents for pretty-printing?
-    echo ""
+    # TODO: indent the file contents for pretty-printing?
+    ${CAT} << EOF
+Current Station Configuration [${HILBERT_CONFIG_DIR}/${HILBERT_CONFIG_FILE}]:
+$(${CAT} "${HILBERT_CONFIG_DIR}/${HILBERT_CONFIG_FILE}")
+EOF
 
     local H=($(${DOCKER} ps -qa --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" 2>/dev/null))
     if [[ -n "${H[*]}" ]]; then
-        echo "
+        ${CAT} << EOF
 Previously started Hilbert's services/applications found:
-"
-        ${DOCKER} ps -a --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}"
+$(${DOCKER} ps -a --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}")
+EOF
     else
         INFO "No previously started services detected!"
     fi
 
     cmd_native_autodetect
-    return 0
+    return ${ERR_CODE_SUCCESS}
 }
 
-## @fn cmd_version Script name + version
-## NOTE: will show more info for debugging
-function cmd_version() {
-    cat << EOF
+function cmd_version() {         ## @fn Show Script name + version. May show more info for debugging
+    ${CAT} << EOF
 ${TOOL} Version ID: [${HILBERT_STATION_VERSION_ID}]
 EOF
     if [[ $LOGLEVEL -le 1 ]]; then
         cmd_info
     fi
-    return 0
+    return ${ERR_CODE_SUCCESS}
 }
 
 declare -rg INPUT_ARGS=($@)
+declare -g INPUT_OPT=""
+declare -g VERBOSITY_DELTA=1
+declare -g DO_BASH_TRACE=0
 
 # NOTE: Custom argument/option handling only using 'getopts'!
-while getopts ":hqtTdDvV" opt; do   # NOTE: removed 'p' for now
+while getopts ":hsqtTdDviVL" opt; do
+    INPUT_OPT="${INPUT_OPT} -${opt}"
     case ${opt} in
+    i )
+        cmd_info
+        exit ${ERR_CODE_SUCCESS}
+        ;;
     h )
         cmd_usage
-        exit 0
+        cmd_internal_usage
+        exit ${ERR_CODE_SUCCESS}
         ;;
     V )
         cmd_version "$@"
-        exit 0
+        exit ${ERR_CODE_SUCCESS}
         ;;
     t )
         # NOTE: see also http://tldp.org/LDP/Bash-Beginners-Guide/html/sect_02_03.html
-        DEBUG "Turning on tracing of bash command execution + verbosity..."
+#        DEBUG "Turning on tracing of bash command execution + verbosity..."
+        DO_BASH_TRACE=1
         set -v
         set -x
         ;;
     T )
         # NOTE: see also http://tldp.org/LDP/Bash-Beginners-Guide/html/sect_02_03.html
-        DEBUG "Turning off tracing of bash command execution + verbosity..."
+#        DEBUG "Turning off tracing of bash command execution + verbosity..."
         set +v
         set +x
+        DO_BASH_TRACE=0
+        ;;
+    L )
+#        DEBUG "Disable locking..."
+        LOCKING="0"
+        ;;
+    s )
+#        DEBUG "Going silent: no errors or warnings etc!"
+        LOGLEVEL=5
+        # no more changes of LOGLEVEL!
+        VERBOSITY_DELTA=0
         ;;
     v )
-        DEBUG "Increase verbosity..."
-        LOGLEVEL=$((LOGLEVEL-1))
+#        DEBUG "Increase verbosity..."
+        LOGLEVEL=$((LOGLEVEL-VERBOSITY_DELTA))
         ;;
     q )
-        DEBUG "Decrease verbosity..."
-        LOGLEVEL=$((LOGLEVEL+1))
+#        DEBUG "Decrease verbosity..."
+        LOGLEVEL=$((LOGLEVEL+VERBOSITY_DELTA))
         ;;
     d )
-        DEBUG "Turning on dry-run mode..."
-        DRY_RUN="Dry-Run-Mode"
+#        DEBUG "Turning on dry-run mode..."
+        DRY_RUN="DRYRUN"
         ;;
     D )
-        DEBUG "Turning off dry-run mode..."
+#        DEBUG "Turning off dry-run mode..."
         DRY_RUN=""
         ;;
     \? )
-        ERROR "Invalid Option: -$OPTARG"
-        exit 1
+        ERROR "Invalid option: [-$OPTARG]!"
+        exit ${ERR_CODE_EXT_ERROR}
         ;;
     esac
 done
 
-DEBUG "Input args: [${INPUT_ARGS[@]}]"
+DEBUG "Input args: [${INPUT_ARGS[@]}]. Processed options: [${INPUT_OPT}] => LOCKING: [${LOCKING}], LOGLEVEL: [${LOGLEVEL}], DRY_RUN: [${DRY_RUN}], DO_BASH_TRACE: [${DO_BASH_TRACE}].",
 
 if [[ ! -d "${HILBERT_CONFIG_BASEDIR}" ]]; then
-    DEBUG "Base Configuration base directory '${HILBERT_CONFIG_BASEDIR}' is missing!"
-    mkdir -p "${HILBERT_CONFIG_BASEDIR}"
+    DEBUG "Base Configuration base directory [${HILBERT_CONFIG_BASEDIR}] is missing!"
+    ${MKDIR} -p "${HILBERT_CONFIG_BASEDIR}"
 fi
 
 if [[ ! -r "${HILBERT_CONFIG_BASEDIR}" ]]; then
-    DEBUG "Base Configuration directory '${HILBERT_CONFIG_BASEDIR}' is unreadable!"
-    chmod u+rwx "${HILBERT_CONFIG_BASEDIR}"
+    DEBUG "Base Configuration directory [${HILBERT_CONFIG_BASEDIR}] is unreadable!"
+    ${CHMOD} u+rwx "${HILBERT_CONFIG_BASEDIR}"
 fi
 
 if [[ ! -d "${HILBERT_CONFIG_BASEDIR}" ]]; then
-    ERROR "Base Configuration directory '${HILBERT_CONFIG_BASEDIR}' is missing!"
-    exit 1
+    ERROR "Base Configuration directory [${HILBERT_CONFIG_BASEDIR}] is missing!"
+    exit ${ERR_CODE_EXT_ERROR}
 fi
 
 if [[ ! -r "${HILBERT_CONFIG_BASEDIR}" ]]; then
-    ERROR "Configuration directory '${HILBERT_CONFIG_BASEDIR}' is unreadable!"
-    exit 1
+    ERROR "Configuration directory [${HILBERT_CONFIG_BASEDIR}] is unreadable!"
+    exit ${ERR_CODE_EXT_ERROR}
 fi
 
-DEBUG "Base Configuration directory '${HILBERT_CONFIG_BASEDIR}' exists and is readable..."
+DEBUG "Base Configuration directory [${HILBERT_CONFIG_BASEDIR}] exists and is readable..."
 
 if [[ ! -d "${HILBERT_CONFIG_DIR}" ]]; then
-    DEBUG "Configuration directory '${HILBERT_CONFIG_DIR}' is initialized yet!"
+    DEBUG "Configuration directory [${HILBERT_CONFIG_DIR}] is initialized yet!"
 fi
 
-if [[ ! -r "${HILBERT_CONFIG_FILE}" ]]; then
-    WARNING "Station Configuration file '${HILBERT_CONFIG_FILE}' is unreadable!"
-#    exit 1
+if [[ ! -r "${HILBERT_CONFIG_DIR}/${HILBERT_CONFIG_FILE}" ]]; then
+    WARNING "Station Configuration file [${HILBERT_CONFIG_DIR}/${HILBERT_CONFIG_FILE}] is unreadable!"
+#    exit ${ERR_CODE_EXT_ERROR}
 else
-    DEBUG "Station Configuration file '${HILBERT_CONFIG_FILE}' exists and is readable..."
+    DEBUG "Station Configuration file [${HILBERT_CONFIG_DIR}/${HILBERT_CONFIG_FILE}] exists and is readable..."
 fi
 
 
@@ -453,11 +688,11 @@ declare -rA _type_specs=( ['compose']='file ref' )
 function _service_get_type_spec() {
     ## NOTE: ServiceType: 'compose' etc...
     local f="${_type_specs[$*]}"
-    echo "$f"
+    ${ECHO} "$f"
     if [[ -z "$f" ]]; then
-        return 2
+        return ${ERR_CODE_INT_ERROR}
     fi
-    return 0
+    return ${ERR_CODE_SUCCESS}
 }
 
 function _service_get_type() {
@@ -467,7 +702,7 @@ function _service_get_type() {
 
 function _service_get_field() {
     local k="$1:$2"
-    echo "${hilbert_station_services_and_applications[$k]}"
+    ${ECHO} "${hilbert_station_services_and_applications[$k]}"
     return $?
 }
 
@@ -498,165 +733,447 @@ function _service_get_info() {
         ret+=", $k: '$data'"
     done
 
-    echo "$ret"
-    return 0
+    ${ECHO} "$ret"
+    return ${ERR_CODE_SUCCESS}
 }
 
-
-function cmd_install_station_config() {
+function cmd_install_station_config() { ## @fn Try to Install new station configuration instead of the current one (to be backuped)
     local arg="$*"
-    local base
-    local new_cfg_dir
 
     if [[ -z "${arg}" ]]; then
-        ERROR "Wrong argument '${arg}'!"
+        ERROR "Wrong argument [${arg}]!"
         cmd_usage
-        exit 1
+        exit ${ERR_CODE_EXT_ERROR}
     fi
-
-    base=$(basename "${arg}")
-
-    new_cfg_dir=$(mktemp -u -d --tmpdir="${HILBERT_CONFIG_BASEDIR}" "$base.XXXXXXXXXX")
-    DEBUG "NOTE: new config is '${base}' => new_cfg_dir: '${new_cfg_dir}'"
 
     # TODO: what about further resources? Maybe a .tar.gz and unpack it into ${new_cfg_dir}? rsync?!
-    if [[ -d "${arg}" ]]; then
+    if [[ -d "${arg}" && -x "${arg}" && -r "${arg}" ]]; then
+        INFO "Directory with a new-configuration: [${arg}]"  # is not yet fully supported!!!?
 
-        WARNING "New configuration directory: '${arg}'"  # is not yet fully supported!!!?
-
-        if [[ ! -r "${arg}/station.cfg" ]]; then
-            ERROR "Station configuration file '${arg}/station.cfg' is not readable or missing!"
+        if [[ ! -r "${arg}/${HILBERT_CONFIG_FILE}" ]]; then
+            ERROR "Station configuration file [${arg}/${HILBERT_CONFIG_FILE}] is not readable or missing!"
             cmd_usage
-            exit 1
+            exit ${ERR_CODE_EXT_ERROR}
         fi
-
-        # NOTE: take over the deployed station configurations
-        DEBUG "Moving ${arg} => ${new_cfg_dir}..."
-        mv "${arg}" "${new_cfg_dir}"
-
-    elif [[ -r "${arg}" ]]; then
-
-        # NOTE: New station's configuration file
-        # TODO: make sure there is no such dir yet!
-
-        WARNING "Deprecated init method!!!"
-        INFO "Initializing with a single station-config file: [${arg}]... Unique base name: $base"
-
-        # NOTE: take over the deployed station configuration file!
-        DEBUG "Moving ${arg} => ${new_cfg_dir}/station.cfg"
-
-        mkdir -p "${new_cfg_dir}"  ## TODO: add mode?
-        mv "${arg}" "${new_cfg_dir}/station.cfg"
-
-        # NOTE: the rest of resources must be installed manually by hand:
-        ln -s '../docker-compose.yml' "${new_cfg_dir}/docker-compose.yml"
     else
-        ERROR "Cannot Install configuration specified by '${arg}'!"
+        ERROR "Cannot Install configuration specified by [${arg}]!"
         cmd_usage
-        exit 1
+        exit ${ERR_CODE_EXT_ERROR}
     fi
 
 
-    if [[ -L "${HILBERT_CONFIG_DIR}" ]]; then
-        DEBUG "${HILBERT_CONFIG_DIR} -> $(readlink -f "${HILBERT_CONFIG_DIR}")"
-        # TODO: remove older config?
-        unlink "${HILBERT_CONFIG_DIR}"
-    elif [[ -d "${HILBERT_CONFIG_DIR}" ]]; then
-        ERROR "Directory ${HILBERT_CONFIG_DIR} exists and it is not a link!"
-        exit 2
+    ### TODO: check beforehand and if necessary pre stop everything ++ post start anew,
+    ### forget the currently running application choice??
+    ###    cmd_detect_changes
+    local _old="$(${READLINK} -f "${HILBERT_CONFIG_DIR}")"
+    # rsync -zavc src/ dest/ --dry-run # -zaic
+
+    local base=$(${BASENAME} "${arg}")
+    local new_cfg_dir=$(${MKTEMP} -u -d --tmpdir="${HILBERT_CONFIG_BASEDIR}" "$base.XXXXXXXXXX") # dry run: just output it!
+    DEBUG "NOTE: new config is [${base}] => new_cfg_dir: [${new_cfg_dir}]"
+
+    # NOTE: take over the deployed station configurations
+    DEBUG "Moving ${arg} => ${new_cfg_dir}..."
+    DRYRUN ${MOVE} "${arg}" "${new_cfg_dir}" # rsync --backup --backup-dir
+    if [[ $? -ne 0 ]]; then
+        ERROR "Failed to move temporary configuration directory [${arg}] to [${new_cfg_dir}]!"
+        exit ${ERR_CODE_EXT_ERROR}
     fi
 
-    ## NOTE: atomic configuration update!
-    ## NOTE: full path in symbolic link => may interfere when volume-mounted...
-    ln -sf "$(basename "${new_cfg_dir}")" "${HILBERT_CONFIG_DIR}"
-
-    if [[ ! -L "${HILBERT_CONFIG_DIR}" ]]; then
-        ERROR "${HILBERT_CONFIG_DIR} is not a link!"
-        exit 2
+    ## NOTE: All deployed docker-compose.yml files will be previously prepared & simplified due to the following:
+    HILBERT_CONFIG_DIR=${new_cfg_dir} cmd_tool_subcall -L cmd_init_services
+    if [[ $? -ne 0 ]]; then
+        ERROR "Could not initialize/prepare in new Hilbert dir [${new_cfg_dir}]!"
+        # TODO: remove this temporary dir?
+        exit ${ERR_CODE_INT_ERROR}
     fi
 
-    ## TODO: FIXME: All deployed docker-compose.yml files should be previously pre-peared & simplified!
-    return 0
+    cmd_set_station_config_reference "$(${BASENAME} "${new_cfg_dir}")"
+    # TODO: any non-zero return codes?
+
+    # TODO: backup older config for a while. FIXME: limited number of backups?
+    DRYRUN ${MOVE} --backup=numbered -T "${_old}" "${HILBERT_CONFIG_BACKUP}"
+
+    # Max 10 backups!
+    local _max_backup="10"
+    if [[ -d "${HILBERT_CONFIG_BACKUP}.~${_max_backup}~" ]]; then
+        local _i=1
+
+        DRYRUN ${REMOVE} -Rf "${HILBERT_CONFIG_BACKUP}.~${_i}~"
+
+        for ((;;_i++)); do
+            [[ ${_i} -ge ${_max_backup} ]] && break
+
+            DRYRUN ${MOVE} -f "${HILBERT_CONFIG_BACKUP}.~$((_i+1))~" "${HILBERT_CONFIG_BACKUP}.~${_i}~"
+        done
+    fi
+
+    return ${ERR_CODE_SUCCESS}
 }
 
-
-## @fn cmd_read_configuration
-function cmd_read_configuration() {
-    if [[ ! -r "${HILBERT_CONFIG_FILE}" ]]; then
-        ERROR "Configuration file '${HILBERT_CONFIG_FILE}' is not readable ($(ls -la ${HILBERT_CONFIG_FILE})!"
-        exit 1
+function cmd_read_configuration() { ## @fn Read current station configuration
+    ## NOTE: read config file specified by HILBERT_CONFIG_FILE
+    if [[ ! -r "${HILBERT_CONFIG_DIR}/${HILBERT_CONFIG_FILE}" ]]; then
+        ERROR "Configuration file [${HILBERT_CONFIG_DIR}/${HILBERT_CONFIG_FILE}] is not readable ($(${LIST} -la "${HILBERT_CONFIG_DIR}/${HILBERT_CONFIG_FILE}")!"
+        exit ${ERR_CODE_INT_ERROR}
     fi
 
     # NOTE: try to read/check station configuration only once (if it is valid):
-    declare -p "hilbert_station_services_and_applications" 1>>/dev/null 2>&1
+    declare -p "hilbert_station_services_and_applications" &>/dev/null
     if [[ $? -eq 0 ]]; then
-        DEBUG "Configuration file has been loaded already!"
-        return 0
+        DEBUG "Some configuration file has been loaded already!"
+        return ${ERR_CODE_SUCCESS}
     fi
 
-    declare -p "hilbert_station_profile_services" 1>>/dev/null 2>&1
+    declare -p "hilbert_station_profile_services" &>/dev/null
     if [[ $? -eq 0 ]]; then
-        DEBUG "Configuration file has been loaded already!"
-        return 0
+        DEBUG "Some configuration file has been loaded already!"
+        return ${ERR_CODE_SUCCESS}
     fi
 
-    declare -p "hilbert_station_profile_services" 1>>/dev/null 2>&1
+    declare -p "hilbert_station_compatible_applications" &>/dev/null
     if [[ $? -eq 0 ]]; then
-        DEBUG "Configuration file has been loaded already!"
-        return 0
+        DEBUG "Some configuration file has been loaded already!"
+        return ${ERR_CODE_SUCCESS}
     fi
 
-    source "${HILBERT_CONFIG_FILE}"  # TODO: FIXME: only pass declare ... key="...value..."!?
+    source "${HILBERT_CONFIG_DIR}/${HILBERT_CONFIG_FILE}"  ## TODO: FIXME: only pass declare ... key="...value..."!?
     local _ret=$?
 
-    declare -p "hilbert_station_services_and_applications" 1>>/dev/null 2>&1
+    declare -p "hilbert_station_services_and_applications" &>/dev/null
     if [[ $? -ne 0 ]]; then
-        ERROR "Wrong local configuration file: '${HILBERT_CONFIG_FILE}'! NOTE: it should set at least 'hilbert_station_services_and_applications'!"
-        exit 1
+        ERROR "Wrong local configuration file: [${HILBERT_CONFIG_DIR}/${HILBERT_CONFIG_FILE}]! NOTE: it should set at least [hilbert_station_services_and_applications]!"
+        exit ${ERR_CODE_INT_ERROR}
     fi
 
-    declare -p "hilbert_station_profile_services" 1>>/dev/null 2>&1
+    declare -p "hilbert_station_profile_services" &>/dev/null
     if [[ $? -ne 0 ]]; then
-        DEBUG "Strange local configuration file: '${HILBERT_CONFIG_FILE}': 'hilbert_station_profile_services' is not set!"
+        WARNING "Strange local station's config file: [${HILBERT_CONFIG_DIR}/${HILBERT_CONFIG_FILE}]: [hilbert_station_profile_services] is not set!"
     fi
 
-    declare -p "hilbert_station_compatible_applications" 1>>/dev/null 2>&1
+    declare -p "hilbert_station_compatible_applications" &>/dev/null
     if [[ $? -ne 0 ]]; then
-        DEBUG "Strange local configuration file: '${HILBERT_CONFIG_FILE}': 'hilbert_station_compatible_applications' is not set!"
+        WARNING "Strange local station's config file: [${HILBERT_CONFIG_DIR}/${HILBERT_CONFIG_FILE}]: [hilbert_station_compatible_applications] is not set!"
     fi
 
     return ${_ret}
 }
 
-## @fn cmd_init
-## @param [cfg] (optional)
-function cmd_init() {
-    local arg="$*"
+function cmd_init() {         ## @fn Install/Initialize/Prepare Station configuration
+    local _arg="$*"
+    local _hilbert_is_running
+    local _ret
 
-    if [[ ! -w "/dev/pts/ptmx" ]]; then
-        if [[ -n "${DRY_RUN}" ]]; then
-            echo "[${DRY_RUN}] Simulating: [chmod a+rw /dev/pts/ptmx]..."
+    # Current configuration:
+    local _old="$(${READLINK} -f "${HILBERT_CONFIG_DIR}")"
+
+    # by default: only rerun all possible initialization/preparation routines!
+    if [[ -z "${_arg}" ]]; then # no new config. Just check current, refresh it [and restart]
+
+        # -L "${HILBERT_CONFIG_DIR}" &&  ??
+        if [[ -d "${_old}" && -x "${_old}" && -r "${_old}" ]]; then
+            if [[ ! -r "${_old}/${HILBERT_CONFIG_FILE}" ]]; then
+                ERROR "Current station config file [${_old}/${HILBERT_CONFIG_FILE}] is not readable or missing!"
+                exit ${ERR_CODE_INT_ERROR}
+            fi
+
+            INFO "Current configuration: [${HILBERT_CONFIG_DIR}] -> [${_old}]"
+
+            cmd_detect_running_hilbert # 0 - nothing! 1 => Hilbert is running!
+            _hilbert_is_running=$?
+
+            # refreshing:
+            cmd_prepare
+
+            cmd_init_services
+            _ret=$?
+            if [[ ${_ret} -ne 0 ]]; then
+                ERROR "Failed to initialize/prepare current configuration!"
+                exit ${_ret}
+            fi
+
+            # TODO: check for differences in caches!?
+
+            _ret=${ERR_CODE_SUCCESS}
+
+            # restarting if Hilbert is currently running
+            if [[ ${_hilbert_is_running} -ne 0 ]]; then
+                cmd_start # NOTE: means restart with the same current app.
+                _ret=$?
+            else
+                DEBUG "Hilbert was not running: no restart is performed!"
+            fi
+
+            DEBUG "Preparation/initialization is done! Ret code: [${_ret}]."
+            exit ${_ret}
         else
-            DEBUG "Trying to fix '/dev/pts/ptmx'-permissions:"
-
-            chmod a+rw /dev/pts/ptmx 1>/dev/null 2>&1 || \
-            sudo -n -P chmod a+rw /dev/pts/ptmx 1>/dev/null 2>&1 || \
-            WARNING "Could not run: 'chmod a+rw /dev/pts/ptmx'!"
+            ERROR "No current configuration [${HILBERT_CONFIG_DIR}] -> [${_old}]!"
+            ERROR "Wrong usage: please install/deploy a station configuration first!"
+            exit ${ERR_CODE_EXT_ERROR}
         fi
     fi
 
-    cmd_native_autodetect
-    if [[ -n "${arg}" && -r "${arg}" ]]; then
-        cmd_install_station_config "${arg}"
+    # new config!?
+    local new_cfg
+
+    cmd_compare_station_configs "${_arg}"
+    ## ret: 0 same config dirs - no changes!
+    ## ret: 1 init (update cached files + restart)
+    ## ret: 2 whole restart! (e.g. if no configuration is present or new config file is different)
+    new_cfg=$?
+
+    cmd_detect_running_hilbert # 0 - nothing! 1 => Hilbert is running!
+    _hilbert_is_running=$?
+
+    ############################################################
+    local _app=""
+    if [[ ${_hilbert_is_running} -ne 0 ]]; then
+        cmd_detect_top_application
+        _ret=$?
+        if [[ ${_ret} -ne 0 ]]; then
+            ERROR "Failed to detect the currently running application!"
+            exit ${_ret}
+        fi
+        _app="${APP_ID}"
+        DEBUG "Hilbert is currently running! Query for the current application returned: [${_app}], with ret. status: [$?]."
     fi
 
-    local s
+    # Start with general station preparation
+    cmd_prepare
+
+    ############################################################
+    if [[ ${new_cfg} -eq 0 ]]; then  # Identical configuration?
+
+        # Refreshing current configuration:
+        cmd_init_services
+        _ret=$?
+        if [[ ${_ret} -ne 0 ]]; then
+            ERROR "Failed to initialize/prepare current configuration!"
+            exit ${_ret}
+        fi
+
+        _ret=${ERR_CODE_SUCCESS}
+
+        # restarting if Hilbert is currently running
+        if [[ ${_hilbert_is_running} -ne 0 ]]; then
+            cmd_tool_subcall -L start # cmd_start
+            _ret=$?
+        else
+            DEBUG "Hilbert was not running: no restart is performed!"
+        fi
+
+        DEBUG "Preparation/initialization is done! Ret code: [${_ret}]."
+        return ${_ret}
+    fi
+
+
+    ############################################################
+    # similar configurations : (${new_cfg} == 1), or whole new configuration (${new_cfg} == 2)
+
+    ## NOTE: try to do preparation/initialization in temporary location before updating the global symbolic link!
+    cmd_install_station_config "${_arg}"
+    _ret=$?
+
+    if [[ ${_ret} -ne 0 ]]; then
+        ERROR "Failed to install new configuration from [${_arg}]!"
+        exit ${_ret}
+    fi
+
+    _ret=${ERR_CODE_SUCCESS}
+
+    # restarting if Hilbert is currently running
+    if [[ ${_hilbert_is_running} -ne 0 ]]; then
+
+        HILBERT_CONFIG_DIR="${HILBERT_CONFIG_BACKUP}" cmd_tool_subcall -L stop
+        _ret=$?
+
+        if [[ ${_ret} -ne 0 ]]; then
+            ERROR "Failed to stop services from [${HILBERT_CONFIG_BACKUP}]! Reverting and restarting..."
+            # reverting:
+            cmd_set_station_config_reference "$(${BASENAME} "${HILBERT_CONFIG_BACKUP}")"
+            DEBUG "Note that [cmd_set_station_config_reference \"$(${BASENAME} "${HILBERT_CONFIG_BACKUP}")\"] finished with exit code: [$?]..."
+
+            # restarting from old configuration:
+            HILBERT_CONFIG_DIR=${HILBERT_CONFIG_BACKUP} cmd_tool_subcall -L start "${_app}"
+            DEBUG "Note that [HILBERT_CONFIG_DIR=${HILBERT_CONFIG_BACKUP} cmd_tool_subcall -L start \"${_app}\"] finished with exit code: [$?]..."
+
+            exit ${_ret}
+        fi
+
+        # starting from new configuration:
+
+        # checking for same AppID:
+        cmd_tool_subcall -qqqqdL app_change "${_app}" &>/dev/null
+        if [[ $? -ne 0 ]]; then
+            # no such application in the new configuration! opting for the default one!
+            cmd_tool_subcall -L start
+        else
+            cmd_tool_subcall -L start "${_app}"
+        fi
+        _ret=$?
+
+        if [[ ${_ret} -ne 0 ]]; then
+            ERROR "Failed to stop services from [${HILBERT_CONFIG_DIR}]! Stopping, reverting and restarting..."
+
+            # stopping...
+            cmd_tool_subcall -L stop
+            DEBUG "Note that [cmd_tool_subcall -L stop] finished with exit code: [$?]..."
+
+            # reverting:
+            cmd_set_station_config_reference "$(${BASENAME} "${HILBERT_CONFIG_BACKUP}")"
+            DEBUG "Note that [cmd_set_station_config_reference \"$(${BASENAME} "${HILBERT_CONFIG_BACKUP}")\"] finished with exit code: [$?]..."
+
+            # restarting from old configuration:
+            HILBERT_CONFIG_DIR=${HILBERT_CONFIG_BACKUP} cmd_tool_subcall -L start "${_app}"
+            DEBUG "Note that [HILBERT_CONFIG_DIR=${HILBERT_CONFIG_BACKUP} cmd_tool_subcall -L start \"${_app}\"] finished with exit code: [$?]..."
+
+            exit ${_ret}
+        fi
+
+        return ${_ret}
+
+    else
+        DEBUG "Hilbert was not running: no restart is performed!"
+    fi
+
+    DEBUG "Preparation/initialization/installation/restart are all done! Ret code: [${_ret}]."
+    return ${_ret}
+}
+
+function cmd_tool_subcall() { ## @fn Execute this tool recursively. Add [-L] to avoid lock-guards for sub-process!
+    # LOGLEVEL=${LOGLEVEL} DRY_RUN=${DRY_RUN} HILBERT_CONFIG_DIR=...?!
+    local _cmd="${ENV} ${TOOL_SH} ${INPUT_OPT} $@"
+    DEBUG "Running [$TOOL $@] via [${_cmd}]"
+    eval "${_cmd}"
+    return $?
+}
+
+function cmd_compare_station_configs() { ## @fn compare some station configuration with the current one
+    ## NOTE: requires diff! ($DIFF)
+    ## NOTE: return-codes have special meanings!
+    ## ret: 0 same config dirs - no changes!
+    ## ret: 1 init (update cached files + restart)
+    ## ret: 2 whole restart! (e.g. if no configuration is present or new config file is different)
+    local arg="$1"
+
+    if [[ -z "${arg}" ]]; then
+        ERROR "Please specify a path to a configuration folder!"
+        exit ${ERR_CODE_INT_ERROR}
+    fi
+
+    # TODO: what about further resources? Maybe a .tar.gz and unpack it into ${new_cfg_dir}? rsync?!
+    if [[ -d "${arg}" && -x "${arg}" && -r "${arg}" ]]; then
+        INFO "New directory with configuration: [${arg}]"  # is not yet fully supported!!!?
+
+        if [[ ! -r "${arg}/${HILBERT_CONFIG_FILE}" ]]; then
+            ERROR "Station configuration file [${arg}/${HILBERT_CONFIG_FILE}] is not readable or missing!"
+            exit ${ERR_CODE_INT_ERROR}
+        fi
+    else
+        ERROR "Wrong configuration folder: [${arg}]!"
+        exit ${ERR_CODE_INT_ERROR}
+    fi
+
+    local _old="$(${READLINK} -f "${HILBERT_CONFIG_DIR}")"
+
+    # -L "${HILBERT_CONFIG_DIR}" && # ??
+    if [[ -d "${_old}" && -x "${_old}" && -r "${_old}" ]]; then
+        if [[ ! -r "${_old}/${HILBERT_CONFIG_FILE}" ]]; then
+            WARNING "Current station config file [${_old}/${HILBERT_CONFIG_FILE}] is not readable or missing!"
+            return 2
+        fi
+
+        INFO "Current configuration: [${HILBERT_CONFIG_DIR}] -> [${_old}]"
+    else
+        DEBUG "No current configuration [${HILBERT_CONFIG_DIR}] -> [${_old}]!"
+        return 2
+    fi
+
+    local _ret
+    ${DIFF} -aq "${_old}/${HILBERT_CONFIG_FILE}" "${arg}/${HILBERT_CONFIG_FILE}"
+    _ret=$?
+    if [[ ${_ret} -eq 0 ]]; then
+        DEBUG "Station Configs are the same! Only preparation/initialization may be required!"
+#        return 1
+    elif [[ ${_ret} -eq 1 ]]; then
+        DEBUG "Station Configs are different! Complete update is required!"
+        return 2
+    else
+        ERROR "Could not compare Station Configs: [${_old}/${HILBERT_CONFIG_FILE}] [${arg}/${HILBERT_CONFIG_FILE}]!"
+        exit ${ERR_CODE_EXT_ERROR}
+    fi
+
+    ### TODO: check beforehand and if necessary pre stop everything ++ post start anew,
+    ### forget the currently running application choice??
+    DEBUG "Comparison of the current configuration [${_old}] with the one in [$arg]: [diff -aqr -x 'cache_*.yaml' -x \"${HILBERT_CONFIG_FILE}\" \"${_old}\" \"$arg\"]..."
+#    ${RSYNC} -zaic "${_old}" "${arg}" --dry-run
+    ${DIFF} -aqr -x 'cache_*.yaml' -x 'override_*.yaml' -x "${HILBERT_CONFIG_FILE}" "${_old}" "${arg}"
+    _ret=$?
+
+    if [[ ${_ret} -eq 0 ]]; then
+        DEBUG "Same Configuration directories: nothing to update!!"
+        return 0
+    elif [[ ${_ret} -eq 1 ]]; then
+        DEBUG "Configs are different: configuration has to be updated!!"
+        return 1
+    else
+        ERROR "Could not compare configs!"
+        exit ${ERR_CODE_EXT_ERROR}
+    fi
+}
+
+function cmd_set_station_config_reference() { ## @fn Set station config reference
+    local new_cfg_dir="$@"
+
+    if [[ -L "${HILBERT_CONFIG_DIR}" ]]; then
+        DEBUG "Current latest configuration: ${HILBERT_CONFIG_DIR}: $(${LIST} -l "${HILBERT_CONFIG_DIR}")"
+
+#        DRYRUN ${UNLINK} "${HILBERT_CONFIG_DIR}"
+#        if [[ $? -ne 0 ]]; then
+#            ERROR "Failed to unlink [${HILBERT_CONFIG_DIR}]!"
+#            exit ${ERR_CODE_EXT_ERROR}
+#        fi
+
+    elif [[ -d "${HILBERT_CONFIG_DIR}" ]]; then
+        ERROR "Directory ${HILBERT_CONFIG_DIR} exists and it is not a link!"
+        exit ${ERR_CODE_INT_ERROR}
+    fi
+
+    ## NOTE: atomic configuration update!
+    ## NOTE: full path in symbolic link => may interfere when volume-mounted...
+    DRYRUN ${LINK} -snf "${new_cfg_dir}" "${HILBERT_CONFIG_DIR}"
+    if [[ $? -ne 0 ]]; then
+        ERROR "Failed to create a link [${HILBERT_CONFIG_DIR}] for [${new_cfg_dir}]!"
+        exit ${ERR_CODE_EXT_ERROR}
+    fi
+
+    # post-setup self-test
+    if [[ ! -L "${HILBERT_CONFIG_DIR}" ]]; then
+        ERROR "${HILBERT_CONFIG_DIR} is not a link!"
+        exit ${ERR_CODE_INT_ERROR}
+    fi
+
+    return ${ERR_CODE_SUCCESS}
+}
+
+function cmd_init_services() {         ## @fn Initialize/Prepare Station configuration
+    cmd_native_autodetect
     cmd_read_configuration
 
+    local s
+    local ret=""
+
+    local _ret
     if [[ ${#hilbert_station_profile_services[@]} -ne 0 ]]; then
         for s in "${hilbert_station_profile_services[@]}"; do
             DEBUG "Initializing service [$s]"
             cmd_init_service "${s}"
+            _ret=$?
+            if [[ ${_ret} -ne 0 ]]; then
+                ret="${ret} ${s}"
+                WARNING "Could not prepare/init service [${s}] due to some error (ret. code: ${_ret})!"
+                # exit ${ERR_CODE_INT_ERROR}
+            fi
         done
     fi
 
@@ -664,56 +1181,89 @@ function cmd_init() {
         for s in "${hilbert_station_compatible_applications[@]}"; do
             DEBUG "Initializing application [$s]"
             cmd_init_service "${s}"
+            _ret=$?
+            if [[ ${_ret} -ne 0 ]]; then
+                ret="${ret} ${s}"
+                WARNING  "Could not prepare/init service [${s}] due to some error (ret. code: ${_ret})!"
+                # exit ${ERR_CODE_INT_ERROR}
+            fi
         done
     fi
 
-    ## TODO: hilbert_cleanup==true? =>
+    if [[ -n ${ret} ]]; then
+        ERROR "There was an error while preparing/initializing the following services/applications: [$ret]"
+        return ${ERR_CODE_INT_ERROR}
+    else
+        return ${ERR_CODE_SUCCESS}
+    fi
+}
+
+function cmd_prepare() {         ## @fn Prepare Station
+    if [[ ! -w "/dev/pts/ptmx" ]]; then
+        DEBUG "Trying to fix permissions for [/dev/pts/ptmx]: [$(${LIST} -l /dev/pts/ptmx)]"
+        DRYRUN ${CHMOD} a+rw /dev/pts/ptmx 2>&1
+        DRYRUN ${SUDO} -n -P ${CHMOD} a+rw /dev/pts/ptmx 2>&1
+        #1>/dev/null )
+        if [[ ! -w "/dev/pts/ptmx" ]]; then
+            WARNING "Could not fix [/dev/pts/ptmx] yet!"
+        else
+            DEBUG "Successfully fixed permissions of [/dev/pts/ptmx]!"
+        fi
+    fi
+
+
+    ## TODO: hilbert_cleanup==true?  Cleanup/Prepare policy?
     if [[ -n "${DOCKER_GC}" ]]; then
         if hash "${DOCKER_GC}" 2>/dev/null; then
-            if [[ -z "${DRY_RUN}" ]]; then
-                echo "[${DRY_RUN}] Simulating: [${DOCKER_GC}]: "
-#                ${DOCKER_GC}  # NOTE: actually run this in production!
+            if [[ -n "${DRY_RUN}" ]]; then # TODO: switch to using DRYRUN
+                DRYRUN_ECHO "${DOCKER_GC}"
             else
-                echo "Running: [${DOCKER_GC}]"
+                DEBUG "Dry-running: [${DOCKER_GC}]...!" # NOTE: make sure to use docker_gc in production!
+                DRY_RUN=1 ${DOCKER_GC} &>/dev/null
             fi
         fi
     fi
 
     if [[ ! -r "${HILBERT_CONFIG_BASEDIR}/${OGL}" ]]; then
-        INFO "Missing/unreadable '${HILBERT_CONFIG_BASEDIR}/${OGL}'! Please regenerate it for OpenGL apps!"
+        DEBUG "Missing/unreadable [${HILBERT_CONFIG_BASEDIR}/${OGL}]! NOTE: It might be necessary for OpenGL apps!"
+    else
+        ## NOTE: Specific for GPU/OpenGL related apps:
+        if [[ ! -f "${HILBERT_OGL}" ]]; then
+            if [[ -f "${HILBERT_CONFIG_BASEDIR}/${OGL}" ]]; then
+                ${COPY} -fp "${HILBERT_CONFIG_BASEDIR}/${OGL}" "${HILBERT_OGL}" || ${SUDO} -n -P ${COPY} -fp "${HILBERT_CONFIG_BASEDIR}/${OGL}" "${HILBERT_OGL}"
+            fi
+        fi
     fi
 
-    return $?
+    if [[ ! -f "${HILBERT_OGL}" ]]; then
+        DEBUG "Missing [${HILBERT_OGL}]! Please regenerate and place to [${HILBERT_CONFIG_BASEDIR}]!"
+    fi
 }
 
-function cmd_xsetroot() { ## @fn Wrapper for xsetroot
-    ## NOTE: debug message
+
+function cmd_xsetroot() {         ## @fn Wrapper for xsetroot
+    ## NOTE: argument is a debug message
     local arg="$*"
 
     if [[ -n DISPLAY ]]; then
-        DEBUG "${arg}"
-
-        if [[ -n "${DRY_RUN}" ]]; then
-            echo "[${DRY_RUN}] Simulating: [${XSETROOT}]"
-        else
-            ${XSETROOT}
-        fi
+        DEBUG "Message: ${arg}"
+        DRYRUN ${XSETROOT}
     else
         WARNING "Could not execute [${XSETROOT}] without X11 display! Debug message was: [${arg}]!"
     fi
 }
 
 
-function cmd_app_change() { ## @fn Change current application (to be stopped) to the given one (to be started)
+function cmd_app_change() {         ## @fn Change current application (to be stopped) to the given one (to be started)
     ## NOTE: Application ID:
     local arg="$*"
 
     cmd_native_autodetect
 
     if [[ -z ${arg} ]]; then
-        ERROR "Wrong argument '${arg}'!"
+        ERROR "Wrong argument [${arg}]!"
         cmd_usage
-        exit 1
+        exit ${ERR_CODE_EXT_ERROR}
     fi
 
     cmd_read_configuration
@@ -721,17 +1271,18 @@ function cmd_app_change() { ## @fn Change current application (to be stopped) to
     cmd_detect_top_application
     if [[ $? -ne 0 ]]; then
         WARNING "Could not properly detect the current top application!"
-        if [[ -n "${current_top_application_id}" ]]; then
-            WARNING "Trying to stop (all) found top apps: ${current_top_application_id}..."
-            cmd_docker_stop "${current_top_application_id}"
-        fi
-    else
-        if [[ "${APP_ID}" != "$arg" ]]; then
-            cmd_stop_service "${APP_ID}"
-        else
-            cmd_stop_service "${APP_ID}"  #  cmd_restart_service "${APP_ID}" ; return 0 # Same Application ID => Same Env.Vars??? :-(
-        fi
     fi
+
+    if [[ -n "${current_top_application_id}" ]]; then
+        WARNING "Trying to stop (all) found top apps: ${current_top_application_id}..."
+        cmd_docker_stop "${current_top_application_id}"
+    elif [[ -n "${APP_ID}" ]]; then
+#    if [[ "${APP_ID}" != "$arg" ]]; then
+#    cmd_stop_service "${APP_ID}"
+#    else
+        cmd_stop_service "${APP_ID}"  #  cmd_restart_service "${APP_ID}" ; return 0 # Same Application ID => Same Env.Vars??? :-(
+    fi
+
 
     cmd_xsetroot "Paint X11 root desktop before starting [$arg]"
 
@@ -739,13 +1290,13 @@ function cmd_app_change() { ## @fn Change current application (to be stopped) to
     return $?
 }
 
-function cmd_start_service() {
+function cmd_start_service() { ## @fn Start Hilbert service
     local arg="$*"
 
     if [[ -z ${arg} ]]; then
-        ERROR "Wrong argument '${arg}'!"
+        ERROR "Wrong argument [${arg}]!"
         cmd_usage
-        exit 1
+        exit ${ERR_CODE_EXT_ERROR}
     fi
 
     cmd_read_configuration
@@ -753,9 +1304,14 @@ function cmd_start_service() {
     local t
     t="$(_service_get_type "${arg}")"
 
+    if [[ $? -ne 0 ]]; then
+        ERROR "Invalid service/application: [${arg}]!"
+        exit ${ERR_CODE_EXT_ERROR}
+    fi
+
     if [[ "x$t" != "xcompose" ]]; then
-        ERROR "Unsupported application type of service/application '${arg}': '$t'"
-        exit 1
+        ERROR "Unsupported application type of service/application [${arg}]: [$t]"
+        exit ${ERR_CODE_EXT_ERROR}
     fi
 
     ## NOTE: auto_detections are common for any type...
@@ -772,24 +1328,28 @@ function cmd_start_service() {
     return $?
 }
 
-function cmd_init_service() {
-    ## NOTE: Application/Service ID
+function cmd_init_service() { ## @fn Prepare/initialize Hilbert service/application. E.g. pull docker image, cache docker-compose.yml, run pre_init hook
+    ## NOTE: Application ID | Service ID
     local arg="$*"
 
-    if [[ -z ${arg} ]]; then
-        ERROR "Wrong argument '${arg}'!"
-        cmd_usage
-        exit 1
-    fi
-
-    cmd_read_configuration
+#    if [[ -z ${arg} ]]; then
+#        ERROR "Missing argument (service/application ID)!"
+#        cmd_usage
+#        exit ${ERR_CODE_INT_ERROR}
+#    fi
+#    cmd_read_configuration
 
     local t
     t="$(_service_get_type "${arg}")"
 
+    if [[ $? -ne 0 ]]; then
+        ERROR "Invalid service/application: [${arg}]!"
+        exit ${ERR_CODE_EXT_ERROR}
+    fi
+
     if [[ ! "x$t" = "xcompose" ]]; then
-        ERROR "Wrong or unsupported application: '${arg}' (type: '$t')"
-        exit 1
+        ERROR "Wrong or unsupported application: [${arg}] (type: [$t])"
+        exit ${ERR_CODE_EXT_ERROR}
     fi
 
     ## NOTE: auto_detections are common for any type...
@@ -810,20 +1370,17 @@ function cmd_init_service() {
 
     DEBUG "Initializing/preparing service/application via docker-compose: ${arg}..."
     cmd_compose_init "${arg}"
-
     return $?
 }
 
-## @fn cmd_restart_service  Deprecated!!!! TO BE REMOVED!?
-## @param arg ApplicationID
-function cmd_restart_service() {
+function cmd_restart_service() { ## @fn Restart currently running service NOTE: Deprecated! TO BE REMOVED? @param arg ApplicationID
     ## NOTE: Application ID
     local arg="$*"
 
     if [[ -z ${arg} ]]; then
-        ERROR "Wrong argument '${arg}'!"
+        ERROR "Wrong argument [${arg}]!"
         cmd_usage
-        exit 1
+        exit ${ERR_CODE_EXT_ERROR}
     fi
 
     cmd_read_configuration
@@ -831,9 +1388,14 @@ function cmd_restart_service() {
     local t
     t="$(_service_get_type "${arg}")"
 
+    if [[ $? -ne 0 ]]; then
+        ERROR "Invalid service/application: [${arg}]!"
+        exit ${ERR_CODE_EXT_ERROR}
+    fi
+
     if [[ ! "x$t" = "xcompose" ]]; then
-        ERROR "Wrong or unsupported application: '${arg}' (type: '$t')"
-        exit 1
+        ERROR "Wrong or unsupported application: [${arg}] (type: [$t])"
+        exit ${ERR_CODE_EXT_ERROR}
     fi
 
     ## NOTE: auto_detections are common for any type...
@@ -850,16 +1412,14 @@ function cmd_restart_service() {
     return $?
 }
 
-## @fn cmd_stop_service
-## @param arg ApplicationID
-function cmd_stop_service() {
+function cmd_stop_service() { ## @fn Stop Hilbert Service, @param arg ApplicationID
     ## NOTE: Application ID
     local arg="$*"
 
     if [[ -z "${arg}" ]]; then
-        ERROR "Wrong argument '${arg}'!"
+        ERROR "Wrong argument [${arg}]!"
         cmd_usage
-        exit 1
+        exit ${ERR_CODE_EXT_ERROR}
     fi
 
     cmd_read_configuration
@@ -867,18 +1427,23 @@ function cmd_stop_service() {
     local t
     t="$(_service_get_type "${arg}")"
 
-    if [[ ! "x$t" = "xcompose" ]]; then
-        ERROR "Wrong or unsupported application: '${arg}' (type: '$t')"
-        exit 1
+    if [[ $? -ne 0 ]]; then
+        ERROR "Invalid service/application: [${arg}]!"
+        exit ${ERR_CODE_EXT_ERROR}
     fi
 
-    DEBUG "Stopping service/application via docker-compose: ${arg}..."
+    if [[ ! "x$t" = "xcompose" ]]; then
+        ERROR "Wrong or unsupported application: [${arg}] (type: [$t])"
+        exit ${ERR_CODE_EXT_ERROR}
+    fi
+
+    DEBUG "Stopping service/application via docker-compose: [${arg}]..."
     cmd_compose_stop "${arg}"
 
-    return 0
+    return $?
 }
 
-function cmd_compose_start() {
+function cmd_compose_start() { ## @fn Run Docker-Compose service
     ## NOTE: Application ID
     local arg="$*"
 
@@ -895,20 +1460,27 @@ function cmd_compose_start() {
         export COMPOSE_FILE="${PLAIN_COMPOSE_FILE}"
     else
         export COMPOSE_FILE="${HILBERT_APPLICATION_FILE:-docker-compose.yml}"  # Default value
+        local DOCKER_COMPOSE_OVERRIDE="override_for_${HILBERT_APPLICATION_ID}.yaml"
+        if [[ -r "${HILBERT_CONFIG_DIR}/${DOCKER_COMPOSE_OVERRIDE}" ]]; then
+            export COMPOSE_FILE="${COMPOSE_FILE}${COMPOSE_PATH_SEPARATOR}${DOCKER_COMPOSE_OVERRIDE}"
+        fi
     fi
 
     DEBUG "Starting service/application: ${HILBERT_APPLICATION_ID} (${HILBERT_APPLICATION_REF} from ${COMPOSE_FILE})..."
     cmd_docker_compose up -d "${HILBERT_APPLICATION_REF}"
-
+    local _ret=$?
     unset -v HILBERT_APPLICATION_ID COMPOSE_FILE
 
-    return 0
+    return ${_ret}
 }
 
 
-function cmd_compose_init() {
+function cmd_compose_init() { ## @fn Initialize/prepare/cache a Docker-Compose service for faster start-up
     ## NOTE: Application/Service ID (of compose type)
+    ## NOTE: operates in HILBERT_CONFIG_DIR!
     local arg="$*"
+    local ret
+
     export HILBERT_APPLICATION_ID="$arg"  # NOTE: To be set as env. variable APP_ID within container...
 
     local HILBERT_APPLICATION_FILE
@@ -921,16 +1493,10 @@ function cmd_compose_init() {
 
     if [[ ! -r "${HILBERT_CONFIG_DIR}/${COMPOSE_FILE}" ]]; then
         ERROR "COMPOSE_FILE [${HILBERT_CONFIG_DIR}/${COMPOSE_FILE}] is missing or unreadable!"
-        return 2
+        return ${ERR_CODE_INT_ERROR}
     fi
 
     local DOCKER_COMPOSE_OVERRIDE="override_for_${HILBERT_APPLICATION_ID}.yaml"
-
-    if [[ -n "${DRY_RUN}" ]]; then
-        echo "[${DRY_RUN}] Simulating: [rm '${HILBERT_CONFIG_DIR}/${DOCKER_COMPOSE_OVERRIDE}']"
-    else
-        rm -f "${HILBERT_CONFIG_DIR}/${DOCKER_COMPOSE_OVERRIDE}"
-    fi
 
     if hash "${HILBERT_COMPOSE_CUSTOMIZER}" 2>/dev/null; then
         DEBUG "Customizing for service/application: [${arg}]..."
@@ -938,41 +1504,36 @@ function cmd_compose_init() {
     fi
 
     if [[ -r "${HILBERT_CONFIG_DIR}/${DOCKER_COMPOSE_OVERRIDE}" ]]; then
-        export COMPOSE_FILE="${COMPOSE_FILE}:${DOCKER_COMPOSE_OVERRIDE}"
+        export COMPOSE_FILE="${COMPOSE_FILE}${COMPOSE_PATH_SEPARATOR}${DOCKER_COMPOSE_OVERRIDE}"
     fi
 
     local PLAIN_COMPOSE_FILE="cache_for_${HILBERT_APPLICATION_ID}.yaml"
-    DEBUG "Trying to simplify: '${COMPOSE_FILE}' -> '${PLAIN_COMPOSE_FILE}' in '${HILBERT_CONFIG_DIR}/': "
+    DEBUG "Trying to simplify: [${COMPOSE_FILE}] -> [${PLAIN_COMPOSE_FILE}] in [${HILBERT_CONFIG_DIR}/]: "
 
-    if [[ -n "${DRY_RUN}" ]]; then
-        echo "[${DRY_RUN}] Simulating: [rm '${HILBERT_CONFIG_DIR}/${PLAIN_COMPOSE_FILE}']"
-    else
-        rm -f "${HILBERT_CONFIG_DIR}/${PLAIN_COMPOSE_FILE}"
-    fi
+    DRYRUN ${REMOVE} -f "${HILBERT_CONFIG_DIR}/${PLAIN_COMPOSE_FILE}"
 
-    cmd_docker_compose config > "${HILBERT_CONFIG_DIR}/${PLAIN_COMPOSE_FILE}"
-    local ret=$?
-
-    if [[ $? -eq 0 && -r "${HILBERT_CONFIG_DIR}/${PLAIN_COMPOSE_FILE}" ]]; then  # && [[ -z "${DRY_RUN}" ]] ???
-        export COMPOSE_FILE="${PLAIN_COMPOSE_FILE}"
-    else
-        if [[ -n "${DRY_RUN}" ]]; then
-            echo "[${DRY_RUN}] Simulating: [rm '${HILBERT_CONFIG_DIR}/${DOCKER_COMPOSE_OVERRIDE}']"
-        else
-            : rm -f "${HILBERT_CONFIG_DIR}/${DOCKER_COMPOSE_OVERRIDE}" # !
-        fi
-    fi
-
-    cmd_docker_compose pull --ignore-pull-failures "${HILBERT_APPLICATION_REF}" | cat
+    cmd_docker_compose config 1> "${HILBERT_CONFIG_DIR}/${PLAIN_COMPOSE_FILE}"
     ret=$?
 
-    unset -v HILBERT_APPLICATION_ID COMPOSE_FILE
+    if [[ ${ret} -eq 0 && -s "${HILBERT_CONFIG_DIR}/${PLAIN_COMPOSE_FILE}" ]]; then
+        export COMPOSE_FILE="${PLAIN_COMPOSE_FILE}"
+        DRYRUN ${REMOVE} -f "${HILBERT_CONFIG_DIR}/${DOCKER_COMPOSE_OVERRIDE}"
+    fi
 
-    return $ret
+
+    cmd_docker_compose pull --ignore-pull-failures "${HILBERT_APPLICATION_REF}"
+    ret=$?
+
+    if [[ ${ret} -ne 0 ]]; then
+        WARNING "Could not run pull an image for [${HILBERT_APPLICATION_ID} / ${HILBERT_APPLICATION_REF}] using [${COMPOSE_FILE}]!"
+    fi
+
+    unset -v HILBERT_APPLICATION_ID COMPOSE_FILE
+    return ${ret}
 }
 
 
-function cmd_compose_restart() {
+function cmd_compose_restart() { ## @fn Restart Docker-Compose service. DEPRECATED. TO BE REMOVED?!
     ## NOTE: Application ID
     local arg="$*"
 
@@ -989,6 +1550,10 @@ function cmd_compose_restart() {
         export COMPOSE_FILE="${PLAIN_COMPOSE_FILE}"
     else
         export COMPOSE_FILE="${HILBERT_APPLICATION_FILE:-docker-compose.yml}"  # Default value
+        local DOCKER_COMPOSE_OVERRIDE="override_for_${HILBERT_APPLICATION_ID}.yaml"
+        if [[ -r "${HILBERT_CONFIG_DIR}/${DOCKER_COMPOSE_OVERRIDE}" ]]; then
+            export COMPOSE_FILE="${COMPOSE_FILE}${COMPOSE_PATH_SEPARATOR}${DOCKER_COMPOSE_OVERRIDE}"
+        fi
     fi
 
     DEBUG "Restarting service/application: ${HILBERT_APPLICATION_ID} (${HILBERT_APPLICATION_REF} from ${COMPOSE_FILE})..."
@@ -1000,7 +1565,7 @@ function cmd_compose_restart() {
     return $ret
 }
 
-function cmd_compose_stop() {
+function cmd_compose_stop() { ## @fn Stop Docker-Compose service
     local arg="$*"  # Application ID
 
     local HILBERT_APPLICATION_FILE
@@ -1016,29 +1581,37 @@ function cmd_compose_stop() {
         export COMPOSE_FILE="${PLAIN_COMPOSE_FILE}"
     else
         export COMPOSE_FILE="${HILBERT_APPLICATION_FILE:-docker-compose.yml}"  # Default value
+        local DOCKER_COMPOSE_OVERRIDE="override_for_${HILBERT_APPLICATION_ID}.yaml"
+        if [[ -r "${HILBERT_CONFIG_DIR}/${DOCKER_COMPOSE_OVERRIDE}" ]]; then
+            export COMPOSE_FILE="${COMPOSE_FILE}${COMPOSE_PATH_SEPARATOR}${DOCKER_COMPOSE_OVERRIDE}"
+        fi
     fi
 
     DEBUG "Stopping service/application: ${HILBERT_APPLICATION_ID} (${HILBERT_APPLICATION_REF} from ${COMPOSE_FILE})..."
 
     local d="${HILBERT_APPLICATION_REF}"
 
-    DEBUG "Stopping/Killing/Removing service '$d' using docker-compose..."
+    DEBUG "Stopping/Killing/Removing service [$d] using [${DOCKER_COMPOSE}]..."
 
+    local _ret=${ERR_CODE_SUCCESS}
     cmd_docker_compose kill -s SIGINT "$d" && sleep "${hibert_station_process_kill_timeout}"
+    _ret=$?
+
 #    cmd_docker_compose kill -s SIGTERM "$d"  #    cmd_docker_compose kill -s SIGKILL "$d"
     cmd_docker_compose stop -t "${hibert_station_process_kill_timeout}" "$d"
     cmd_docker_compose rm -vf "$d"
+#    _ret=$?
     cmd_docker_compose rm -vf "$d"  # NOTE: to remove "dead" left-over containers!
 #    (cmd_docker_compose rm "$d" || cmd_docker_compose rm -vf "$d")
 
     unset -v HILBERT_APPLICATION_ID COMPOSE_FILE
 
-    return 0
+    return ${_ret}
 }
 
-function cmd_docker_stop() {
+function cmd_docker_stop() {         ## @fn Stop/kill/renove a docker container
     local d=$*
-    DEBUG "Stopping/Killing/Removing service '$d' using '${DOCKER}'..."
+    DEBUG "Stopping/Killing/Removing service [$d] using [${DOCKER}]..."
 
     cmd_docker kill -s SIGINT $d && sleep "${hibert_station_process_kill_timeout}"
 #    cmd_docker kill -s SIGTERM $d #    cmd_docker kill -s SIGKILL $d
@@ -1050,10 +1623,10 @@ function cmd_docker_stop() {
     return $?
 }
 
-function cmd_docker_compose() {
-    if [[ -n "${DRY_RUN}" ]]; then
-        echo "[${DRY_RUN}] Simulating: [${DOCKER_COMPOSE} --skip-hostname-check $*], with COMPOSE_FILE='${COMPOSE_FILE}'"
-        return 0
+function cmd_docker_compose() { ## @fn Run low-level Docker-Compose command directly
+    if [[ -n "${DRY_RUN}" ]]; then # TODO: switch to using DRYRUN
+        DRYRUN_ECHO "COMPOSE_FILE='${COMPOSE_FILE}' ${DOCKER_COMPOSE} --skip-hostname-check $@"
+        return $?
     fi
 
     local S="${PWD}"
@@ -1062,188 +1635,258 @@ function cmd_docker_compose() {
     ## Actually run docker-compose
     # --debug / --verbose?
 #    COMPOSE_FILE="${CF}"
-    ${DOCKER_COMPOSE} --skip-hostname-check $@
+    ${DOCKER_COMPOSE} --skip-hostname-check "$@"
     local ret=$?
-
-    if [[ $ret -ne 0 ]]; then
-        ERROR "Could not run '${DOCKER_COMPOSE} --skip-hostname-check $*' in '${PWD}' with COMPOSE_FILE='${COMPOSE_FILE}'!"
-        return $ret
-    fi
 
     cd "${S}"
-    return 0
+
+    if [[ ${ret} -ne 0 ]]; then
+        ERROR "Could not run [${DOCKER_COMPOSE} --skip-hostname-check $@] in [${HILBERT_CONFIG_DIR}] with COMPOSE_FILE=[${COMPOSE_FILE}]!"
+    fi
+
+    return ${ret}
 }
 
-function cmd_docker() {
-    if [[ -n "${DRY_RUN}" ]]; then
-        echo "[${DRY_RUN}] Simulating: [${DOCKER} $*]"
-        return 0
+function cmd_docker() {         ## @fn Run low-level Docker command directly
+    if [[ -n "${DRY_RUN}" ]]; then # TODO: switch to using DRYRUN
+        DRYRUN_ECHO "${DOCKER} $*"
+        return ${ERR_CODE_SUCCESS}
     fi
 
+    local _CMD="$@"
     if [[ $LOGLEVEL -le "0" ]]; then
-        ${DOCKER} --debug --log-level=debug $@
+        _CMD="${DOCKER} --debug --log-level=debug ${_CMD}"
     else
-        ${DOCKER} $@
+        _CMD="${DOCKER} ${_CMD}"
     fi
+    eval ${_CMD}
     local ret=$?
 
-    if [[ $LOGLEVEL -le "-1" ]]; then
-        ${DOCKER} ps -a
-    fi
-
     if [[ $ret -ne 0 ]]; then
-        WARNING "Could not run '${DOCKER} [?--debug --log-level=debug?] $*' in '${PWD}'!"
-        ## exit 1
+        WARNING "Could not run [${_CMD}] in [${PWD}]! Ret: [${ret}]!"
+        if [[ $LOGLEVEL -le "-1" ]]; then
+            ${ECHO} "Current containers are as follows:"
+            ${DOCKER} ps -a
+        fi
+        ## exit ${ERR_CODE_EXT_ERROR} ## TODO: FIXME:
     fi
 
-    return $ret
+    return ${ret}
 }
 
 
 #function cmd_docker_pause() {
 #    local d=$*
-#    DEBUG "Pause service/application '$d' using '${DOCKER}'..."
+#    DEBUG "Pause service/application [$d] using [${DOCKER}]..."
 #
 #    cmd_docker pause $d
 #    return $?
 #}
 
-## NOTE: side effects:
-##    Container IDs: current_bg_servce_ids, current_top_application_id
-##    Hilbert Application ID: APP_ID, DC reference: current_top_application (unknown docker-compose.yml!)
-function cmd_detect_top_application() {
-    # TODO: FIXME: can only detect the DC's service name - not Application ID!!!
+function cmd_detect_top_application() {  ## @fn Detect the currently running Hilbert (top) application
+    ## NOTE: side effects:
+    ##    Container IDs: current_bg_servce_ids, current_top_application_id
+    ##    Hilbert Application ID: APP_ID, DC reference: current_top_application (unknown docker-compose.yml!)
     # NOTE: cannot attach a label in runtime to docker-compose service :-(
-    declare -rg current_bg_servce_ids=$(${DOCKER} ps -a -q --filter "label=is_top_app=0" --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" 2>/dev/null | xargs --no-run-if-empty)
+    declare -rg current_bg_servce_ids=$(${DOCKER} ps -a -q --filter "label=is_top_app=0" --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" 2>/dev/null | ${XARGS} --no-run-if-empty)
+    if [[ $? -ne 0 ]]; then
+        ERROR "Could not query Docker Engine via ${DOCKER}!"
+        return ${ERR_CODE_EXT_ERROR}
+    fi
 
     local TOP=($(${DOCKER} ps -a -q --filter "label=is_top_app=1" \
                --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" 2>/dev/null ))
-
     if [[ $? -ne 0 ]]; then
         ERROR "Could not query Docker Engine via ${DOCKER}!"
-        exit 1
+        return ${ERR_CODE_EXT_ERROR}
     fi
 
     local N=${#TOP[@]}
     declare -rg current_top_application_id="${TOP[@]}"
 
-    if [[ $N -eq 0 ]]; then
-        WARNING "Found no top application(s)!"
-        return 2
+    if [[ -z "${current_top_application_id}" ]]; then
+#        WARNING "Found no top application(s)!"
+        declare -gr APP_ID=""
+        declare -gr current_top_application=""
+        return ${ERR_CODE_SUCCESS}
     fi
 
     ## NOTE: By design there must be a single top (GUI) application!
     if [[ $N -ne 1 ]]; then
         WARNING "Found $N top applications: [${current_top_application_id}]!"
-        return 2
+        return ${ERR_CODE_INT_ERROR}
     fi
 
     local SV
     SV=$(${DOCKER} inspect --format='{{index .Config.Labels "com.docker.compose.service" }}' "${current_top_application_id}" 2>/dev/null)
     if [[ $? -ne 0 ]]; then
-        ERROR "Could not inspect container '${current_top_application_id}'"
-        exit 1
+        ERROR "Could not inspect container [${current_top_application_id}]"
+        return ${ERR_CODE_EXT_ERROR}
     fi
 
     # NOTE: set "Env APP_ID=' to Application ID!
-    declare -gr APP_ID=$(${DOCKER} inspect --format='{{index .Config.Env }}' "${current_top_application_id}" 2>/dev/null | sed -e 's@^.*APP_ID=@@g' -e 's@ .*$@@g')
+    declare -gr APP_ID=$(${DOCKER} inspect --format='{{index .Config.Env }}' "${current_top_application_id}" 2>/dev/null | ${SED} -e 's@^.*APP_ID=@@g' -e 's@ .*$@@g')
     if [[ $? -ne 0 ]]; then
-        ERROR "Could not inspect container '${current_top_application_id}' using ${DOCKER}"
-        exit 1
+        ERROR "Could not inspect container [${current_top_application_id}] using ${DOCKER}"
+        return ${ERR_CODE_EXT_ERROR}
     fi
 
-    DEBUG "Found $N top application '${current_top_application_id}': ${SV} / APP_ID: ${APP_ID}"
+    DEBUG "Found $N top application [${current_top_application_id}]: ${SV} / APP_ID: ${APP_ID}"
     declare -gr current_top_application="${SV}"
-    return 0
+    return ${ERR_CODE_SUCCESS}
 }
 
-## @fn cmd_list_applications List Applications
-function cmd_list_applications() {
+function cmd_detect_running_hilbert() {  ## @fn Detect the currently running Hilbert service(s)/application(s)
+## NOTE: special meaning for return codes!
+### ret: 0 if there are no currently running Hilbert service(s)/application(s)
+### ret: 1 if something is running!
+    local current_hilbert_ids=$(${DOCKER} ps -a -q --filter "label=is_top_app" \
+      --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" \
+      --filter "status=running" 2>/dev/null | ${XARGS} --no-run-if-empty)
+
+    if [[ $? -ne 0 ]]; then
+        ERROR "Could not query Docker Engine via ${DOCKER}!"
+        exit ${ERR_CODE_EXT_ERROR}
+    fi
+
+    if [[ -z "${current_hilbert_ids[@]}" ]]; then
+        DEBUG "There are no currently running Hilbert service(s) or application(s)!"
+        return 0 # nothing detected!
+    else
+        DEBUG "Currently running Hilbert service(s)/application(s) IDs: [${current_hilbert_ids[@]}]!"
+        return 1 # something is running!
+    fi
+    #    DEBUG "[${#current_hilbert_ids[@]}]: [${current_hilbert_ids[@]}]"
+}
+
+
+
+function cmd_list_applications() { ## @fn List Applications
     local data
 
     cmd_read_configuration
 
     if [[ -n "${hilbert_station_compatible_applications[@]}" ]]; then
-        echo "Aplications compatible with this station: "
+        ${ECHO} "Aplications compatible with this station: "
         for app in "${hilbert_station_compatible_applications[@]}"; do
             data="$(_service_get_info "${app}")"
             if [[ $? -ne 0 ]]; then
-                ERROR "Wrong Application ID: '${app}'"
+                ERROR "Wrong Application ID [${app}] specified in 'hilbert_station_compatible_applications' from station's config!"
+                exit ${ERR_CODE_INT_ERROR}
             else
-                echo " - ${app} [$data]"
+                ${ECHO} " - ${app} [$data]"
             fi
         done
     else
-        echo "No application are to be run on this station... this must be a server..!"
+        ${ECHO} "No application are to be run on this station... this must be a server..!"
     fi
 
     if [[ -n "${hilbert_station_default_application}" ]]; then
         ## NOTE: check whether ${hilbert_station_default_application} is a valid ID:
         data="$(_service_get_info "${hilbert_station_default_application}")"
         if [[ $? -ne 0 ]]; then
-            ERROR "Wrong Application ID: '${hilbert_station_default_application}'"
+            ERROR "Wrong Application ID specified in 'hilbert_station_default_application': [${hilbert_station_default_application}] from station's config!"
+            exit ${ERR_CODE_INT_ERROR}
         else
-            echo "Default application: ${hilbert_station_default_application} [$data]"
+            ${ECHO} "Default application: ${hilbert_station_default_application} [$data]"
         fi
     else
-        echo "No default application: is this a server?!"
+        ${ECHO} "No default application: is this a server?!"
     fi
 
     cmd_detect_top_application
     if [[ $? -ne 0 ]]; then
-        INFO "Could not properly detect previously started Hilbert's application!"
-        if [[ -n "${current_top_application_id}" ]]; then
-            echo "Previously started Hilbert's applications detected: "
-            ${DOCKER} ps -a --filter "label=is_top_app=1" --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}"
-        else
-            echo "No previously started applications detected!"
-        fi
-    else
-        echo "Previously started Hilbert's application(s) detected: '${APP_ID}' (ref: '${current_top_application}', id: '${current_top_application_id}')"
+        WARNING "Could not properly detect the current Hilbert applications or services!"
     fi
 
-    return 0
+    if [[ -n "${current_top_application_id}" ]]; then
+        ${ECHO} "Previously started Hilbert's applications detected: "
+        ${DOCKER} ps -a --filter "label=is_top_app=1" --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}"
+    fi
+
+    if [[ -n "${APP_ID}" || -n "${current_top_application}" || -n "${current_top_application_id}" ]]; then
+        ${ECHO} "Previously started Hilbert's application(s) detected: [${APP_ID}] (ref: [${current_top_application}], id: [${current_top_application_id}])"
+    else
+        ${ECHO} "No previously started applications detected!"
+    fi
+
+    return ${ERR_CODE_SUCCESS}
 }
 
-## @fn cmd_list_services List Services
-function cmd_list_services() {
+function cmd_list_services() { ## @fn List Hilbert Services for the current station configuration
     cmd_read_configuration
 
     if [[ -n "${hilbert_station_profile_services[@]}" ]]; then
-        echo "Background services according to the station profile: "
+        ${ECHO} "Background services according to the station profile: "
         for sv in "${hilbert_station_profile_services[@]}"; do
             local data
             data="$(_service_get_info "${sv}")"
             if [[ $? -ne 0 ]]; then
-                ERROR "Wrong Service ID: '${sv}'"
+                ERROR "Wrong Service ID [${sv}] specified in 'hilbert_station_profile_services' from station configuration"
+                exit ${ERR_CODE_INT_ERROR}
             else
-                echo " - ${sv} [$data]"
+                ${ECHO} " - ${sv} [$data]"
             fi
         done
     else
-        echo "No services will be running on this station!"
+        ${ECHO} "No services will be running on this station!"
     fi
 
     local BG
     BG=($(${DOCKER} ps -qa --filter "label=is_top_app=0" --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" 2>/dev/null))
     if [[ -n "${BG[*]}" ]]; then
-        echo "Previously started Hilbert's services detected: "
+        ${ECHO} "Previously started Hilbert's services detected: "
         ${DOCKER} ps -a --filter "label=is_top_app=0" --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}"
     else
-        echo "No previously started services detected!"
+        ${ECHO} "No previously started services detected!"
     fi
 
-    return 0
+    return ${ERR_CODE_SUCCESS}
 }
 
-## @fn cmd_start (re)start services and top application
-function cmd_start() {
+function cmd_get_current_application() { ## @fn output the currently running application or "" if no app. is currently running
+    local ret #    cmd_native_autodetect #    cmd_read_configuration
+    cmd_detect_top_application
+    ret=$?
+    if [[ ${ret} -ne 0 ]]; then
+        return ${ret}
+    fi
+
+    ${ECHO} "${APP_ID}"
+    return ${ERR_CODE_SUCCESS}
+}
+
+function cmd_get_default_application() { ## @fn output the application which is started by default
     cmd_native_autodetect
     cmd_read_configuration
-    cmd_detect_top_application
+    ${ECHO} "${hilbert_station_default_application}"
+    exit ${ERR_CODE_SUCCESS}
+}
+
+function cmd_start() {         ## @fn (re)start services and top application [prefered application]
+    local arg="$1" ## try to run this application if no app is currently running!
+    local data
+
+    cmd_native_autodetect
+    cmd_read_configuration
+
+    if [[ -n "${arg}" ]]; then
+        data="$(_service_get_info "${arg}")"
+        if [[ $? -ne 0 ]]; then
+            ERROR "Cannot start an unknown application [${arg}]!"
+            exit ${ERR_CODE_INT_ERROR}
+        fi
+    fi
+
+    cmd_detect_top_application # NOTE: lots of side-effects (current_top_application_id, current_bg_servce_ids, APP_ID)!
+    if [[ $? -ne 0 ]]; then
+        WARNING "Could not properly detect the current Hilbert applications or services!"
+    fi
+
     if [[ -z "${current_top_application_id}" && -z "${current_bg_servce_ids}" ]]; then
         DEBUG "OK: no applications or services are currently running. Clean reboot!"
     else
+        ## TODO: FIXME: the following detection/display of stale services/apps is docker-dependent!
         WARNING "Crash or multiple start detected: "
         ${DOCKER} ps -a --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}"
 
@@ -1268,14 +1911,15 @@ function cmd_start() {
 #        DEBUG "hilbert_autostart_delay: ${hilbert_autostart_delay} (positive int)"
 
         DEBUG "Will NOT start Hilbert now!.."
-        exit 0
+        exit ${ERR_CODE_SUCCESS}
     fi
 
     local start_application="${hilbert_station_default_application}"
 
     ## TODO: FIXME: check restart/crash policy!!!!!
     ## hilbert_restart_policy = "cleanup"?
-    ## Cleanup any other containers: e.g. docker ps -aq | xargs --no-run-if-empty docker rm -f
+
+    ## TODO: Cleanup any other containers: e.g. docker ps -aq | ${XARGS} --no-run-if-empty docker rm -f
     if [[ -n "${current_top_application_id}" ]]; then
         ## NOTE: restart policy: continue??
         if [[ -n "${APP_ID}" ]]; then
@@ -1285,7 +1929,12 @@ function cmd_start() {
         fi
 
         INFO "Trying to kill (all) found Hilbert's TOP applications: ${current_top_application_id}..."
-        cmd_docker_stop ${current_top_application_id}
+        cmd_docker_stop "${current_top_application_id}"
+    fi
+
+    if [[ -n "${arg}" ]]; then
+        DEBUG "Going to run [$arg] instead of current [${APP_ID}: ${current_top_application_id}] or default [${hilbert_station_default_application}] top application!"
+        start_application="${arg}"
     fi
 
     if [[ -n "${current_bg_servce_ids}" ]]; then
@@ -1293,23 +1942,15 @@ function cmd_start() {
         cmd_docker_stop ${current_bg_servce_ids}
     fi
 
-#    DEBUG "Sleeping for [${hilbert_autostart_delay}] sec (due to 'hilbert_autostart_delay' from '${HILBERT_CONFIG_FILE}')..."
+#    DEBUG "Sleeping for [${hilbert_autostart_delay}] sec (due to 'hilbert_autostart_delay' from [${HILBERT_CONFIG_DIR}/${HILBERT_CONFIG_FILE}])..."
 #    sleep "${hilbert_autostart_delay}"
 
-    ## NOTE: Specific for GPU/OpenGL related apps:
-    if [[ ! -f "${HILBERT_OGL}" ]]; then
-        if [[ -f "${HILBERT_CONFIG_BASEDIR}/${OGL}" ]]; then
-            cp -fp "${HILBERT_CONFIG_BASEDIR}/${OGL}" "${HILBERT_OGL}" || sudo -n -P cp -fp "${HILBERT_CONFIG_BASEDIR}/${OGL}" "${HILBERT_OGL}"
-        fi
-    fi
 
-    if [[ ! -f "${HILBERT_OGL}" ]]; then
-        WARNING "Missing '${HILBERT_OGL}'! Please regenerate and place to '${HILBERT_CONFIG_BASEDIR}'!"
-    fi
+    # Start with general station preparation
+    cmd_prepare
 
     local indices=( ${!hilbert_station_profile_services[@]} )  # Array of indices
     local N=${#indices[@]}
-    local data
 
     if [[ $N -ne 0 ]]; then
         local i
@@ -1319,7 +1960,7 @@ function cmd_start() {
             sv="${hilbert_station_profile_services[indices[i]]}"
             data="$(_service_get_info "$sv")"
             if [[ $? -ne 0 ]]; then
-                WARNING "Trying to start a bad service [${indices[i]}]: '${sv}'"
+                WARNING "Trying to start a bad service [${indices[i]}]: [${sv}]"
             else
                 DEBUG "Starting Service $sv: [$data]"
             fi
@@ -1327,19 +1968,21 @@ function cmd_start() {
             cmd_start_service "${sv}"
 
             if [[ $? -ne 0 ]]; then
-                ERROR "Could not start service: '${sv}' ($data)"
+                ERROR "Could not start service: [${sv}] ($data)"
+                exit ${ERR_CODE_INT_ERROR}
             fi
         done
     else
         DEBUG "No services should be running on this station!"
     fi
 
-    ## NOTE: start default application!
+    ## NOTE: start some application (either specified or )!
     if [[ -n "${start_application}" ]]; then
         ## NOTE: check whether ${start_application} is a valid ID:
         data="$(_service_get_info "${start_application}")"
         if [[ $? -ne 0 ]]; then
-            ERROR "Trying to start a bad application: '${start_application}'"
+            ERROR "Trying to start a bad application: [${start_application}]"
+            exit ${ERR_CODE_INT_ERROR}
         else
             DEBUG "Starting Default application: ${start_application} [$data]"
         fi
@@ -1352,19 +1995,24 @@ function cmd_start() {
         fi
 
         if [[ $? -ne 0 ]]; then
-            ERROR "Could not start application: '${start_application}' ($data)"
+            ERROR "Could not start application: [${start_application}] ($data)"
+            exit ${ERR_CODE_INT_ERROR}
         fi
     else
         INFO "No default application: is this a server?!"
     fi
-    return 0
+
+    return $?
 }
 
-## @fn cmd_stop stop current top application and background services
-function cmd_stop() {
+function cmd_stop() {         ## @fn Stop Hilbert's current top application and background services
     cmd_native_autodetect
     cmd_read_configuration
+
     cmd_detect_top_application
+    if [[ $? -ne 0 ]]; then
+        WARNING "Could not properly detect the current Hilbert applications or services!"
+    fi
     if [[ -n "${current_top_application_id}" ]]; then
         INFO "Previously started Hilbert's application(s) detected: [${current_top_application_id}, APP_ID: ${APP_ID}]"
 
@@ -1374,8 +2022,8 @@ function cmd_stop() {
         else
             cmd_stop_service "${APP_ID}"
         fi
-	
-        cmd_xsetroot "Paint X11 after stopping '${APP_ID}'"
+
+        cmd_xsetroot "Paint X11 after stopping [${APP_ID}]"
     else
         INFO "No previously started applications are currently detected"
     fi
@@ -1392,7 +2040,7 @@ function cmd_stop() {
             sv="${hilbert_station_profile_services[indices[i]]}"
             data="$(_service_get_info "$sv")"
             if [[ $? -ne 0 ]]; then
-                WARNING "Trying to stop a bad service [${indices[i]}]: '${sv}'"
+                WARNING "Trying to stop a bad service [${indices[i]}]: [${sv}]"
             else
                 DEBUG "Starting Service $sv: [$data]"
             fi
@@ -1400,7 +2048,8 @@ function cmd_stop() {
             cmd_stop_service "${sv}"
 
             if [[ $? -ne 0 ]]; then
-                ERROR "Could not stop service: '${sv}' ($data)"
+                ERROR "Could not stop service: [${sv}] ($data)"
+                exit ${ERR_CODE_INT_ERROR}
             fi
         done
 
@@ -1408,28 +2057,25 @@ function cmd_stop() {
     else
         DEBUG "No services should be running on this station!"
     fi
-    return 0
+
+    return $?
 }
 
-## @fn cmd_shutdown
-function cmd_shutdown() {
+function cmd_shutdown() {         ## @fn Shutdown PC
     local arg=$@
-    DEBUG "Shutting this system down... Arguments: [${arg}]"
+    DEBUG "Attempting to shut-down this system using [${SHUTDOWN} ${arg}])..."
 
-    if [[ -n "${DRY_RUN}" ]]; then
-        echo "[${DRY_RUN}] Simulating: [${SHUTDOWN} ${arg} || sudo -n -P ${SHUTDOWN} ${arg}]..."
-    else
-        ${SHUTDOWN} ${arg} || sudo -n -P ${SHUTDOWN} ${arg}
-    fi
+    DRYRUN ${SHUTDOWN} ${arg}
+    DRYRUN ${SUDO} -n -P ${SHUTDOWN} ${arg}
 }
 
-## @fn cmd_subcommand_handle Main CLI parser/handler
-function cmd_subcommand_handle() {
-    subcommand=$1; shift
+function cmd_subcommand_handle() { ## @fn Main CLI parser, sub-command handler
+    subcommand="$1"; shift
+    local _ret
 
-    DEBUG "Subcommand to handle: '$subcommand'"
+    DEBUG "Subcommand to handle: [${subcommand}]"
 
-    case "$subcommand" in
+    case "${subcommand}" in
     list_applications)
         cmd_start_locking
         ## TODO: arguments?
@@ -1474,30 +2120,42 @@ function cmd_subcommand_handle() {
         cmd_start "$*"
         exit $?
         ;;
+    cmd_usage|cmd_tool_subcall|cmd_native_autodetect|cmd_start_locking|cmd_subcommand_handle)
+        ${subcommand} "$@"
+        _ret=$?
+
+        if [[ ${_ret} -ne 0 ]]; then
+            ERROR "Something went wrong in subcommand handler: [${subcommand} \"$@\"]. Exit code: ${_ret}!"
+            exit ${_ret}
+        else
+            DEBUG "Script successfully handled hidden subcommand: [${subcommand} \"$@\"]!"
+            exit ${ERR_CODE_SUCCESS}
+        fi
+        ;;
     cmd_*) ## NOTE: hidden subcommand-s (for testing)
         ## NOTE: lock to be sure...
         cmd_start_locking
-        cmd_native_autodetect
-        ${subcommand} "$*"
-
-        if [[ $? -ne 0 ]]; then
-            ERROR "Something went wrong in subcommand handler: [${subcommand} '$*']!"
-            exit 1
+#        cmd_native_autodetect
+        ${subcommand} "$@"
+        _ret=$?
+        if [[ ${_ret} -ne 0 ]]; then
+            ERROR "Something went wrong in subcommand handler: [${subcommand} \"$@\"]. Exit code: ${_ret}!"
+            exit ${_ret}
         else
-            DEBUG "Script successfully handled hidden subcommand: [${subcommand}]!"
-            exit 0
+            DEBUG "Script successfully handled hidden subcommand: [${subcommand} \"$@\"]!"
+            exit ${ERR_CODE_SUCCESS}
         fi
         ;;
     esac
 
     if [[ -n "${subcommand}" ]]; then
-        ERROR "Invalid sub-command: '$subcommand'"
-        exit 1
+        ERROR "Invalid sub-command: [$subcommand]"
+        exit ${ERR_CODE_INT_ERROR}
     fi
 
-    ## NOTE: "${subcommand}" == ""
+    ## NOTE: "x${subcommand}" == "x"
     cmd_usage
-    exit 0
+    exit ${ERR_CODE_SUCCESS}
 }
 
 shift $((OPTIND -1))
