@@ -956,7 +956,7 @@ function cmd_init() {         ## @fn Install/Initialize/Prepare Station configur
 
         # restarting if Hilbert is currently running
         if [[ ${_hilbert_is_running} -ne 0 ]]; then
-            cmd_start
+            cmd_tool_subcall -L start # cmd_start
             _ret=$?
         else
             DEBUG "Hilbert was not running: no restart is performed!"
@@ -1332,13 +1332,12 @@ function cmd_init_service() { ## @fn Prepare/initialize Hilbert service/applicat
     ## NOTE: Application ID | Service ID
     local arg="$*"
 
-    if [[ -z ${arg} ]]; then
-        ERROR "Missing argument (service/application ID)!"
-        cmd_usage
-        exit ${ERR_CODE_INT_ERROR}
-    fi
-
-    cmd_read_configuration
+#    if [[ -z ${arg} ]]; then
+#        ERROR "Missing argument (service/application ID)!"
+#        cmd_usage
+#        exit ${ERR_CODE_INT_ERROR}
+#    fi
+#    cmd_read_configuration
 
     local t
     t="$(_service_get_type "${arg}")"
@@ -1371,7 +1370,6 @@ function cmd_init_service() { ## @fn Prepare/initialize Hilbert service/applicat
 
     DEBUG "Initializing/preparing service/application via docker-compose: ${arg}..."
     cmd_compose_init "${arg}"
-
     return $?
 }
 
@@ -1627,7 +1625,7 @@ function cmd_docker_stop() {         ## @fn Stop/kill/renove a docker container
 
 function cmd_docker_compose() { ## @fn Run low-level Docker-Compose command directly
     if [[ -n "${DRY_RUN}" ]]; then # TODO: switch to using DRYRUN
-        DRYRUN_ECHO "COMPOSE_FILE=${COMPOSE_FILE} ${DOCKER_COMPOSE} --skip-hostname-check $*"
+        DRYRUN_ECHO "COMPOSE_FILE='${COMPOSE_FILE}' ${DOCKER_COMPOSE} --skip-hostname-check $@"
         return $?
     fi
 
@@ -1637,7 +1635,7 @@ function cmd_docker_compose() { ## @fn Run low-level Docker-Compose command dire
     ## Actually run docker-compose
     # --debug / --verbose?
 #    COMPOSE_FILE="${CF}"
-    ${DOCKER_COMPOSE} --skip-hostname-check $@
+    ${DOCKER_COMPOSE} --skip-hostname-check "$@"
     local ret=$?
 
     cd "${S}"
@@ -2122,7 +2120,7 @@ function cmd_subcommand_handle() { ## @fn Main CLI parser, sub-command handler
         cmd_start "$*"
         exit $?
         ;;
-    cmd_usage|cmd_xsetroot|cmd_detect_running_hilbert|cmd_tool_subcall|cmd_native_autodetect|cmd_start_locking|cmd_subcommand_handle)
+    cmd_usage|cmd_tool_subcall|cmd_native_autodetect|cmd_start_locking|cmd_subcommand_handle)
         ${subcommand} "$@"
         _ret=$?
 
@@ -2137,7 +2135,7 @@ function cmd_subcommand_handle() { ## @fn Main CLI parser, sub-command handler
     cmd_*) ## NOTE: hidden subcommand-s (for testing)
         ## NOTE: lock to be sure...
         cmd_start_locking
-        cmd_native_autodetect
+#        cmd_native_autodetect
         ${subcommand} "$@"
         _ret=$?
         if [[ ${_ret} -ne 0 ]]; then
