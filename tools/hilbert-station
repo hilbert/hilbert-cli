@@ -1161,14 +1161,18 @@ function cmd_init_services() {         ## @fn Initialize/Prepare Station configu
     cmd_read_configuration
 
     local s
+    local ret=""
+
+    local _ret
     if [[ ${#hilbert_station_profile_services[@]} -ne 0 ]]; then
         for s in "${hilbert_station_profile_services[@]}"; do
             DEBUG "Initializing service [$s]"
             cmd_init_service "${s}"
             _ret=$?
             if [[ ${_ret} -ne 0 ]]; then
-                ERROR "Could not prepare/init service [${s}] due to some error (ret. code: ${_ret})!"
-                exit ${ERR_CODE_INT_ERROR}
+                ret="${ret} ${s}"
+                WARNING "Could not prepare/init service [${s}] due to some error (ret. code: ${_ret})!"
+                # exit ${ERR_CODE_INT_ERROR}
             fi
         done
     fi
@@ -1179,10 +1183,18 @@ function cmd_init_services() {         ## @fn Initialize/Prepare Station configu
             cmd_init_service "${s}"
             _ret=$?
             if [[ ${_ret} -ne 0 ]]; then
-                ERROR "Could not prepare/init service [${s}] due to some error (ret. code: ${_ret})!"
-                exit ${ERR_CODE_INT_ERROR}
+                ret="${ret} ${s}"
+                WARNING  "Could not prepare/init service [${s}] due to some error (ret. code: ${_ret})!"
+                # exit ${ERR_CODE_INT_ERROR}
             fi
         done
+    fi
+
+    if [[ -n ${ret} ]]; then
+        ERROR "There was an error while preparing/initializing the following services/applications: [$ret]"
+        return ${ERR_CODE_INT_ERROR}
+    else
+        return ${ERR_CODE_SUCCESS}
     fi
 }
 
@@ -1464,6 +1476,8 @@ function cmd_compose_init() { ## @fn Initialize/prepare/cache a Docker-Compose s
     ## NOTE: Application/Service ID (of compose type)
     ## NOTE: operates in HILBERT_CONFIG_DIR!
     local arg="$*"
+    local ret
+
     export HILBERT_APPLICATION_ID="$arg"  # NOTE: To be set as env. variable APP_ID within container...
 
     local HILBERT_APPLICATION_FILE
@@ -1498,9 +1512,9 @@ function cmd_compose_init() { ## @fn Initialize/prepare/cache a Docker-Compose s
     DRYRUN ${REMOVE} -f "${HILBERT_CONFIG_DIR}/${PLAIN_COMPOSE_FILE}"
 
     cmd_docker_compose config > "${HILBERT_CONFIG_DIR}/${PLAIN_COMPOSE_FILE}"
-    local ret=$?
+    ret=$?
 
-    if [[ $? -eq 0 && -r "${HILBERT_CONFIG_DIR}/${PLAIN_COMPOSE_FILE}" ]]; then
+    if [[ ${ret} -eq 0 && -s "${HILBERT_CONFIG_DIR}/${PLAIN_COMPOSE_FILE}" ]]; then
         export COMPOSE_FILE="${PLAIN_COMPOSE_FILE}"
     else
         DRYRUN ${REMOVE} -f "${HILBERT_CONFIG_DIR}/${DOCKER_COMPOSE_OVERRIDE}" # !?
@@ -1509,9 +1523,12 @@ function cmd_compose_init() { ## @fn Initialize/prepare/cache a Docker-Compose s
     cmd_docker_compose pull --ignore-pull-failures "${HILBERT_APPLICATION_REF}" | cat
     ret=$?
 
-    unset -v HILBERT_APPLICATION_ID COMPOSE_FILE
+    if [[ ${ret} -ne 0 ]]; then
+        WARNING "Could not run pull an image for [${HILBERT_APPLICATION_ID} / ${HILBERT_APPLICATION_REF}] using [${COMPOSE_FILE}]!"
+    fi
 
-    return $ret
+    unset -v HILBERT_APPLICATION_ID COMPOSE_FILE
+    return ${ret}
 }
 
 
@@ -1600,7 +1617,7 @@ function cmd_docker_stop() {         ## @fn Stop/kill/renove a docker container
 function cmd_docker_compose() { ## @fn Run low-level Docker-Compose command directly
     if [[ -n "${DRY_RUN}" ]]; then # TODO: switch to using DRYRUN
         DRYRUN_ECHO "COMPOSE_FILE=${COMPOSE_FILE} ${DOCKER_COMPOSE} --skip-hostname-check $*"
-        return ${ERR_CODE_SUCCESS}
+        return $?
     fi
 
     local S="${PWD}"
@@ -1612,12 +1629,12 @@ function cmd_docker_compose() { ## @fn Run low-level Docker-Compose command dire
     ${DOCKER_COMPOSE} --skip-hostname-check $@
     local ret=$?
 
+    cd "${S}"
+
     if [[ ${ret} -ne 0 ]]; then
-        ERROR "Could not run [${DOCKER_COMPOSE} --skip-hostname-check $*] in [${PWD}] with COMPOSE_FILE=[${COMPOSE_FILE}]!"
-        return ${ret}
+        ERROR "Could not run [${DOCKER_COMPOSE} --skip-hostname-check $@] in [${HILBERT_CONFIG_DIR}] with COMPOSE_FILE=[${COMPOSE_FILE}]!"
     fi
 
-    cd "${S}"
     return ${ret}
 }
 
@@ -1663,26 +1680,26 @@ function cmd_detect_top_application() {  ## @fn Detect the currently running Hil
     ##    Hilbert Application ID: APP_ID, DC reference: current_top_application (unknown docker-compose.yml!)
     # NOTE: cannot attach a label in runtime to docker-compose service :-(
     declare -rg current_bg_servce_ids=$(${DOCKER} ps -a -q --filter "label=is_top_app=0" --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" 2>/dev/null | ${XARGS} --no-run-if-empty)
-
     if [[ $? -ne 0 ]]; then
         ERROR "Could not query Docker Engine via ${DOCKER}!"
-        exit ${ERR_CODE_EXT_ERROR}
+        return ${ERR_CODE_EXT_ERROR}
     fi
 
     local TOP=($(${DOCKER} ps -a -q --filter "label=is_top_app=1" \
                --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" 2>/dev/null ))
-
     if [[ $? -ne 0 ]]; then
         ERROR "Could not query Docker Engine via ${DOCKER}!"
-        exit ${ERR_CODE_EXT_ERROR}
+        return ${ERR_CODE_EXT_ERROR}
     fi
 
     local N=${#TOP[@]}
     declare -rg current_top_application_id="${TOP[@]}"
 
-    if [[ -z "${TOP[@]}" ]]; then
-        WARNING "Found no top application(s)!"
-        return ${ERR_CODE_INT_ERROR}
+    if [[ -z "${current_top_application_id}" ]]; then
+#        WARNING "Found no top application(s)!"
+        declare -gr APP_ID=""
+        declare -gr current_top_application=""
+        return ${ERR_CODE_SUCCESS}
     fi
 
     ## NOTE: By design there must be a single top (GUI) application!
@@ -1695,14 +1712,14 @@ function cmd_detect_top_application() {  ## @fn Detect the currently running Hil
     SV=$(${DOCKER} inspect --format='{{index .Config.Labels "com.docker.compose.service" }}' "${current_top_application_id}" 2>/dev/null)
     if [[ $? -ne 0 ]]; then
         ERROR "Could not inspect container [${current_top_application_id}]"
-        exit ${ERR_CODE_EXT_ERROR}
+        return ${ERR_CODE_EXT_ERROR}
     fi
 
     # NOTE: set "Env APP_ID=' to Application ID!
     declare -gr APP_ID=$(${DOCKER} inspect --format='{{index .Config.Env }}' "${current_top_application_id}" 2>/dev/null | ${SED} -e 's@^.*APP_ID=@@g' -e 's@ .*$@@g')
     if [[ $? -ne 0 ]]; then
         ERROR "Could not inspect container [${current_top_application_id}] using ${DOCKER}"
-        exit ${ERR_CODE_EXT_ERROR}
+        return ${ERR_CODE_EXT_ERROR}
     fi
 
     DEBUG "Found $N top application [${current_top_application_id}]: ${SV} / APP_ID: ${APP_ID}"
@@ -1851,6 +1868,9 @@ function cmd_start() {         ## @fn (re)start services and top application [pr
     fi
 
     cmd_detect_top_application # NOTE: lots of side-effects (current_top_application_id, current_bg_servce_ids, APP_ID)!
+    if [[ $? -ne 0 ]]; then
+        WARNING "Could not properly detect the current Hilbert applications or services!"
+    fi
 
     if [[ -z "${current_top_application_id}" && -z "${current_bg_servce_ids}" ]]; then
         DEBUG "OK: no applications or services are currently running. Clean reboot!"
@@ -1977,7 +1997,11 @@ function cmd_start() {         ## @fn (re)start services and top application [pr
 function cmd_stop() {         ## @fn Stop Hilbert's current top application and background services
     cmd_native_autodetect
     cmd_read_configuration
+
     cmd_detect_top_application
+    if [[ $? -ne 0 ]]; then
+        WARNING "Could not properly detect the current Hilbert applications or services!"
+    fi
     if [[ -n "${current_top_application_id}" ]]; then
         INFO "Previously started Hilbert's application(s) detected: [${current_top_application_id}, APP_ID: ${APP_ID}]"
 
@@ -2103,7 +2127,6 @@ function cmd_subcommand_handle() { ## @fn Main CLI parser, sub-command handler
         cmd_native_autodetect
         ${subcommand} "$@"
         _ret=$?
-
         if [[ ${_ret} -ne 0 ]]; then
             ERROR "Something went wrong in subcommand handler: [${subcommand} \"$@\"]. Exit code: ${_ret}!"
             exit ${_ret}
