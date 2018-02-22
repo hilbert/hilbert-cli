@@ -12,9 +12,8 @@ usage: # Print Targets
 	@grep '^[^#[:space:]].*:' Makefile
 
 check: # Run the tests
-	/bin/bash -c 'py.test -vv -l --tb=auto --full-trace --color=auto tests/test_*.py'
-	/bin/bash -c 'py.test-3 -vv -l --tb=auto --full-trace --color=auto tests/test_*.py'
-	
+	/bin/bash -c 'python3 -m pytest -vv -l --tb=auto --full-trace --color=auto tests/test_*.py'
+
 tox: tox.ini setup.py # Run clean testing via tox
 	tox
 	
@@ -35,3 +34,10 @@ epydoc: ${SRC} # Build API Documentation with epydoc
 
 clean: # Clean Project
 	rm -rf *~ docs/doxy docs/epydoc docs/pylint_*.html docs/pep8.report.txt
+
+dist/hilbert: hilbert.spec
+	pyinstaller hilbert.spec # may need to be run with a proper Python interpreter, if several are available
+
+dist: setup.py
+	python3 setup.py sdist
+	python3 setup.py bdist
