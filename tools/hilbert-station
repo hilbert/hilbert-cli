@@ -80,8 +80,8 @@ export DIFF=${HILBERT_DEPENDENCY_DIFF:-diff}
 declare -rg TOOL="$(${BASENAME} "${TOOL_SH}")"
 export PATH="${PATH}:$(${READLINK} -f "$(${DIRNAME} "${TOOL_SH}")")" # Add the tool' directory into the search PATH...
 
-# TODO: FIXME: detect available "logger"!
-declare -rg LOGGER="logger --id=$$ -t ${TOOL} "
+declare -rg LOGGER="${HILBERT_DEPENDENCY_LOGGER:-logger --id=$$ -t ${TOOL} }"
+declare -rg SHUTDOWN="${HILBERT_DEPENDENCY_SHUTDOWN:-$(PATH="${PATH}:/sbin:/usr/sbin" ${WHICH} shutdown)}"
 
 declare -g LOGLEVEL=${LOGLEVEL:-2}  # Default setting: show WARNINGs and ERRORs (but not DEBUG/INFO messages)
 declare -g DRY_RUN="${DRY_RUN:-}"  # NOTE: turn on dry mode (not actual service-runtime action execution) if non-empty
@@ -282,19 +282,6 @@ export DOCKER_GC="${DOCKER_GC:-docker-gc}"
 export DOCKER_COMPOSE="${DOCKER_COMPOSE:-docker-compose}"
 export HILBERT_COMPOSE_CUSTOMIZER="${HILBERT_COMPOSE_CUSTOMIZER:-hilbert-compose-customizer}"
 
-for d in /usr/sbin/shutdown /sbin/shutdown;
-do
-    if [[ -f "${d}" && -x "${d}" ]]; then
-        declare -rg SHUTDOWN="${d}"
-        break
-    fi
-done
-
-if [[ ! -v SHUTDOWN ]]; then
-    declare -rg SHUTDOWN=$(${WHICH} shutdown 2>&1)
-fi
-
-
 function cmd_internal_usage() {         ## @fn Show CLI internal help
     if [[ $LOGLEVEL -le 0 ]]; then
         ${CAT} << EOF
@@ -479,9 +466,10 @@ SILENT MODE: [$((1-VERBOSITY_DELTA))]
 
 Lockfile:    [${LOCKFILE}: $(${LIST} -l "${LOCKFILE}" 2>&1)]
 Do locking:  [${LOCKING}]
-LOGGER:      [${LOGGER}: $(_which_ext "${LOGGER}")]
 FLOCK:       [${FLOCK}: $(_which_ext "${FLOCK}")]
 PIDOF:       [${PIDOF}: $(_which_ext "${PIDOF}")]
+LOGGER:      [${LOGGER}: $(_which_ext "${LOGGER}")]
+SHUTDOWN:    [${SHUTDOWN}: $(_which_ext "${SHUTDOWN}")]
 
 SH:          [${SH}: $(_which_ext "${SH}")]
 ENV:         [${ENV}: $(_which_ext "${ENV}")]
@@ -513,7 +501,6 @@ DIRNAME:     [${DIRNAME}: $(_which_ext "${DIRNAME}")]
 BASENAME:    [${BASENAME}: $(_which_ext "${BASENAME}")]
 READLINK:    [${READLINK}: $(_which_ext "${READLINK}")]
 XSETROOT:    [${XSETROOT}: $(_which_ext "${XSETROOT}")]
-SHUTDOWN:    [${SHUTDOWN}: $(_which_ext "${SHUTDOWN}")]
 
 Config Base: [${HILBERT_CONFIG_BASEDIR}]
 Config Dir:  [${HILBERT_CONFIG_DIR} -> $(${READLINK} -f "${HILBERT_CONFIG_DIR}" 2>&1)]
