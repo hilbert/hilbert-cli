@@ -95,20 +95,14 @@ declare -g hibert_station_process_kill_timeout=${hibert_station_process_kill_tim
 
 ## NOTE: usually /var/lock/ is a symbolic link to /run/lock/ => it will be removed in case of a crash! No stale lockfile is possible!
 ## NOTE: just in case if /run != /var/run the following loop will check them separately:
-for d in /var/run/hilbert /var/run/lock/lockdev /run/lock/lockdev /var/run/lock /run/lock /var/run /run;
+## NOTE: /var/tmp and /tmp/ may not be cleaned up due to reboot... But they are always writeable!
+for d in "${HILBERT_LOCKFILE_DIR:-/var/run/hilbert}" /run/lock/lockdev /run/lock /run /var/run/lock/lockdev /var/run/lock /var/run /var/lock/lockdev /var/lock /var/tmp /tmp;
 do
     if [[ -w "${d}/" ]]; then
-        declare -- LOCKFILE="${d}"
+        declare -rg LOCKFILE="${d}/lockfile_${TOOL}.lock"
         break
     fi
 done
-
-if [[ -n "${LOCKFILE}" && -w "${LOCKFILE}/" ]]; then
-    LOCKFILE+="/${TOOL}.lock"
-else
-    ## NOTE: /tmp/ may not be cleaned up due to reboot... But it is always writeable
-    declare -- LOCKFILE="/tmp/_var_lock_${TOOL}.lock"
-fi
 
 declare -ir LOCKFD=99
 
@@ -139,6 +133,11 @@ function cmd_start_locking() { ## @fn Start a lock to avoid parallel execution o
         return ${ERR_CODE_SUCCESS}
     fi
 
+    if [[ -z "${LOCKFILE}" ]]; then
+        ERROR "Found no writeable location for the lockfile! You can specify it via [HILBERT_LOCKFILE_DIR] env. var."
+        exit ${ERR_CODE_EXT_ERROR}
+    fi
+
     local pid
     for pid in $(${PIDOF} -s "${TOOL}"); do
         if [[ $pid != $$ ]]; then
@@ -146,6 +145,7 @@ function cmd_start_locking() { ## @fn Start a lock to avoid parallel execution o
             exit ${ERR_CODE_EXT_ERROR}
         fi
     done
+    
 
     DEBUG "Starting exclusive (locked) usage of ${TOOL}..."
 
