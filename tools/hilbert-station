@@ -1520,8 +1520,8 @@ function cmd_compose_init() { ## @fn Initialize/prepare/cache a Docker-Compose s
         DRYRUN ${REMOVE} -f "${HILBERT_CONFIG_DIR}/${DOCKER_COMPOSE_OVERRIDE}"
     fi
 
-
-    cmd_docker_compose pull --ignore-pull-failures "${HILBERT_APPLICATION_REF}"
+    cmd_docker_compose pull --quiet --ignore-pull-failures "${HILBERT_APPLICATION_REF}" \
+    || { cmd_docker_compose pull --ignore-pull-failures "${HILBERT_APPLICATION_REF}" | ${GREP} -e 'Pulling from' -e Digest -e Status -e Error ; }
     ret=$?
 
     if [[ ${ret} -ne 0 ]]; then
