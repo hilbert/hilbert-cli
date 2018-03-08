@@ -74,6 +74,9 @@ export CHMOD=${HILBERT_DEPENDENCY_CHMOD:-chmod}
 export FLOCK=${HILBERT_DEPENDENCY_FLOCK:-flock}
 export PIDOF=${HILBERT_DEPENDENCY_PIDOF:-pidof}
 
+# required for comparing config-dirs:
+export DIFF=${HILBERT_DEPENDENCY_DIFF:-diff}
+
 declare -rg TOOL="$(${BASENAME} "${TOOL_SH}")"
 export PATH="${PATH}:$(${READLINK} -f "$(${DIRNAME} "${TOOL_SH}")")" # Add the tool' directory into the search PATH...
 
@@ -82,9 +85,6 @@ declare -rg LOGGER="logger --id=$$ -t ${TOOL} "
 
 declare -g LOGLEVEL=${LOGLEVEL:-2}  # Default setting: show WARNINGs and ERRORs (but not DEBUG/INFO messages)
 declare -g DRY_RUN="${DRY_RUN:-}"  # NOTE: turn on dry mode (not actual service-runtime action execution) if non-empty
-
-# required for comparing config-dirs:
-export DIFF=${DIFF:-diff}
 
 # delays during stopping/killing/removing docker containers
 declare -g hibert_station_process_kill_timeout=${hibert_station_process_kill_timeout:-8}
