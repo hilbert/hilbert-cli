@@ -1,0 +1,26 @@
+version: '2.1'
+services:
+  kiosk_browser_info:
+    extends:
+      file: docker-compose.yml
+      service: kiosk_base
+    command:
+     - browser.sh
+     - -vvvfkT
+     - --retry
+     - "5"
+     ### show developer tools: "-d"
+     #- -d
+     ### Zoom factor: 1.0 => 100%
+     #- -z
+     #- "1.0"
+     - -l
+     - "${HILBERT_WEBGL_APPS:-http://127.0.0.1:8080/}"
+    environment:
+     - "APP_ID=${HILBERT_APPLICATION_ID:-kiosk_browser_index}"
+    volumes:
+     - kiosk_info_local:/root/.config/kiosk-browser
+
+volumes:
+  kiosk_info_local:
+    driver: local

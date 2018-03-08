@@ -14,10 +14,10 @@ services:
     network_mode: "host"
     ipc: host
     environment:
-     - "CUPS_SERVER=${HILBERT_CUPS_SERVER}"
+#     - "CUPS_SERVER=${HILBERT_CUPS_SERVER}"
      - "ALSA_CARD=${HILBERT_ALSA_CARD:-0}"
      - "LANGUAGE=${HILBERT_PREFERRED_LANGUAGE:-en}"
-     - "MOUSE_CURSOR=${HILBERT_HIDE_MOUSE_CURSOR:-on}"
+##     - "MOUSE_CURSOR=${HILBERT_HIDE_MOUSE_CURSOR:-on}"
      - "CUSTOMIZATION=${HILBERT_CUSTOMIZATIONS:-alsa nv}"
      - "HB_URL=${HILBERT_HEARTBEAT_URL:-http://127.0.0.1:8888}"
      - "APP_ID=${HILBERT_APPLICATION_ID:-unset_application_service_id}"
@@ -64,10 +64,10 @@ services:
     volumes:
      - "/etc/pulse:/etc/pulse:ro"
      - ${PULSE_SERVER}:/run/pulse/native
-     - ${PULSE_COOKIE}:/run/pulse/cookie
+#     - ${PULSE_COOKIE}:/run/pulse/cookie
     environment:
      - PULSE_SERVER=/run/pulse/native
-     - PULSE_COOKIE=/run/pulse/cookie
+#     - PULSE_COOKIE=/run/pulse/cookie
 
   gui:
     image: hilbert/gui:${IMAGE_VERSION:-latest}
@@ -103,6 +103,19 @@ services:
     labels:
      - "is_top_app=1"
     environment:
-     - "HB_INIT_TIMEOUT=9"
-     - "APP_ID=${HILBERT_APPLICATION_ID:-web_kiosk}"
+     - "HB_INIT_TIMEOUT=6000"
+     - "HB_PING_INTERVAL=3000"
+     - "APP_ID=${HILBERT_APPLICATION_ID:-web_kiosk_base}"
     privileged: false
+    network_mode: "host"
+    entrypoint:
+     - /sbin/my_init
+     - --skip-runit
+     - --skip-startup-files
+     - --
+     - hb_wrapper.sh
+     - launch.sh
+     - xfullscreen
+     - hb_preload.sh
+    command:
+     - kiosk.sh

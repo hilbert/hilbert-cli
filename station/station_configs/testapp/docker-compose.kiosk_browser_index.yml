@@ -4,15 +4,14 @@ services:
     extends: 
       file: docker-compose.yml
       service: kiosk_base
+    command:
+     - browser.sh
+     - -vvvim
+     ### Zoom factor: 1.0 => 100%
+     #- -z
+     #- "1.0"
+     ### show developer tools: "-d"
+     #- -d
+#     - "${HILBERT_WEBGL_APPS:-https://supernova.eso.org/exhibition/register/}"
     environment:
      - "APP_ID=${HILBERT_APPLICATION_ID:-kiosk_browser_index}"
-    entrypoint: 
-     - /sbin/my_init 
-     - --skip-runit 
-     - --skip-startup-files
-     - --
-    command:
-     - hb_wrapper.sh
-     - launch.sh
-     - browser.sh
-     - -vvvfkim
