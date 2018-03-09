@@ -9,3 +9,10 @@ services:
     privileged: true
     command:
      - testapp.sh
+    volumes:
+     - kiosk_testapp_local:/root/.config/kiosk-browser
+
+volumes:
+  kiosk_testapp_local:
+    driver: local
+
