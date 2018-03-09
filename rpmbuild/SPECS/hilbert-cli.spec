@@ -21,8 +21,7 @@ License:        Apache License, Version 2.0
 Release:        8%{?dist}
 
 URL:            https://github.com/hilbert/%{origname}
-Source0:        https://cloud.imaginary.org/index.php/s/WSGU4yEaR4RaH3T/download?path=%2F&files=hilbert-cli.tar.gz
-# hilbert-cli.tar.gz
+Source0:        %{origname}.tar.gz
 # v%{version}.tar.gz
 # https://github.com/hilbert/hilbert-cli/archive/v%{version}.tar.gz
 Source1:        https://cloud.imaginary.org/index.php/s/WSGU4yEaR4RaH3T/download?path=%2F&files=hilbert-compose-customizer.tar.gz
