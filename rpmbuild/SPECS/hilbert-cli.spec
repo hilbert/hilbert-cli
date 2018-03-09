@@ -18,14 +18,17 @@ Name:           hilbert-cli
 Version:        0.9.1
 
 License:        Apache License, Version 2.0
-Release:        7%{?dist}
+Release:        8%{?dist}
 
 URL:            https://github.com/hilbert/%{origname}
-Source0:         hilbert-cli.tar.gz
+Source0:        https://cloud.imaginary.org/index.php/s/WSGU4yEaR4RaH3T/download?path=%2F&files=hilbert-cli.tar.gz
+# hilbert-cli.tar.gz
 # v%{version}.tar.gz
 # https://github.com/hilbert/hilbert-cli/archive/v%{version}.tar.gz
-Source1:        hilbert-compose-customizer.tar.gz
-Source2:        docker-compose.tar.gz
+Source1:        https://cloud.imaginary.org/index.php/s/WSGU4yEaR4RaH3T/download?path=%2F&files=hilbert-compose-customizer.tar.gz
+# hilbert-compose-customizer.tar.gz
+Source2:        https://cloud.imaginary.org/index.php/s/WSGU4yEaR4RaH3T/download?path=%2F&files=docker-compose.tar.gz
+# docker-compose.tar.gz
 
 #hilbert-default-config.tar.gz
 #Source2:        station.cfg
@@ -77,8 +80,8 @@ rm -rf $RPM_BUILD_ROOT
 
 # Install Hilbert Client-tools into a separate location
 mkdir -p "%{buildroot}/%{_bin_dir}/" || exit $?
-cp tools/hilbert-station station/docker-gc station/generate_ogl.sh station/get-compose.sh "%{buildroot}/%{_bin_dir}/"  || exit $?
-
+cp tools/hilbert-station station/docker-gc "%{buildroot}/%{_bin_dir}/"  || exit $?
+# station/generate_ogl.sh station/get-compose.sh 
 
 # Make sure that 
 # 1. hilbert-station and docker-compose can be found in the PATH
@@ -106,22 +109,8 @@ echo "D /var/run/hilbert 0755 %{user} %{user} - " > "%{buildroot}/etc/tmpfiles.d
 #sudo -g %{user} -u %{user} HILBERT_CONFIG_BASEDIR=%{buildroot}/%{_cfg_dir}/ -i %{buildroot}/%{_bin_dir}/hilbert-station -vv init 
 #chown -R %{user}:%{user} %{buildroot}/%{_cfg_dir}/../../
 
-cp hilbert-compose-customizer "%{buildroot}/%{_bin_dir}/"  || exit $?
-
-if [ -f docker-compose ]; then
-  cp docker-compose "%{buildroot}/%{_bin_dir}/"
-fi
-
-
-# Download docker-compose 1.13.0 from GitHub 
-if [ ! -f "%{buildroot}/%{_bin_dir}/docker-compose" ]; then
-  BASE=$PWD
-  cd %{buildroot}/%{_bin_dir}/
-  ./get-compose.sh || exit 1 
-  unlink ./compose
-  cd $BASE
-fi
-
+cp hilbert-compose-customizer "%{buildroot}/%{_bin_dir}/" || exit $?
+cp docker-compose "%{buildroot}/%{_bin_dir}/" || exit $?
 
 ##%%make_install
 
@@ -165,6 +154,11 @@ rm -rf $RPM_BUILD_ROOT
 # docker rmi hello-world:latest
 
 %changelog
+* Thu Mar 8 2018 Alex
+- major update of CLI tools (e.g. hilbert-station)
+- update of hilbert-compose-customizer (to detect all video devices in /dev/dri)
+- update of docker-compose, docker-gc
+
 * Sun Oct 1 2017 Alex
 - Updated hilbert-station to avoid unnecessary output from `docker pull` 
 - Updated hilbert-compose-customizer to workaround nvidia-docker issue with the host networking driver/mode
