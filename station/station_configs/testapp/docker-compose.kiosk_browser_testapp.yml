@@ -7,12 +7,5 @@ services:
     environment:
      - "APP_ID=${HILBERT_APPLICATION_ID:-kiosk_browser_testapp}"
     privileged: true
-    entrypoint: 
-     - /sbin/my_init 
-     - --skip-runit 
-     - --skip-startup-files
-     - --
     command:
-     - hb_wrapper.sh
-     - launch.sh
      - testapp.sh
