@@ -2052,8 +2052,33 @@ function cmd_shutdown() {         ## @fn Shutdown PC
     local arg=$@
     DEBUG "Attempting to shut-down this system using [${SHUTDOWN} ${arg}])..."
 
-    DRYRUN ${SHUTDOWN} ${arg}
-    DRYRUN ${SUDO} -n -P ${SHUTDOWN} ${arg}
+    DRYRUN ${SHUTDOWN} ${arg} &>/dev/null
+    if [[ $? -eq 0 ]]; then
+        return ${ERR_CODE_SUCCESS}
+    fi
+    
+    DRYRUN ${SUDO} -n -P ${SHUTDOWN} ${arg} &>/dev/null
+    if [[ $? -eq 0 ]]; then
+        return ${ERR_CODE_SUCCESS}
+    fi
+
+    WARNING "Could not shutdown using [${SHUTDOWN} ${arg}]! Console output is as follows:"
+    DRYRUN ${SHUTDOWN} ${arg} 2>&1
+    if [[ $? -eq 0 ]]; then
+        return ${ERR_CODE_SUCCESS}
+    fi
+
+    WARNING "Could not shutdown using [${SUDO} -n -P ${SHUTDOWN} ${arg}]! Console output is as follows:"
+    DRYRUN ${SUDO} -n -P ${SHUTDOWN} ${arg} 2>&1
+    if [[ $? -eq 0 ]]; then
+        return ${ERR_CODE_SUCCESS}
+    fi
+
+    ERROR "Could not shutdown via [${SHUTDOWN} ${arg}] and [${SUDO} -n -P ${SHUTDOWN} ${arg}]!"
+    
+    # TODO: consider to use poweroff or halt ? or reboot? or special configuration on current target OS?
+    
+    return ${ERR_CODE_EXT_ERROR}
 }
 
 function cmd_subcommand_handle() { ## @fn Main CLI parser, sub-command handler
