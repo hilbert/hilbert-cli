@@ -23,3 +23,5 @@ services:
      - --
     command: 
      - omd_agent_entrypoint.sh
+    volumes:
+     - /var/log:/var/log:ro
