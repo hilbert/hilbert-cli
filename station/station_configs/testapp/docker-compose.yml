@@ -1,7 +1,7 @@
 version: '2.1'
 services:
   base:
-    image: hilbert/base:${IMAGE_VERSION:-latest}
+    image: hilbert/base:${HILBERT_IMAGE_VERSION:-latest}
     volumes:
      - /tmp:/tmp:rw
      - /etc/localtime:/etc/localtime:ro 
@@ -29,7 +29,7 @@ services:
   ddd:
     extends: 
       service: base
-    image: hilbert/dd:${IMAGE_VERSION:-latest}
+    image: hilbert/dd:${HILBERT_IMAGE_VERSION:-latest}
     labels:
      - "is_top_app=0"
     volumes:
@@ -70,7 +70,7 @@ services:
 #     - PULSE_COOKIE=/run/pulse/cookie
 
   gui:
-    image: hilbert/gui:${IMAGE_VERSION:-latest}
+    image: hilbert/gui:${HILBERT_IMAGE_VERSION:-latest}
     extends: 
       file: docker-compose.yml
       service: pa
@@ -98,7 +98,7 @@ services:
   kiosk_base:
     extends:
       service: gui
-    image: hilbert/kiosk:${IMAGE_VERSION:-latest}
+    image: hilbert/kiosk:${HILBERT_IMAGE_VERSION:-latest}
     restart: "on-failure:5"
     labels:
      - "is_top_app=1"
@@ -115,7 +115,6 @@ services:
      - --
      - hb_wrapper.sh
      - launch.sh
-     - xfullscreen
      - hb_preload.sh
     command:
      - kiosk.sh

@@ -6,7 +6,7 @@ services:
       service: gui
     labels:
      - "is_top_app=0"
-    image: hilbert/x11vnc:${IMAGE_VERSION:-latest}
+    image: hilbert/x11vnc:${HILBERT_IMAGE_VERSION:-latest}
     restart: "on-failure:5"
     ports:
      - "127.0.0.1:5900-5910:5900-5910"

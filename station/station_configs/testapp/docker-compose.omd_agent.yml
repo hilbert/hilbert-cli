@@ -4,7 +4,7 @@ services:
     extends:
       file: docker-compose.yml
       service: ddd
-    image: hilbert/omd_agent:${IMAGE_VERSION:-latest}
+    image: hilbert/omd_agent:${HILBERT_IMAGE_VERSION:-latest}
     environment:
      - "HB_INIT_TIMEOUT=0"
     ports:
