@@ -64,10 +64,10 @@ services:
     volumes:
      - "/etc/pulse:/etc/pulse:ro"
      - ${PULSE_SERVER}:/run/pulse/native
-#     - ${PULSE_COOKIE}:/run/pulse/cookie
+     - ${PULSE_COOKIE:-/tmp/pulsecookie}:${PULSE_COOKIE:-/tmp/pulsecookie}
     environment:
      - PULSE_SERVER=/run/pulse/native
-#     - PULSE_COOKIE=/run/pulse/cookie
+     - PULSE_COOKIE=${PULSE_COOKIE:-/tmp/pulsecookie}
 
   gui:
     image: hilbert/gui:${HILBERT_IMAGE_VERSION:-latest}
