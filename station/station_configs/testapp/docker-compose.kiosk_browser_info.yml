@@ -20,10 +20,10 @@ services:
      - "APP_ID=${HILBERT_APPLICATION_ID:-kiosk_browser_info}"
      - "HILBERT_MOUSE_CURSOR=off"
      - "HILBERT_UNCLUTTER_ARGS=-root -idle 1 -jitter 50"
-
+#
 #    volumes:
 #     - kiosk_info_local:/root/.config/kiosk-browser
-
-volumes:
-  kiosk_info_local:
-    driver: local
+#
+#volumes:
+#  kiosk_info_local:
+#    driver: local
