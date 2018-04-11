@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 # for emacs: -*-sh-*-
-
+set -x
 ## TODO: add some more description here?
 
 declare -rg TOOL_SH="$0"
@@ -690,7 +690,7 @@ fi
 
 ## NOTE: Global knowledge about supported services/applications:
 declare -r _type_field='type'
-declare -rA _type_specs=( ['compose']='file ref' )
+declare -rA _type_specs=( ['compose']='file ref auto_detections' ['native']='ref auto_detections' )
 
 function _service_get_type_spec() {
     ## NOTE: ServiceType: 'compose' etc...
@@ -1316,7 +1316,7 @@ function cmd_start_service() { ## @fn Start Hilbert service
         exit ${ERR_CODE_EXT_ERROR}
     fi
 
-    if [[ "x$t" != "xcompose" ]]; then
+    if [[ "x$t" != "xcompose" && "x$t" != "xnative" ]]; then
         ERROR "Unsupported application type of service/application [${arg}]: [$t]"
         exit ${ERR_CODE_EXT_ERROR}
     fi
@@ -1329,8 +1329,13 @@ function cmd_start_service() { ## @fn Start Hilbert service
         eval "${HILBERT_APPLICATION_AD}"
     fi
 
-    DEBUG "Starting service/application via docker-compose: ${arg}..."
-    cmd_compose_start "${arg}"
+    if [[ "x$t" = "xcompose" ]]; then
+        DEBUG "Starting service/application via docker-compose: ${arg}..."
+        cmd_compose_start "${arg}"
+    else
+        DEBUG "Starting native service/application: ${arg}..."
+        ${SH} -c "echo '${arg}'..."
+    fi
 
     return $?
 }
@@ -1354,7 +1359,8 @@ function cmd_init_service() { ## @fn Prepare/initialize Hilbert service/applicat
         exit ${ERR_CODE_EXT_ERROR}
     fi
 
-    if [[ ! "x$t" = "xcompose" ]]; then
+    if [[ "x$t" != "xcompose" && "x$t" != "xnative" ]]; then
+#    if [[ ! "x$t" = "xcompose" ]]; then
         ERROR "Wrong or unsupported application: [${arg}] (type: [$t])"
         exit ${ERR_CODE_EXT_ERROR}
     fi
@@ -1374,9 +1380,16 @@ function cmd_init_service() { ## @fn Prepare/initialize Hilbert service/applicat
         DEBUG "Running Preparations before initialization: [${HILBERT_APPLICATION_PREINIT}]..."
         eval "${HILBERT_APPLICATION_PREINIT}"
     fi
+    
+    if [[ "x$t" = "xcompose" ]]; then
+        DEBUG "Initializing/preparing service/application via docker-compose: ${arg}..."
+        cmd_compose_init "${arg}"
+    else
+        DEBUG "Starting native service/application: ${arg}..."
+        ${SH} -c "echo '${arg}'..."
+    fi
 
-    DEBUG "Initializing/preparing service/application via docker-compose: ${arg}..."
-    cmd_compose_init "${arg}"
+
     return $?
 }
 
@@ -1400,7 +1413,8 @@ function cmd_restart_service() { ## @fn Restart currently running service NOTE: 
         exit ${ERR_CODE_EXT_ERROR}
     fi
 
-    if [[ ! "x$t" = "xcompose" ]]; then
+    if [[ "x$t" != "xcompose" && "x$t" != "xnative" ]]; then
+#    if [[ ! "x$t" = "xcompose" ]]; then
         ERROR "Wrong or unsupported application: [${arg}] (type: [$t])"
         exit ${ERR_CODE_EXT_ERROR}
     fi
@@ -1439,7 +1453,8 @@ function cmd_stop_service() { ## @fn Stop Hilbert Service, @param arg Applicatio
         exit ${ERR_CODE_EXT_ERROR}
     fi
 
-    if [[ ! "x$t" = "xcompose" ]]; then
+    if [[ "x$t" != "xcompose" && "x$t" != "xnative" ]]; then
+#    if [[ ! "x$t" = "xcompose" ]]; then
         ERROR "Wrong or unsupported application: [${arg}] (type: [$t])"
         exit ${ERR_CODE_EXT_ERROR}
     fi
