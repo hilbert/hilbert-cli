@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 # for emacs: -*-sh-*-
-set -x
+#set -x
 ## TODO: add some more description here?
 
 declare -rg TOOL_SH="$0"
@@ -74,6 +74,7 @@ export REMOVE=${HILBERT_DEPENDENCY_REMOVE:-rm}
 export CHMOD=${HILBERT_DEPENDENCY_CHMOD:-chmod}
 export FLOCK=${HILBERT_DEPENDENCY_FLOCK:-flock}
 export PIDOF=${HILBERT_DEPENDENCY_PIDOF:-pidof}
+export NOHUP=${HILBERT_DEPENDENCY_NOHUP:-nohup}
 
 # required for comparing config-dirs:
 export DIFF=${HILBERT_DEPENDENCY_DIFF:-diff}
@@ -99,10 +100,11 @@ declare -g hibert_station_process_kill_timeout=${hibert_station_process_kill_tim
 ## NOTE: usually /var/lock/ is a symbolic link to /run/lock/ => it will be removed in case of a crash! No stale lockfile is possible!
 ## NOTE: just in case if /run != /var/run the following loop will check them separately:
 ## NOTE: /var/tmp and /tmp/ may not be cleaned up due to reboot... But they are always writeable!
-for d in "${HILBERT_LOCKFILE_DIR:-/var/run/hilbert}" /run/lock/lockdev /run/lock /run /var/run/lock/lockdev /var/run/lock /var/run /var/lock/lockdev /var/lock /var/tmp /tmp;
+for d in "${HILBERT_LOCKFILE_DIR}" /var/run/hilbert /run/lock/lockdev /run/lock /run /var/run/lock/lockdev /var/run/lock /var/run /var/lock/lockdev /var/lock /var/tmp /tmp;
 do
     if [[ -w "${d}/" ]]; then
-        declare -rg LOCKFILE="${d}/lockfile_${TOOL}.lock"
+        export HILBERT_LOCKFILE_DIR="${d}"
+        declare -rg LOCKFILE="${HILBERT_LOCKFILE_DIR}/lockfile_${TOOL}.lock"
         break
     fi
 done
@@ -142,13 +144,12 @@ function cmd_start_locking() { ## @fn Start a lock to avoid parallel execution o
     fi
 
     local pid
-    for pid in $(${PIDOF} -s "${TOOL}"); do
-        if [[ $pid != $$ ]]; then
-            ERROR "Process is already running with PID $pid"
+    for pid in $(${PIDOF} "${TOOL}"); do
+        if [[ ${pid} != $$ ]]; then
+            ERROR "Process is already running with PID [$pid]"
             exit ${ERR_CODE_EXT_ERROR}
         fi
     done
-    
 
     DEBUG "Starting exclusive (locked) usage of ${TOOL}..."
 
@@ -490,6 +491,8 @@ PIDOF:       [${PIDOF}: $(_which_ext "${PIDOF}")]
 LOGGER:      [${LOGGER}: $(_which_ext "${LOGGER}")]
 SHUTDOWN:    [${SHUTDOWN}: $(_which_ext "${SHUTDOWN}")], HILBERT_SHUTDOWN_DELAY: [${HILBERT_SHUTDOWN_DELAY}]
 
+HILBERT_LOCKFILE_DIR: [${HILBERT_LOCKFILE_DIR}]
+
 SH:          [${SH}: $(_which_ext "${SH}")]
 ENV:         [${ENV}: $(_which_ext "${ENV}")]
 SED:         [${SED}: $(_which_ext "${SED}")]
@@ -506,6 +509,7 @@ MOVE:        [${MOVE}: $(_which_ext "${MOVE}")]
 SUDO:        [${SUDO}: $(_which_ext "${SUDO}")]
 SORT:        [${SORT}: $(_which_ext "${SORT}")]
 UNIQ:        [${UNIQ}: $(_which_ext "${UNIQ}")]
+NOHUP:       [${NOHUP}: $(_which_ext "${NOHUP}")]
 RSYNC:       [${RSYNC} ($(${RSYNC} --version 2>&1 | ${GREP} version)): $(_which_ext "${RSYNC}")]
 WHICH:       [${WHICH}: $(_which_ext "${WHICH}")]
 MKDIR:       [${MKDIR}: $(_which_ext "${MKDIR}")]
@@ -690,7 +694,7 @@ fi
 
 ## NOTE: Global knowledge about supported services/applications:
 declare -r _type_field='type'
-declare -rA _type_specs=( ['compose']='file ref auto_detections' ['native']='ref auto_detections' )
+declare -rA _type_specs=( ['compose']='file ref' ['native']='ref' )
 
 function _service_get_type_spec() {
     ## NOTE: ServiceType: 'compose' etc...
@@ -1316,7 +1320,9 @@ function cmd_start_service() { ## @fn Start Hilbert service
         exit ${ERR_CODE_EXT_ERROR}
     fi
 
-    if [[ "x$t" != "xcompose" && "x$t" != "xnative" ]]; then
+    local spec
+    spec=$(_service_get_type_spec "$t")
+    if [[ $? -ne 0 ]]; then
         ERROR "Unsupported application type of service/application [${arg}]: [$t]"
         exit ${ERR_CODE_EXT_ERROR}
     fi
@@ -1332,9 +1338,12 @@ function cmd_start_service() { ## @fn Start Hilbert service
     if [[ "x$t" = "xcompose" ]]; then
         DEBUG "Starting service/application via docker-compose: ${arg}..."
         cmd_compose_start "${arg}"
-    else
+    elif [[ "x$t" = "xnative" ]]; then
         DEBUG "Starting native service/application: ${arg}..."
-        ${SH} -c "echo '${arg}'..."
+        cmd_native init "${arg}"
+    else
+        ERROR "Unsupported application: [${arg}] (type: [$t])"
+        return ${ERR_CODE_INT_ERROR}
     fi
 
     return $?
@@ -1359,8 +1368,9 @@ function cmd_init_service() { ## @fn Prepare/initialize Hilbert service/applicat
         exit ${ERR_CODE_EXT_ERROR}
     fi
 
-    if [[ "x$t" != "xcompose" && "x$t" != "xnative" ]]; then
-#    if [[ ! "x$t" = "xcompose" ]]; then
+    local spec
+    spec=$(_service_get_type_spec "$t")
+    if [[ $? -ne 0 ]]; then
         ERROR "Wrong or unsupported application: [${arg}] (type: [$t])"
         exit ${ERR_CODE_EXT_ERROR}
     fi
@@ -1384,11 +1394,13 @@ function cmd_init_service() { ## @fn Prepare/initialize Hilbert service/applicat
     if [[ "x$t" = "xcompose" ]]; then
         DEBUG "Initializing/preparing service/application via docker-compose: ${arg}..."
         cmd_compose_init "${arg}"
+    elif [[ "x$t" = "xnative" ]]; then
+        DEBUG "Initiaziing/preparing native service/application: ${arg}..."
+        cmd_native init "${arg}"
     else
-        DEBUG "Starting native service/application: ${arg}..."
-        ${SH} -c "echo '${arg}'..."
+        ERROR "Unsupported application: [${arg}] (type: [$t])"
+        return ${ERR_CODE_INT_ERROR}	
     fi
-
 
     return $?
 }
@@ -1413,8 +1425,9 @@ function cmd_restart_service() { ## @fn Restart currently running service NOTE: 
         exit ${ERR_CODE_EXT_ERROR}
     fi
 
-    if [[ "x$t" != "xcompose" && "x$t" != "xnative" ]]; then
-#    if [[ ! "x$t" = "xcompose" ]]; then
+    local spec
+    spec=$(_service_get_type_spec "$t")
+    if [[ $? -ne 0 ]]; then
         ERROR "Wrong or unsupported application: [${arg}] (type: [$t])"
         exit ${ERR_CODE_EXT_ERROR}
     fi
@@ -1427,8 +1440,17 @@ function cmd_restart_service() { ## @fn Restart currently running service NOTE: 
         eval "${HILBERT_APPLICATION_AD}"
     fi
 
-    DEBUG "Restarting service/application via docker-compose: ${arg}..."
-    cmd_compose_restart "${arg}"
+
+    if [[ "x$t" = "xcompose" ]]; then
+        DEBUG "Restarting service/application via docker-compose: ${arg}..."
+        cmd_compose_restart "${arg}"
+    elif [[ "x$t" = "xnative" ]]; then
+        DEBUG "Restarting native service/application: ${arg}..."
+        cmd_native restart "${arg}"
+    else
+        ERROR "Unsupported application: [${arg}] (type: [$t])"
+        return ${ERR_CODE_INT_ERROR}	
+    fi
 
     return $?
 }
@@ -1453,17 +1475,69 @@ function cmd_stop_service() { ## @fn Stop Hilbert Service, @param arg Applicatio
         exit ${ERR_CODE_EXT_ERROR}
     fi
 
-    if [[ "x$t" != "xcompose" && "x$t" != "xnative" ]]; then
-#    if [[ ! "x$t" = "xcompose" ]]; then
+    local spec
+    spec=$(_service_get_type_spec "$t")
+    if [[ $? -ne 0 ]]; then
         ERROR "Wrong or unsupported application: [${arg}] (type: [$t])"
         exit ${ERR_CODE_EXT_ERROR}
     fi
 
-    DEBUG "Stopping service/application via docker-compose: [${arg}]..."
-    cmd_compose_stop "${arg}"
+
+    if [[ "x$t" = "xcompose" ]]; then
+        DEBUG "Stopping service/application via docker-compose: [${arg}]..."
+        cmd_compose_stop "${arg}"
+    elif [[ "x$t" = "xnative" ]]; then
+        DEBUG "Stopping native service/application via docker-compose: [${arg}]..."
+        cmd_native stop "${arg}"
+    else
+        ERROR "Unsupported application: [${arg}] (type: [$t])"
+        return ${ERR_CODE_INT_ERROR}	
+    fi
 
     return $?
 }
+
+function cmd_native() { ## @fn Action with a native service/application
+    local cmd=$1; shift
+    local arg=$1; shift # APP_ID!
+    
+    local HILBERT_APPLICATION_REF
+    HILBERT_APPLICATION_REF="$(_service_get_field "$arg" "ref")"
+    if [[ $? -ne 0 ]]; then
+        ERROR "Invalid reference for a native service/application: [${arg}]!"
+        return ${ERR_CODE_INT_ERROR}
+    fi
+
+    if [[ ! -e "${HILBERT_APPLICATION_REF}" ]]; then
+        ERROR "Invalid reference [${HILBERT_APPLICATION_REF}] for a native service/application [${arg}]!"
+        return ${ERR_CODE_INT_ERROR}
+    fi
+
+    local PID
+    if [[ "x$cmd" = "xstart" ]]; then
+        ${NOHUP} "${HILBERT_APPLICATION_REF}" &> "/tmp/hilbert_start_${arg}.log" &
+        PID=${!}
+        echo "${PID}" > "${HILBERT_LOCKFILE_DIR}/hilbert_${TOOL}_${arg}.pid"
+    elif [[ "x$cmd" = "xstop" ]]; then
+#    for pid in $(${PIDOF} -s "${TOOL}"); do
+
+        ERROR "Sorry: stopping native service/application is currently not supported!"
+        return ${ERR_CODE_INT_ERROR}
+    elif [[ "x$cmd" = "xrestart" ]]; then
+        : "${SH}" -c "${HILBERT_APPLICATION_REF}"
+    elif [[ "x$cmd" = "xinit" ]]; then # prepare!
+        :
+    elif [[ "x$cmd" = "xdetect" ]]; then
+        :
+    elif [[ "x$cmd" = "xdetectapp" ]]; then
+        :
+    else
+        ERROR "Unsupported action: [${cmd}] on application/service [${arg}]! :-("
+        return ${ERR_CODE_INT_ERROR}     
+    fi
+    return $? # ${ERR_CODE_SUCCESS}
+}
+
 
 function cmd_compose_start() { ## @fn Run Docker-Compose service
     ## NOTE: Application ID
@@ -2092,7 +2166,7 @@ function cmd_shutdown() {         ## @fn Shutdown PC
 
     local log="/tmp/shutdown_$(${DATE} +%s_%N).log"
     DRYRUN ${TOUCH} ${_log}
-    DRYRUN sh -c "nohup sh -c 'sleep ${HILBERT_SHUTDOWN_DELAY}; ( ${SHUTDOWN} ${arg} ; ${SUDO} -n -P ${SHUTDOWN} ${arg} ) &>> ${_log};' &"
+    DRYRUN sh -c "${NOHUP} sh -c 'sleep ${HILBERT_SHUTDOWN_DELAY}; ( ${SHUTDOWN} ${arg} ; ${SUDO} -n -P ${SHUTDOWN} ${arg} ) &>> ${_log};' &"
     ret=$?
 
     if [[ -z "${DRY_RUN}" && $ret -ne 0 ]]; then
