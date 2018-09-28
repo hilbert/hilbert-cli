@@ -22,6 +22,9 @@ import collections
 import sys
 import os
 import time
+import datetime
+import random
+import itertools 
 import re, tokenize
 import tempfile  # See also https://security.openstack.org/guidelines/dg_using-temporary-files-securely.html
 import subprocess  # See also https://pymotw.com/2/subprocess/
@@ -1732,7 +1735,8 @@ class WOL(BaseRecordValidator):
         assert _MAC != ''
         return _MAC
 
-    def start(self):  # , action, action_args):
+    def start(self, action_args):
+
         _address = None
         _parent = self.get_parent(cls=Station)
 
@@ -1743,19 +1747,44 @@ class WOL(BaseRecordValidator):
                 assert isinstance(_address, HostAddress)
                 _address = _address.get_address()
 
+                
         _MAC = self.get_MAC()
+
+        log.debug("WOL execution( MAC: {}, IP/Addr: {}, Args: {}".format(_MAC, _address, action_args))
+        
+        N = action_args
+        
+        if (N is None) or (N == ''):
+            N = 5 # Default number of WOL!
+        else:
+            N = int(N)
+            
+        if N <= 0:
+            log.debug("WOL execution: nothing to do!")
+            return True
+            
 
         _cmd = [self._WOL, _MAC]  # NOTE: avoid IP for now? {"-i", _address, }
         __cmd = ' '.join(_cmd)
 
         retcode = None
+
+        # Small initial sleep to avoid instant paralell WOL-spamming
+        time.sleep( random.uniform(0, 0.03) )
+
+        # measure time for a single WOL call:
+        _t = datetime.datetime.now()
+        
         try:
             retcode = _execute(_cmd, dry_run=get_NO_LOCAL_EXEC_MODE())
         except:
             log.exception("Could not execute [{0}]!".format(__cmd))
             raise
+        
+        _t = (datetime.datetime.now() - _t).total_seconds() # convert it into seconds
 
         assert retcode is not None
+        
         if not retcode:
             log.debug("Command ({}) execution success!".format(__cmd))
         # return
@@ -1764,9 +1793,45 @@ class WOL(BaseRecordValidator):
 #            if PEDANTIC:
 #                raise Exception("Could not execute '{0}'!".format(__cmd))
 
+        N = N - 1
+            
+        if N <= 0:
+            return (retcode == 0)
+        
+        # Estimate the number of parallel WOL executions = number of Stations in the current config file!
+        M = _parent.get_parent(cls=GlobalStations)
+        if M is not None:
+            M = M.get_data()
+            if M is not None:
+                M = len(M)
+                
+        if M is None:
+            M = 10
+        
+        _t = M * _t
+        
+        log.debug("WOL execution: assuming {} parallel execs => max. random delay: {}s ".format(M, _t))
+        
+        for _ in itertools.repeat(None, N):
+            time.sleep(random.uniform(0, _t))
+            try:
+                retcode = _execute(_cmd, dry_run=get_NO_LOCAL_EXEC_MODE())
+            except:
+                log.exception("Could not execute [{0}]!".format(__cmd))
+                raise
+            assert retcode is not None
+        
+            if not retcode:
+                log.debug("Command ({}) execution success!".format(__cmd))
+                # return
+            else:
+                log.error("Could not wakeup via '{0}'! Return code: {1}".format(__cmd, retcode))
+
+        return (retcode == 0) # No point in extra targeted WOL - broadcasts should be enough!
+
         if (_address is None) or (_address == ''):
             log.warning("Sorry: could not get station's address for this WOL MethodObject!")
-            return retcode
+            return (retcode == 0)
 
         # if PEDANTIC:  # NOTE: address should be present for other reasons anyway...
         #                raise Exception("Sorry: could not get station's address for this WOL MethodObject!")
@@ -1791,6 +1856,7 @@ class WOL(BaseRecordValidator):
             log.debug("Command ({}) execution success!".format(__cmd))
         else:
             log.error("Could not wakeup via '{0}'! Return code: {1}".format(__cmd, retcode))
+            
         return (retcode == 0)
 
 
@@ -2594,7 +2660,7 @@ class Station(BaseRecordValidator):  # Wrapper?
             log.error("Missing/wrong Power-On Method configuration for this station!")
             raise Exception("Missing/wrong Power-On Method configuration for this station!")
 
-        return poweron.start()  # , action_args????
+        return poweron.start(action_args)
 
     def run_action(self, action, action_args):
         """

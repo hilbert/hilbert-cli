@@ -756,8 +756,8 @@ def cmd_start(parser, context, args):
     group.add_argument('--configdump', required=False,
                        help="specify input dump file")
 
-    parser.add_argument('StationID', help="station to power-on via network")
-    #    parser.add_argument('action_args', nargs='?', help="optional arguments for poweron", metavar='args')
+    parser.add_argument('StationID', help="station to power-ON via network (e.g. using wakeonlan)")
+    parser.add_argument('action_args', nargs='?', help="number of power-ONs to perform", metavar='args')
 
     cmd_action(parser, context, args, Action=action, appIdRequired=False)
 
