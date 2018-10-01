@@ -42,6 +42,7 @@ declare -rg ERR_CODE_INT_ERROR=2 # error due to wrong usage of scripts (bad argu
 
 
 export RSYNC=${HILBERT_DEPENDENCY_RSYNC:-rsync}
+export DATE=${HILBERT_DEPENDENCY_DATE:-date}
 export GREP=${HILBERT_DEPENDENCY_GREP:-grep}
 export SORT=${HILBERT_DEPENDENCY_SORT:-sort}
 export UNIQ=${HILBERT_DEPENDENCY_UNIQ:-uniq}
@@ -83,6 +84,8 @@ export PATH="${PATH}:$(${READLINK} -f "$(${DIRNAME} "${TOOL_SH}")")" # Add the t
 declare -rg LOGGER="${HILBERT_DEPENDENCY_LOGGER:-logger --id=$$ -t ${TOOL} }"
 declare -rg SHUTDOWN="${HILBERT_DEPENDENCY_SHUTDOWN:-$(PATH="${PATH}:/sbin:/usr/sbin" ${WHICH} shutdown)}"
 
+export HILBERT_SHUTDOWN_DELAY=${HILBERT_SHUTDOWN_DELAY:-3s}
+
 declare -g LOGLEVEL=${LOGLEVEL:-2}  # Default setting: show WARNINGs and ERRORs (but not DEBUG/INFO messages)
 declare -g DRY_RUN="${DRY_RUN:-}"  # NOTE: turn on dry mode (not actual service-runtime action execution) if non-empty
 
@@ -120,7 +123,7 @@ function unlock()            { _lock u; }   # drop a lock
 exec 3>&1 4>&2
 ## See also https://www.gnu.org/software/bash/manual/bashref.html#index-signal-handling
 ## NOTE: SIGKILL and SIGSTOP can not be caught, blocked or ignored.
-trap 'exec 2>&4 1>&3 ' SIGHUP SIGINT SIGQUIT SIGPIPE SIGTERM EXIT RETURN
+trap 'exec 2>&4 1>&3 ' SIGHUP SIGINT SIGQUIT SIGPIPE SIGTERM EXIT # RETURN
 ## NOTE: SIGTSTP => bg! ? RETURN ???
 exec 2>&1
 # 1>log.out
@@ -172,16 +175,19 @@ function cmd_start_locking() { ## @fn Start a lock to avoid parallel execution o
 ## https://unix.stackexchange.com/questions/9957/how-to-check-if-bash-can-print-colors
 ## https://linux.101hacks.com/ps1-examples/prompt-color-using-tput/
 if [[ -t 1 && -n "$(${TPUT} colors 2>/dev/null)" && "$(${TPUT} colors 2>/dev/null)" -ge 8 ]]; then
+    declare -rg ANSI_DIM="$(${TPUT} dim)"
     declare -rg ANSI_NO_COLOR="$(${TPUT} sgr0)" # '\033[0m'
     declare -rg ANSI_RED="$(${TPUT} setaf 1)" # '\033[1;31m'
+    declare -rg ANSI_GREEN="$(${TPUT} setaf 2)" 
     declare -rg ANSI_YELLOW="$(${TPUT} setaf 3)" # '\033[1;33m'
     declare -rg ANSI_BRIGHT_MAGENTA="$(${TPUT} setaf 5)" # '\033[1;95m'
     declare -rg ANSI_CYAN="$(${TPUT} setaf 6)" # '\033[1;36m'
-    declare -rg ANSI_GRAY="$(${TPUT} dim)$(${TPUT} setaf 7)" # '\033[0;37m'
-#    declare -rg ANSI_BRIGHT_WHITE="$(${TPUT} setaf 7)" # '\033[1;97m'
+    declare -rg ANSI_BRIGHT_WHITE="$(${TPUT} setaf 7)" # '\033[1;97m'
+    declare -rg ANSI_GRAY="${ANSI_DIM}${ANSI_BRIGHT_WHITE}" # '\033[0;37m'
 fi
 
 # default colors for the logging routines:
+declare -rg COLOR_TIMER="${HILBERT_CONSOLE_COLOR_TIMER:-${ANSI_GREEN:-=*= }}"
 declare -rg COLOR_DEBUG="${HILBERT_CONSOLE_COLOR_DEBUG:-${ANSI_GRAY:-=== }}"
 declare -rg COLOR_INFO="${HILBERT_CONSOLE_COLOR_INFO:-${ANSI_CYAN:-    }}"
 declare -rg COLOR_WARNING="${HILBERT_CONSOLE_COLOR_WARNING:-${ANSI_YELLOW:-!!! }}"
@@ -199,6 +205,19 @@ function DRYRUN_ECHO() {
     return ${ERR_CODE_SUCCESS}
 }
 
+function TIMER() {
+#  local _time_save="${TIMEFORMAT}"
+   if [[ $LOGLEVEL -le 1 ]]; then
+     TIMEFORMAT="${COLOR_TIMER}TIMER   [$@] => User: %3lU, System: %3lS, Real: %3lR${COLOR_NONE}"
+     time "$@"
+   else
+     "$@"
+   fi
+
+   return $?
+
+#  TIME="${_time_save}"
+}
 
 function DRYRUN() {
     local _cmd="$@"
@@ -292,7 +311,7 @@ EOF
     fi
 
     if [[ $LOGLEVEL -le -2 ]]; then
-        local FUN=$(${GREP} '^ *function .*()' "${TOOL_SH}" | ${SED} -e 's@function @@g' -e 's@().*$@|@g' | ${GREP} -vE '(_lock|_no_more_locking|_prepare_locking|exlock_now|exlock|shlock|unlock|DEBUG|INFO|WARNING|ERROR|DRYRUN|_which_ext|_service_get_)' | ${XARGS} | ${SED} -e 's@| @|@g' -e 's@|$@@g' )
+        local FUN=$(${GREP} '^ *function .*()' "${TOOL_SH}" | ${SED} -e 's@function @@g' -e 's@().*$@|@g' | ${GREP} -vE '(_lock|_no_more_locking|_prepare_locking|exlock_now|exlock|shlock|unlock|DEBUG|INFO|WARNING|ERROR|DRYRUN|TIMER|_which_ext|_service_get_)' | ${XARGS} | ${SED} -e 's@| @|@g' -e 's@|$@@g' )
         ${CAT} << EOF
 Call tree for internal commands supported by this tool:
 
@@ -469,12 +488,13 @@ Do locking:  [${LOCKING}]
 FLOCK:       [${FLOCK}: $(_which_ext "${FLOCK}")]
 PIDOF:       [${PIDOF}: $(_which_ext "${PIDOF}")]
 LOGGER:      [${LOGGER}: $(_which_ext "${LOGGER}")]
-SHUTDOWN:    [${SHUTDOWN}: $(_which_ext "${SHUTDOWN}")]
+SHUTDOWN:    [${SHUTDOWN}: $(_which_ext "${SHUTDOWN}")], HILBERT_SHUTDOWN_DELAY: [${HILBERT_SHUTDOWN_DELAY}]
 
 SH:          [${SH}: $(_which_ext "${SH}")]
 ENV:         [${ENV}: $(_which_ext "${ENV}")]
 SED:         [${SED}: $(_which_ext "${SED}")]
 CAT:         [${CAT}: $(_which_ext "${CAT}")]
+DATE:        [${DATE}: $(_which_ext "${DATE}")]
 GREP:        [${GREP}: $(_which_ext "${GREP}")]
 ECHO:        [${ECHO}: $(_which_ext "${ECHO}")]
 TPUT:        [${TPUT}: $(_which_ext "${TPUT}")]
@@ -524,7 +544,7 @@ HOME:        [${HOME}]
 PWD:         [${PWD}]
 PATH:        [${PATH}]
 
-date:        [$(date)]
+time stamp:  [$(${DATE})]
 TERM:        [${TERM}]
 uname:       [$(uname -a)]
 hostname:    [$(hostname), $(hostname -I)]
@@ -861,7 +881,7 @@ function cmd_init() {         ## @fn Install/Initialize/Prepare Station configur
         if [[ -d "${_old}" && -x "${_old}" && -r "${_old}" ]]; then
             if [[ ! -r "${_old}/${HILBERT_CONFIG_FILE}" ]]; then
                 ERROR "Current station config file [${_old}/${HILBERT_CONFIG_FILE}] is not readable or missing!"
-                exit ${ERR_CODE_INT_ERROR}
+                return ${ERR_CODE_INT_ERROR}
             fi
 
             INFO "Current configuration: [${HILBERT_CONFIG_DIR}] -> [${_old}]"
@@ -876,10 +896,10 @@ function cmd_init() {         ## @fn Install/Initialize/Prepare Station configur
             _ret=$?
             if [[ ${_ret} -ne 0 ]]; then
                 ERROR "Failed to initialize/prepare current configuration!"
-                exit ${_ret}
+                return ${_ret}
             fi
 
-            # TODO: check for differences in caches!?
+            # TODO: check for differences in caches!?n
 
             _ret=${ERR_CODE_SUCCESS}
 
@@ -892,11 +912,11 @@ function cmd_init() {         ## @fn Install/Initialize/Prepare Station configur
             fi
 
             DEBUG "Preparation/initialization is done! Ret code: [${_ret}]."
-            exit ${_ret}
+            return ${_ret}
         else
             ERROR "No current configuration [${HILBERT_CONFIG_DIR}] -> [${_old}]!"
             ERROR "Wrong usage: please install/deploy a station configuration first!"
-            exit ${ERR_CODE_EXT_ERROR}
+            return ${ERR_CODE_EXT_ERROR}
         fi
     fi
 
@@ -919,7 +939,7 @@ function cmd_init() {         ## @fn Install/Initialize/Prepare Station configur
         _ret=$?
         if [[ ${_ret} -ne 0 ]]; then
             ERROR "Failed to detect the currently running application!"
-            exit ${_ret}
+            return ${_ret}
         fi
         _app="${APP_ID}"
         DEBUG "Hilbert is currently running! Query for the current application returned: [${_app}], with ret. status: [$?]."
@@ -936,7 +956,7 @@ function cmd_init() {         ## @fn Install/Initialize/Prepare Station configur
         _ret=$?
         if [[ ${_ret} -ne 0 ]]; then
             ERROR "Failed to initialize/prepare current configuration!"
-            exit ${_ret}
+            return ${_ret}
         fi
 
         _ret=${ERR_CODE_SUCCESS}
@@ -963,7 +983,7 @@ function cmd_init() {         ## @fn Install/Initialize/Prepare Station configur
 
     if [[ ${_ret} -ne 0 ]]; then
         ERROR "Failed to install new configuration from [${_arg}]!"
-        exit ${_ret}
+        return ${_ret}
     fi
 
     _ret=${ERR_CODE_SUCCESS}
@@ -984,7 +1004,7 @@ function cmd_init() {         ## @fn Install/Initialize/Prepare Station configur
             HILBERT_CONFIG_DIR=${HILBERT_CONFIG_BACKUP} cmd_tool_subcall -L start "${_app}"
             DEBUG "Note that [HILBERT_CONFIG_DIR=${HILBERT_CONFIG_BACKUP} cmd_tool_subcall -L start \"${_app}\"] finished with exit code: [$?]..."
 
-            exit ${_ret}
+            return ${_ret}
         fi
 
         # starting from new configuration:
@@ -1014,7 +1034,7 @@ function cmd_init() {         ## @fn Install/Initialize/Prepare Station configur
             HILBERT_CONFIG_DIR=${HILBERT_CONFIG_BACKUP} cmd_tool_subcall -L start "${_app}"
             DEBUG "Note that [HILBERT_CONFIG_DIR=${HILBERT_CONFIG_BACKUP} cmd_tool_subcall -L start \"${_app}\"] finished with exit code: [$?]..."
 
-            exit ${_ret}
+            return ${_ret}
         fi
 
         return ${_ret}
@@ -1581,7 +1601,7 @@ function cmd_compose_stop() { ## @fn Stop Docker-Compose service
     DEBUG "Stopping/Killing/Removing service [$d] using [${DOCKER_COMPOSE}]..."
 
     local _ret=${ERR_CODE_SUCCESS}
-    cmd_docker_compose kill -s SIGINT "$d" && sleep "${hibert_station_process_kill_timeout}"
+    cmd_docker_compose kill -s SIGINT "$d" # && sleep "${hibert_station_process_kill_timeout}"
     _ret=$?
 
 #    cmd_docker_compose kill -s SIGTERM "$d"  #    cmd_docker_compose kill -s SIGKILL "$d"
@@ -1622,8 +1642,9 @@ function cmd_docker_compose() { ## @fn Run low-level Docker-Compose command dire
     ## Actually run docker-compose
     # --debug / --verbose?
 #    COMPOSE_FILE="${CF}"
+    local ret
     ${DOCKER_COMPOSE} --skip-hostname-check "$@"
-    local ret=$?
+    ret=$?
 
     cd "${S}"
 
@@ -1641,13 +1662,14 @@ function cmd_docker() {         ## @fn Run low-level Docker command directly
     fi
 
     local _CMD="$@"
+    local ret
     if [[ $LOGLEVEL -le "0" ]]; then
         _CMD="${DOCKER} --debug --log-level=debug ${_CMD}"
     else
         _CMD="${DOCKER} ${_CMD}"
     fi
-    eval ${_CMD}
-    local ret=$?
+    eval "${_CMD}"
+    ret=$?
 
     if [[ $ret -ne 0 ]]; then
         WARNING "Could not run [${_CMD}] in [${PWD}]! Ret: [${ret}]!"
@@ -2049,14 +2071,29 @@ function cmd_stop() {         ## @fn Stop Hilbert's current top application and 
 }
 
 function cmd_shutdown() {         ## @fn Shutdown PC
+    local ret
     local arg=$@
-    DEBUG "Attempting to shut-down this system using [${SHUTDOWN} ${arg}])..."
+    INFO "Attempting to shut-down this system using [${SHUTDOWN}] with arguments [${arg}]..."
+
+    local log="/tmp/shutdown_$(${DATE} +%s_%N).log"
+    DRYRUN ${TOUCH} ${_log}
+    DRYRUN sh -c "nohup sh -c 'sleep ${HILBERT_SHUTDOWN_DELAY}; ( ${SHUTDOWN} ${arg} ; ${SUDO} -n -P ${SHUTDOWN} ${arg} ) &>> ${_log};' &"
+    ret=$?
+
+    if [[ -z "${DRY_RUN}" && $ret -ne 0 ]]; then
+        ERROR "Could not schedule the shutdown via [${SHUTDOWN} ${arg}] and [${SUDO} -n -P ${SHUTDOWN} ${arg}] (delay: [${HILBERT_SHUTDOWN_DELAY}])!"
+        return ${ret}
+    elif [[ -z "${DRY_RUN}" && -n "${!}" ]]; then
+        DEBUG "Scheduled the shutdown via [${SHUTDOWN} ${arg}] and [${SUDO} -n -P ${SHUTDOWN} ${arg}] (delay: [${HILBERT_SHUTDOWN_DELAY}]) in background [${!}]."
+    else
+        ERROR "Scheduled the shutdown via [${SHUTDOWN} ${arg}] and [${SUDO} -n -P ${SHUTDOWN} ${arg}] (delay: [${HILBERT_SHUTDOWN_DELAY}]) in background [${!}]."
+    fi
 
     DRYRUN ${SHUTDOWN} ${arg} &>/dev/null
-    if [[ $? -eq 0 ]]; then
-        return ${ERR_CODE_SUCCESS}
-    fi
-    
+#    if [[ $? -eq 0 ]]; then
+#        return ${ERR_CODE_SUCCESS}
+#    fi
+
     DRYRUN ${SUDO} -n -P ${SHUTDOWN} ${arg} &>/dev/null
     if [[ $? -eq 0 ]]; then
         return ${ERR_CODE_SUCCESS}
@@ -2075,9 +2112,9 @@ function cmd_shutdown() {         ## @fn Shutdown PC
     fi
 
     ERROR "Could not shutdown via [${SHUTDOWN} ${arg}] and [${SUDO} -n -P ${SHUTDOWN} ${arg}]!"
-    
+
     # TODO: consider to use poweroff or halt ? or reboot? or special configuration on current target OS?
-    
+
     return ${ERR_CODE_EXT_ERROR}
 }
 
@@ -2102,24 +2139,24 @@ function cmd_subcommand_handle() { ## @fn Main CLI parser, sub-command handler
         ;;
     init)
         cmd_start_locking
-        cmd_init "$*"
+        TIMER cmd_init "$*"
         exit $?
         ;;
     app_change)
         cmd_start_locking
-        cmd_app_change "$*"
+        TIMER cmd_app_change "$*"
         exit $?
         ;;
     stop)
         cmd_start_locking
         ## TODO: arguments?
-        cmd_stop "$*"
+        TIMER cmd_stop "$*"
         exit $?
         ;;
     shutdown)
         cmd_start_locking
         local arg="$*"
-        if [[ "${arg}" = "now" || "${arg}" = "-r now" ]]; then
+        if [[ "${arg}" = "now" || "${arg}" = "-r now" || "${arg}" = "-P now" ]]; then
             cmd_shutdown "$@"
         else
             cmd_shutdown
@@ -2129,7 +2166,7 @@ function cmd_subcommand_handle() { ## @fn Main CLI parser, sub-command handler
     start)
         cmd_start_locking
         ## TODO: arguments?
-        cmd_start "$*"
+        TIMER cmd_start "$*"
         exit $?
         ;;
     cmd_usage|cmd_tool_subcall|cmd_native_autodetect|cmd_start_locking|cmd_subcommand_handle)
