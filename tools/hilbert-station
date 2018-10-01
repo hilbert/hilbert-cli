@@ -1264,6 +1264,38 @@ function cmd_xsetroot() {         ## @fn Wrapper for xsetroot
     fi
 }
 
+## @fn cmd_app_
+function cmd_app_restart() {         ## @fn Restart the current top application (or start the default one)
+#    local _ret
+    cmd_native_autodetect
+    cmd_read_configuration
+
+    cmd_detect_top_application
+    if [[ $? -ne 0 ]]; then
+        WARNING "Could not properly detect the current top application!"
+    fi
+
+    if [[ -n "${current_top_application_id}" ]]; then
+        DEBUG "Trying to restart (all) found top apps: ${current_top_application_id}..."
+        cmd_docker_restart "${current_top_application_id}"
+        return $?
+    elif [[ -n "${APP_ID}" ]]; then
+        cmd_restart_service "${APP_ID}"
+        # ; return 0 # Same Application ID => Same Env.Vars??? :-(
+        return $?
+    elif [[ -n "${hilbert_station_default_application}" ]]; then
+        DEBUG "Not top application running current!? Running default app: [${hilbert_station_default_application}]!"
+        cmd_start_service "${hilbert_station_default_application}"
+        return $?
+    fi
+
+    WARNING "No current top application and no default top app for this station!!!"
+    return ${ERR_CODE_EXT_ERROR}
+#
+#    cmd_xsetroot "Paint X11 root desktop before starting [$arg]"
+#    return ${_ret}
+}
+
 
 function cmd_app_change() {         ## @fn Change current application (to be stopped) to the given one (to be started)
     ## NOTE: Application ID:
@@ -1705,9 +1737,19 @@ function cmd_compose_stop() { ## @fn Stop Docker-Compose service
     return ${_ret}
 }
 
-function cmd_docker_stop() {         ## @fn Stop/kill/renove a docker container
+
+function cmd_docker_restart() {         ## @fn Restart docker container(s)
     local d=$*
-    DEBUG "Stopping/Killing/Removing service [$d] using [${DOCKER}]..."
+    DEBUG "Restarting docker container(s) [$d] using [${DOCKER}]..."
+
+    cmd_docker restart $d
+    return $?
+}
+
+
+function cmd_docker_stop() {         ## @fn Stop/kill/remove docker container(s)
+    local d=$*
+    DEBUG "Stopping/Killing/Removing docker container(s) [$d] using [${DOCKER}]..."
 
     cmd_docker kill -s SIGINT $d && sleep "${hibert_station_process_kill_timeout}"
 #    cmd_docker kill -s SIGTERM $d #    cmd_docker kill -s SIGKILL $d
@@ -2236,6 +2278,11 @@ function cmd_subcommand_handle() { ## @fn Main CLI parser, sub-command handler
         TIMER cmd_app_change "$*"
         exit $?
         ;;
+    app_restart)
+        cmd_start_locking
+        TIMER cmd_app_restart "$*"
+        exit $?
+        ;;
     stop)
         cmd_start_locking
         ## TODO: arguments?
@@ -2245,10 +2292,20 @@ function cmd_subcommand_handle() { ## @fn Main CLI parser, sub-command handler
     shutdown)
         cmd_start_locking
         local arg="$*"
-        if [[ "${arg}" = "now" || "${arg}" = "-r now" || "${arg}" = "-P now" ]]; then
+        if [[ "${arg}" = "now" ]]; then
             cmd_shutdown "$@"
         else
             cmd_shutdown
+        fi
+        exit $?
+        ;;
+    reboot)
+        cmd_start_locking
+        local arg="$*"
+        if [[ "${arg}" = "now" ]]; then
+            cmd_shutdown -r "$@"
+        else
+            cmd_shutdown -r
         fi
         exit $?
         ;;

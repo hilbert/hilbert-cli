@@ -764,6 +764,25 @@ def cmd_start(parser, context, args):
     return args
 
 
+@subcmd('reboot', help='reboot station')
+def cmd_reboot(parser, context, args):
+    action = 'reboot'
+    log.debug("Running 'cmd_{}'".format(action))
+
+    group = parser.add_mutually_exclusive_group()
+
+    group.add_argument('--configfile', required=False,
+                       help="specify input .YAML file (default: 'Hilbert.yml')")
+    group.add_argument('--configdump', required=False,
+                       help="specify input dump file")
+
+    parser.add_argument('StationID', help="station to power-on via network")
+    #    parser.add_argument('action_args', nargs='?', help="optional arguments for poweron", metavar='args')
+
+    cmd_action(parser, context, args, Action=action, appIdRequired=False)
+
+    return args
+
 @subcmd('poweroff', help='finalize Hilbert on a station and shut it down')
 def cmd_stop(parser, context, args):
     action = 'stop'
@@ -804,9 +823,9 @@ def cmd_cfg_deploy(parser, context, args):
     return args
 
 
-# @subcmd('app_start', help='start an application on a station')
-def cmd_app_start(parser, context, args):
-    action = 'app_start'
+@subcmd('app_restart', help='restart current/default application on a station')
+def cmd_app_restart(parser, context, args):
+    action = 'app_restart'
     log.debug("Running 'cmd_{}'".format(action))
 
     group = parser.add_mutually_exclusive_group()
@@ -817,10 +836,10 @@ def cmd_app_start(parser, context, args):
                        help="specify input dump file")
 
     parser.add_argument('StationID', help="specify the station")
-    parser.add_argument('ApplicationID', help="specify the application to start")
+#    parser.add_argument('ApplicationID', help="specify the application to start")
     #    parser.add_argument('action_args', nargs='?', help="optional argument for start: ApplicationID/ServiceID ", metavar='id')
 
-    cmd_action(parser, context, args, Action=action, appIdRequired=True)
+    cmd_action(parser, context, args, Action=action, appIdRequired=False)
 
     return args
 
@@ -868,9 +887,10 @@ def cmd_app_change(parser, context, args):
     return args
 
 
-# @subcmd('run_action', help='run specified action on given station with given arguments...')
+@subcmd('run_shell_cmd', help='run specified shell command on given station...')
 def cmd_run_action(parser, context, args):
-    log.debug("Running 'cmd_{}'".format('run_action'))
+    action = 'run_shell_cmd'
+    log.debug("Running 'cmd_{}'".format(action))
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--configfile', required=False,
@@ -878,11 +898,10 @@ def cmd_run_action(parser, context, args):
     group.add_argument('--configdump', required=False,
                        help="specify input dump file")
 
-    parser.add_argument('Action', help="specify the action")
     parser.add_argument('StationID', help="specify the station")
-    parser.add_argument('action_args', nargs='?', help="optional arguments for the action", metavar='args')
+    parser.add_argument('action_args', nargs='+', help="specify the command to run", metavar='args')
 
-    cmd_action(parser, context, args, Action=None, appIdRequired=False)
+    cmd_action(parser, context, args, Action=action, appIdRequired=False)
 
     return args
 

@@ -2245,51 +2245,122 @@ class Station(BaseRecordValidator):  # Wrapper?
         log.debug('HostAddress: {}'.format(_a))
         return _a
 
-    def shutdown(self):
+    def app_restart(self, action_args=None):
         _a = self.get_address()
 
         assert _a is not None
         assert isinstance(_a, HostAddress)
 
         try:
+            _ret = _a.ssh([_HILBERT_STATION, _HILBERT_STATION_OPTIONS, "app_restart"])
+        except:
+            log.exception("Could not start app-restarting on the station {}".format(_a))
+            _ret = -1
+
+        if _ret != 0:
+            log.error("Failed running app-restarting on the station {}".format(_a))
+
+        return _ret
+
+    def reboot(self, action_args=None):
+        _a = self.get_address()
+
+        assert _a is not None
+        assert isinstance(_a, HostAddress)
+
+        _ret = 0
+
+        try:
+            _ret = _a.ssh([_HILBERT_STATION, _HILBERT_STATION_OPTIONS, "reboot"])
+        except:
+            log.exception("Could not start rebooting the station {}".format(_a))
+            _ret = -1
+
+        if _ret != 0:
+            log.error("Failed running rebooting on the station {}".format(_a))
+
+        return (_ret == 0)
+
+    def run_remote_cmd(self, action):
+        """
+        """
+        _a = self.get_address()
+
+        assert _a is not None
+        assert isinstance(_a, HostAddress)
+
+        try:
+            log.debug("Going to run action [{}] via ssh on the station [{}]".format(action, _a))
+            _ret = _a.ssh(action)
+        except:
+            log.exception("Could not run an action [{}] via ssh on the station [{}]".format(action, _a))
+            raise
+
+        if _ret == 255:
+            log.debug(
+                "Possibly connection was cut while running action [{}] via ssh on the station [{}] (returned exit code == 255!)".format(
+                    action, _a))
+        elif _ret != 0:
+            log.debug("Running action [{}] via ssh on the station [{}] returned non-zero exit code: [{}]".format(action, _a, _ret))
+
+        return _ret
+
+            
+    def shutdown(self, action_args=None):
+        """
+        Stop Hilbert stack on a station + power it off
+        """
+        _a = self.get_address()
+
+        assert _a is not None
+        assert isinstance(_a, HostAddress)
+
+        _ret = None
+        try:
             _ret = _a.ssh([_HILBERT_STATION, _HILBERT_STATION_OPTIONS, "stop"])
         except:
             s = "Could not stop Hilbert on the station {}".format(_a)
-            if not PEDANTIC:
-                log.warning(s)
-                return False
-            else:
-                log.exception(s)
+            log.exception(s)
+            if PEDANTIC:
                 raise
+            log.info('Going to shut the station down despite an error while stopping Hilbert there!')
+#                return False
 
         if _ret != 0:
-            s = "Could not stop Hilbert on the station {}".format(_a)
+            s = "Could not stop Hilbert on the station {}. Return code: [{}]".format(_a, _ret)
             if not PEDANTIC:
                 log.warning(s)
+                log.info('Going to shut the station down despite an error while stopping Hilbert there!')
             else:
                 log.error(s)
-            return False
+                return False
 
         try:
             ### ssh connection is not supposed to be cut here! only in a minute!
             _ret = _a.ssh([_HILBERT_STATION, _HILBERT_STATION_OPTIONS, "shutdown"])
         except:
             s = "Could not schedule delayed shutdown on the station {}".format(_a)
-            if not PEDANTIC:
-                log.warning(s)
-                return False
-            else:
-                log.exception(s)
+            log.exception(s)
+            if PEDANTIC:
                 raise
+            _ret = -1
 
         if _ret != 0:
-            log.warning("Failed attempt to schedule a shutdown the station {} with default delay".format(_a))
+            s = "Failed attempt to schedule a shutdown the station {} with default delay".format(_a)
+            if not PEDANTIC:
+                log.warning(s)
+                log.info('Going to shut the station down despite an error while stopping Hilbert there!')
+            else:
+                log.error(s)
+                return False
+
             return False
 
         try:
             ### ssh connection is supposed to be cut!
             _ret = _a.ssh([_HILBERT_STATION, _HILBERT_STATION_OPTIONS, "shutdown", "now"])
-            _ret = 255
+            log.warning("ssh connection was NOT cut during immediate station shutdown!?")
+            _ret = 0
         except:
             log.debug("Ok, ssh connection was cut due to immediate station shutdown!")
             _ret = 0
@@ -2300,15 +2371,15 @@ class Station(BaseRecordValidator):  # Wrapper?
 #            else:
 #                log.exception(s)
 #                raise
+#
+#        if _ret != 0:
+#            log.error("Failed attempt to immediately shutdown the station {} ".format(_a))
+#            return False
 
-        if _ret != 0:
-            log.error("Failed attempt to immediately shutdown the station {} ".format(_a))
-            return False
 
+        return (_ret == 0) or (_ret == 255)
 
-        return (_ret == 0)
-
-    def deploy(self):
+    def deploy(self, action_args=None):
         # TODO: get_client_settings()
         _d = self.get_data()
 
@@ -2513,7 +2584,7 @@ class Station(BaseRecordValidator):  # Wrapper?
 
     #        raise NotImplementedError("Cannot switch to a different application on this station!")
 
-    def poweron(self):
+    def poweron(self, action_args=None):
         _d = self.get_data()
         assert _d is not None
 
@@ -2529,30 +2600,39 @@ class Station(BaseRecordValidator):  # Wrapper?
         """
         Run the given action on/with this station
 
-        :param action_args: arguments to the action
         :param action:
-                start  (poweron)
+                start  (wakeup)
                 stop  (shutdown)
+                reboot
                 cfg_deploy
-                app_change <ApplicationID>
-#                start [<ServiceID/ApplicationID>]
-#                finish [<ServiceID/ApplicationID>]
+                app_restart
+                app_change       <ApplicationID>
+                run_shell_cmd <shell command to run remotely>
+        :param action_args: arguments to the action (see the action)
 
         :return: nothing.
         """
+#                start [<ServiceID/ApplicationID>]
+#                finish [<ServiceID/ApplicationID>]
 
-        if action not in ['start', 'stop', 'cfg_deploy', 'app_change']:
+        if action not in ['start', 'stop', 'reboot', 'cfg_deploy', 'app_change', 'app_restart', 'run_shell_cmd']:
             raise Exception("Running action '{0}({1})' is not supported!".format(action, action_args))
 
         # Run 'ssh address hilbert-station action action_args'?!
         if action == 'start':
-            _ret = self.poweron()  # action_args
+            _ret = self.poweron(action_args)
         elif action == 'cfg_deploy':
-            _ret = self.deploy()  # action_args
+            _ret = self.deploy(action_args)
         elif action == 'stop':
-            _ret = self.shutdown()  # action_args
+            _ret = self.shutdown(action_args)
+        elif action == 'reboot':
+            _ret = self.reboot(action_args)
         elif action == 'app_change':
             _ret = self.app_change(action_args)  # ApplicationID
+        elif action == 'app_restart':
+            _ret = self.app_restart(action_args)  # ApplicationID
+        elif action == 'run_shell_cmd':
+            _ret = self.run_remote_cmd(action_args)
 
         # elif action == 'start':
         #            self.start_service(action_args)
