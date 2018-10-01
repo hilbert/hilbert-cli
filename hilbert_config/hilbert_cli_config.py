@@ -1837,14 +1837,20 @@ class DockerComposeService(BaseRecordValidator):
         f = self.get_file()
         t = os.path.join(tmpdir, f)
 
-        log.info("Copying resource file: '%s' -> '%s'...", f, t)
+        log.debug("Copying resource file: '%s' -> '%s'...", f, t)
         if not os.path.exists(t):
             d = os.path.dirname(t)
             if not os.path.exists(d):
                 os.mkdir(d, 7 * 8 + 7)
             shutil.copy(f, t)
+
+        # TODO: FIXME: follow dependencies in docker-compose files manually !!! 
+        # 1. open, check 'version' string: '2', '2.1', '2.2', '2.3'
+        # 2. iterate 'services' mapping and look for '<item>/extends/file' strings -> try to copy / check for the file to be there already
+
         else:
             log.debug("Target resource '%s' already exists!", t)
+
 
     def to_bash_array(self, n):
         _d = self.data_dump()
@@ -2079,6 +2085,7 @@ class StationType(BaseEnum):  # NOTE: to be redesigned/removed later on together
 
         # NOTE: the list of possible values of Station::type (will depend on format version)
         self._enum_list = [self._default_input_data,
+                           text_type('fake'),  # container of defaults 
                            text_type('standalone'),  # No remote control via SSH & Hilbert client...
                            text_type('server'),  # Linux with Hilbert client part installed but no remote control!
                            text_type('standard')  # Linux with Hilbert client part installed!
@@ -2091,6 +2098,7 @@ class Station(BaseRecordValidator):  # Wrapper?
 
     _extends_tag = text_type('extends')
     _client_settings_tag = text_type('client_settings')
+    _compatible_applications_tag = text_type('compatible_applications')
     _type_tag = text_type('type')
 
     def __init__(self, *args, **kwargs):
@@ -2108,14 +2116,14 @@ class Station(BaseRecordValidator):  # Wrapper?
 
         default_rule = {
             Station._extends_tag: (False, StationID),  # TODO: NOTE: to be redesigned later on: e.g. use Profile!?
-            self._name_tag: (True, BaseUIString),
-            text_type('description'): (True, BaseUIString),
-            text_type('icon'): (False, Icon),
-            self._profile_tag: (True, ProfileID),
+            self._name_tag: (True, BaseUIString),            # TODO: FIXME: should not be required for hidden!
+            text_type('description'): (True, BaseUIString),  # TODO: FIXME: should not be required for hidden!
+            text_type('icon'): (False, Icon),                # TODO: currently unused => delete?
+            self._profile_tag: (True, ProfileID), # TODO: FIXME: should not be required for fakes!
             self._address_tag: (True, HostAddress),
             self._poweron_tag: (False, StationPowerOnMethodWrapper),  # !! variadic, PowerOnType...
             self._ssh_options_tag: (False, StationSSHOptions),  # !!! record: user, port, key, key_ref
-            text_type('omd_tag'): (True, StationOMDTag),  # ! like ServiceType: e.g. agent. Q: Is this mandatory?
+            text_type('omd_tag'): (True, StationOMDTag),  # NOTE: like ServiceType: e.g. agent. TODO: FIXME: should not be required for fakes!
             self._ishidden_tag: (False, StationVisibility),  # Q: Is this mandatory?
             Station._client_settings_tag: (False, StationClientSettings),  # IDMap : (BaseID, BaseString)
             Station._type_tag: (False, StringValidator)  # NOTE: to be redesigned later on!
@@ -2138,7 +2146,7 @@ class Station(BaseRecordValidator):  # Wrapper?
         _d = super(Station, self).data_dump()
         l = self.get_compatible_applications()
         if l is not None:
-            _d['compatible_applications'] = sorted(l.keys())
+            _d[Station._compatible_applications_tag] = sorted(l.keys())
             # + ':' + self._compatible_applications[k].get_name()
         return _d
 
@@ -2256,24 +2264,15 @@ class Station(BaseRecordValidator):  # Wrapper?
                 raise
 
         if _ret != 0:
-            return False
-
-        try:
-            _ret = _a.ssh([_HILBERT_STATION, _HILBERT_STATION_OPTIONS, "shutdown", "now"])
-        except:
-            s = "Could not schedule immediate shutdown on the station {}".format(_a)
+            s = "Could not stop Hilbert on the station {}".format(_a)
             if not PEDANTIC:
                 log.warning(s)
-                return False
             else:
-                log.exception(s)
-                raise
-
-        if _ret != 0:
-            log.error("Bad attempt to immediately shutdown the station {} ".format(_a))
+                log.error(s)
             return False
 
         try:
+            ### ssh connection is not supposed to be cut here! only in a minute!
             _ret = _a.ssh([_HILBERT_STATION, _HILBERT_STATION_OPTIONS, "shutdown"])
         except:
             s = "Could not schedule delayed shutdown on the station {}".format(_a)
@@ -2283,6 +2282,30 @@ class Station(BaseRecordValidator):  # Wrapper?
             else:
                 log.exception(s)
                 raise
+
+        if _ret != 0:
+            log.warning("Failed attempt to schedule a shutdown the station {} with default delay".format(_a))
+            return False
+
+        try:
+            ### ssh connection is supposed to be cut!
+            _ret = _a.ssh([_HILBERT_STATION, _HILBERT_STATION_OPTIONS, "shutdown", "now"])
+            _ret = 255
+        except:
+            log.debug("Ok, ssh connection was cut due to immediate station shutdown!")
+            _ret = 0
+#            s = "Could not schedule immediate shutdown on the station {}".format(_a)
+#            if not PEDANTIC:
+#                log.warning(s)
+#                return False
+#            else:
+#                log.exception(s)
+#                raise
+
+        if _ret != 0:
+            log.error("Failed attempt to immediately shutdown the station {} ".format(_a))
+            return False
+
 
         return (_ret == 0)
 
@@ -2364,7 +2387,7 @@ class Station(BaseRecordValidator):  # Wrapper?
                         #                        ss.append(s.get_ref())
                         tmp.write('  {} \\\n'.format(s.to_bash_array(k)))
 
-                        s.copy(tmpdir)
+                        s.copy(tmpdir)  # TODO: follow dependencies!!!
 
                         # TODO: collect all **compatible** applications!
                         #                aa = []
@@ -2377,9 +2400,15 @@ class Station(BaseRecordValidator):  # Wrapper?
                     #                    aa.append(a.get_ref())
                     tmp.write('  {} \\\n'.format(a.to_bash_array(k)))
 
-                    a.copy(tmpdir)
+                    a.copy(tmpdir)  # TODO: follow dependencies!!!
 
                 tmp.write(')\n')
+
+                for k in _d:
+                    if k not in [Station._client_settings_tag, Station._compatible_applications_tag, Station._extends_tag]:
+                        tmp.write("declare -agr hilbert_station_configuration_{}='{}'\n".format(k, _d.get(k, '') ))
+                tmp.write("declare -agr hilbert_station_configuration_ID='{}'\n".format(self.get_id() ))
+
 
                 tmp.write("declare -agr hilbert_station_profile_services=({})\n".format(' '.join(_serviceIDs)))
                 tmp.write(
