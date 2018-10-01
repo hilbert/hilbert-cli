@@ -723,15 +723,24 @@ def cmd_action(parser, context, args, Action=None, appIdRequired=False):
     assert station is not None
 
     log.debug("StationID is valid according to the Configuration!")
-    log.debug("Running action: '{0} {1}' on station '{2}'".format(action, str(action_args), stationId))
+    log.debug("Running action: [{0}] (with args: [{1}]) on station [{2}]".format(action, str(action_args), stationId))
 
     set_log_level_options(_ctx)
 
     try:
-        station.run_action(action, action_args)  # NOTE: temporary API for now
+        _ret = station.run_action(action, action_args)  # NOTE: temporary API for now
     except:
-        log.exception("Could not run '{0} {1}' on station '{2}'".format(action, str(action_args), stationId))
+        log.exception("Could not run [{0}] (with args: [{1}]) on station [{2}]".format(action, str(action_args), stationId))
         sys.exit(1)
+
+    if (_ret == 0) or (_ret is True):
+        log.debug("Successfully run [{0}] (with args: [{1}]) on station [{2}]".format(action, str(action_args), stationId))
+    else:
+        log.error("Failed to run [{0}] (with args: [{1}]) on station [{2}]".format(action, str(action_args), stationId))
+        if type(_ret) is bool:
+            sys.exit(1)
+        sys.exit(_ret)
+
     return args
 
 

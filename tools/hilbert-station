@@ -1390,7 +1390,7 @@ function cmd_init_service() { ## @fn Prepare/initialize Hilbert service/applicat
         DEBUG "Running Preparations before initialization: [${HILBERT_APPLICATION_PREINIT}]..."
         eval "${HILBERT_APPLICATION_PREINIT}"
     fi
-    
+
     if [[ "x$t" = "xcompose" ]]; then
         DEBUG "Initializing/preparing service/application via docker-compose: ${arg}..."
         cmd_compose_init "${arg}"
@@ -1399,7 +1399,7 @@ function cmd_init_service() { ## @fn Prepare/initialize Hilbert service/applicat
         cmd_native init "${arg}"
     else
         ERROR "Unsupported application: [${arg}] (type: [$t])"
-        return ${ERR_CODE_INT_ERROR}	
+        return ${ERR_CODE_INT_ERROR}
     fi
 
     return $?
@@ -1449,7 +1449,7 @@ function cmd_restart_service() { ## @fn Restart currently running service NOTE: 
         cmd_native restart "${arg}"
     else
         ERROR "Unsupported application: [${arg}] (type: [$t])"
-        return ${ERR_CODE_INT_ERROR}	
+        return ${ERR_CODE_INT_ERROR}
     fi
 
     return $?
@@ -1491,7 +1491,7 @@ function cmd_stop_service() { ## @fn Stop Hilbert Service, @param arg Applicatio
         cmd_native stop "${arg}"
     else
         ERROR "Unsupported application: [${arg}] (type: [$t])"
-        return ${ERR_CODE_INT_ERROR}	
+        return ${ERR_CODE_INT_ERROR}
     fi
 
     return $?
@@ -1500,7 +1500,7 @@ function cmd_stop_service() { ## @fn Stop Hilbert Service, @param arg Applicatio
 function cmd_native() { ## @fn Action with a native service/application
     local cmd=$1; shift
     local arg=$1; shift # APP_ID!
-    
+
     local HILBERT_APPLICATION_REF
     HILBERT_APPLICATION_REF="$(_service_get_field "$arg" "ref")"
     if [[ $? -ne 0 ]]; then
@@ -1533,7 +1533,7 @@ function cmd_native() { ## @fn Action with a native service/application
         :
     else
         ERROR "Unsupported action: [${cmd}] on application/service [${arg}]! :-("
-        return ${ERR_CODE_INT_ERROR}     
+        return ${ERR_CODE_INT_ERROR}
     fi
     return $? # ${ERR_CODE_SUCCESS}
 }

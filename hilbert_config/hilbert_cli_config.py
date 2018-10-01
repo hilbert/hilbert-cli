@@ -258,17 +258,17 @@ def _execute(_cmd, shell=False, stdout=None, stderr=None, dry_run=False):  # Tru
         _shell = ' through the shell'
 
     retcode = None
-    try:
-        #    with subprocess.Popen(_cmd, shell=shell, stdout=stdout, stderr=stderr) as p:
-        # timeout=timeout,
-        if dry_run:
-            print("[Dry-Run-Mode] Execute [{0}]{1}".format(__cmd, _shell))
-            retcode = 0
-        else:
+    if dry_run:
+        print("[Dry-Run-Mode] Simulating execution of [{0}]{1}".format(__cmd, _shell))
+        retcode = 0
+    else:
+        try:
+            #    with subprocess.Popen(_cmd, shell=shell, stdout=stdout, stderr=stderr) as p:
+            # timeout=timeout,
             retcode = subprocess.call(_cmd, shell=shell, stdout=stdout, stderr=stderr)
-    except:
-        log.exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
-        raise
+        except:
+            log.exception("Could not execute [{}]!".format(__cmd))
+            raise
 
     assert retcode is not None
     log.debug("Exit code: '{}'".format(retcode))
@@ -287,6 +287,8 @@ def _execute(_cmd, shell=False, stdout=None, stderr=None, dry_run=False):  # Tru
 
 ###############################################################
 def _get_line_col(lc):
+    l = 0 ## ?
+    c = 0 ## ?
     if isinstance(lc, (list, tuple)):
         l = lc[0]
         c = lc[1]
@@ -294,8 +296,7 @@ def _get_line_col(lc):
         try:
             l = lc.line
         except:
-            log.exception("Cannot get line out of '{}': Missing .line attribute!".format(lc))
-            raise
+            log.warning("Cannot get line out of [{}]: Missing .line attribute!".format(lc))
 
         try:
             c = lc.col
@@ -303,8 +304,9 @@ def _get_line_col(lc):
             try:
                 c = lc.column
             except:
-                log.exception("Cannot get column out of '{}': Missing .col/.column attributes!".format(lc))
-                raise
+                log.warning("Cannot get column out of [{}]: Missing .col/.column attributes!".format(lc))
+                pass
+            pass
 
     return l, c
 
@@ -898,7 +900,7 @@ class SemanticVersionValidator(BaseValidator):
         try:
             _v = semantic_version.Version(_t, partial=self._partial)
         except:
-            log.exception("Wrong version data: '{0}' (see: '{1}')".format(d, sys.exc_info()))
+            log.exception("Wrong version data: [{0}]".format(d))
             return False
 
         self.set_data(_v)
@@ -1166,7 +1168,7 @@ class AutoDetectionScript(StringValidator):
                 # NOTE: Check for valid bash script
                 retcode = _execute(_cmd, dry_run=get_NO_LOCAL_EXEC_MODE())
             except:
-                log.exception("Error while running '{}' to check auto-detection script!".format(' '.join(_cmd)))
+                log.error("Error while running '{}' to check auto-detection script!".format(' '.join(_cmd)))
                 return False  # if PEDANTIC:  # TODO: add a special switch?
 
             if retcode != 0:
@@ -1181,7 +1183,7 @@ class AutoDetectionScript(StringValidator):
                 # NOTE: Check for valid bash script
                 retcode = _execute(_cmd, dry_run=get_NO_LOCAL_EXEC_MODE())
             except:
-                log.exception("Error while running '{}' to check auto-detection script!".format(' '.join(_cmd)))
+                log.error("Error while running '{}' to check auto-detection script!".format(' '.join(_cmd)))
                 return False
 
             if retcode != 0:
@@ -1229,7 +1231,7 @@ class AutoDetectionScript(StringValidator):
                 self.set_data(script)
                 return True
         except:
-            log.exception("Wrong input to AutoDetectionScript::validate: {}".format(d))
+            log.error("Wrong input to AutoDetectionScript::validate: {}".format(d))
             return False
 
         self.set_data(script)
@@ -1357,9 +1359,9 @@ class HostAddress(StringValidator):
         try:
             retcode = _execute(_cmd, **kwargs)
         except:
-            log.exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
+            log.exception("Could not execute '{0}'! ".format(__cmd))
             if not PEDANTIC:
-                return 1
+                return -1
             raise
 
         assert retcode is not None
@@ -1369,7 +1371,7 @@ class HostAddress(StringValidator):
         else:
             log.error("Could not run rsync.ssh command: '{0}'! Return code: {1}".format(__cmd, retcode))
             if PEDANTIC:
-                raise Exception("Could not run rsync/ssh command: '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
+                raise Exception("Could not run rsync/ssh command: '{0}'!".format(__cmd))
 
         return retcode
 
@@ -1390,19 +1392,20 @@ class HostAddress(StringValidator):
         try:
             retcode = _execute(_cmd, **kwargs)
         except:
-            log.exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
+            log.exception("Could not execute '{0}'!".format(__cmd))
             if not PEDANTIC:
-                return 1
+                return -1
             raise
 
         assert retcode is not None
+
         if not retcode:
             log.debug("Command ({}) execution success!".format(__cmd))
             return retcode
         else:
             log.error("Could not run scp command: '{0}'! Return code: {1}".format(__cmd, retcode))
-            if PEDANTIC:
-                raise Exception("Could not run scp command: '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
+#            if PEDANTIC:
+#                raise Exception("Could not run scp command: '{0}'!".format(__cmd))
 
         return retcode
 
@@ -1421,20 +1424,19 @@ class HostAddress(StringValidator):
 
         #            client = paramiko.SSHClient()
         #            client.load_system_host_keys()
+        retcode = None
         try:
             retcode = _execute(_cmd, **kwargs)
         except:
-            log.exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
+            log.exception("Could not execute [{0}]!".format(__cmd))
             raise
 
         assert retcode is not None
-        if not retcode:
-            log.debug("Command ({}) execution success!".format(__cmd))
-            return retcode
-        else:
-            log.error("Could not run remote ssh command: '{0}'! Return code: {1}".format(__cmd, retcode))
-            #            if PEDANTIC:
-            raise Exception("Could not run remote ssh command: '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
+#        if retcode:
+#            log.error("Could not run remote ssh command: '{0}'! Return code: {1}".format(__cmd, retcode))
+#            #            if PEDANTIC:
+#            raise Exception("Could not run remote ssh command: [{0}]!".format(__cmd))
+        log.debug("Command [{}] executed with return code: [{}]".format(__cmd, retcode))
         return retcode
 
     @classmethod
@@ -1460,9 +1462,9 @@ class HostAddress(StringValidator):
                 log.debug("Ssh alias '{0}' is functional!".format(text_type(_h)))
 
             return retcode == 0
+
         except:
-            log.exception("Non-functional ssh alias: '{0}'. Moreover: Unexpected error: {1}".format(text_type(_h),
-                                                                                                    sys.exc_info()))
+            log.exception("Error while checking ssh alias: [{0}]. ".format(text_type(_h)))
             if PEDANTIC:
                 raise
 
@@ -1565,7 +1567,7 @@ class VariadicRecordWrapper(BaseValidator):
         try:
             t = self._type_cls.parse(d[self._type_tag], parent=self, parsed_result_is_data=True, id=self._type_tag)
         except:
-            log.exception("Wrong type data: {}".format(d[self._type_tag]))
+            log.error("Wrong type data: {}".format(d[self._type_tag]))
             return False
 
         if t not in _rule:
@@ -1691,13 +1693,8 @@ class DockerMachine(BaseRecordValidator):
         try:
             _ret = _a.ssh(_cmd, shell=True)  # TODO: check for that shell=True!!!???
         except:
-            s = "Could not power-on virtual station {0} (at {1})".format(_n, _a)
-            if not PEDANTIC:
-                log.warning(s)
-                return False
-            else:
-                log.exception(s)
-                raise
+            log.error("Could not power-on virtual station {0} (at {1})".format(_n, _a))
+            return False
 
         return (_ret == 0)
 
@@ -1750,25 +1747,26 @@ class WOL(BaseRecordValidator):
 
         _cmd = [self._WOL, _MAC]  # NOTE: avoid IP for now? {"-i", _address, }
         __cmd = ' '.join(_cmd)
+
+        retcode = None
         try:
             retcode = _execute(_cmd, dry_run=get_NO_LOCAL_EXEC_MODE())
-            assert retcode is not None
-            if not retcode:
-                log.debug("Command ({}) execution success!".format(__cmd))
-            # return
-            else:
-                log.error("Could not wakeup via '{0}'! Return code: {1}".format(__cmd, retcode))
-                if PEDANTIC:
-                    raise Exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
         except:
-            log.exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
-            if not PEDANTIC:
-                return
+            log.exception("Could not execute [{0}]!".format(__cmd))
             raise
+
+        assert retcode is not None
+        if not retcode:
+            log.debug("Command ({}) execution success!".format(__cmd))
+        # return
+        else:
+            log.error("Could not wakeup via '{0}'! Return code: {1}".format(__cmd, retcode))
+#            if PEDANTIC:
+#                raise Exception("Could not execute '{0}'!".format(__cmd))
 
         if (_address is None) or (_address == ''):
             log.warning("Sorry: could not get station's address for this WOL MethodObject!")
-            return
+            return retcode
 
         # if PEDANTIC:  # NOTE: address should be present for other reasons anyway...
         #                raise Exception("Sorry: could not get station's address for this WOL MethodObject!")
@@ -1777,22 +1775,23 @@ class WOL(BaseRecordValidator):
         # Q: any problems with this?
         _cmd = [self._WOL, "-i", _address, _MAC]
         __cmd = ' '.join(_cmd)
+
+        retcode = None
         try:
             retcode = _execute(_cmd, dry_run=get_NO_LOCAL_EXEC_MODE())
-            assert retcode is not None
-            if not retcode:
-                log.debug("Command ({}) execution success!".format(__cmd))
-                return
-            else:
-                log.error("Could not wakeup via '{0}'! Return code: {1}".format(__cmd, retcode))
-                # if PEDANTIC:
-                #    raise Exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
         except:
-            log.exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
-            # if not PEDANTIC:
+            log.exception("Could not execute [{0}]!".format(__cmd))
+            if PEDANTIC:
+                raise
             #    return
-            # raise
-            pass
+#            pass
+
+        assert retcode is not None
+        if not retcode:
+            log.debug("Command ({}) execution success!".format(__cmd))
+        else:
+            log.error("Could not wakeup via '{0}'! Return code: {1}".format(__cmd, retcode))
+        return (retcode == 0)
 
 
 ###############################################################
@@ -2450,11 +2449,10 @@ class Station(BaseRecordValidator):  # Wrapper?
             except:
                 log.debug("Exception during deployment!")
                 s = "Could not deploy new local settings to {}".format(_a)
+                log.exception(s)
                 if not PEDANTIC:
-                    log.warning(s)
                     return False
                 else:
-                    log.exception(s)
                     raise
 
                     #        except: # IOError as e:
