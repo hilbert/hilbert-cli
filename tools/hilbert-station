@@ -76,6 +76,7 @@ export FLOCK=${HILBERT_DEPENDENCY_FLOCK:-flock}
 export PIDOF=${HILBERT_DEPENDENCY_PIDOF:-pidof}
 export NOHUP=${HILBERT_DEPENDENCY_NOHUP:-nohup}
 export SLEEP=${HILBERT_DEPENDENCY_SLEEP:-sleep}
+export SETSID=${HILBERT_DEPENDENCY_SETSID:-setsid}
 
 # required for comparing config-dirs:
 export DIFF=${HILBERT_DEPENDENCY_DIFF:-diff}
@@ -86,7 +87,7 @@ export PATH="${PATH}:$(${READLINK} -f "$(${DIRNAME} "${TOOL_SH}")")" # Add the t
 declare -rg LOGGER="${HILBERT_DEPENDENCY_LOGGER:-logger --id=$$ -t ${TOOL} }"
 declare -rg SHUTDOWN="${HILBERT_DEPENDENCY_SHUTDOWN:-$(PATH="${PATH}:/sbin:/usr/sbin" ${WHICH} shutdown)}"
 
-export HILBERT_SHUTDOWN_DELAY=${HILBERT_SHUTDOWN_DELAY:-3s}
+export HILBERT_SHUTDOWN_DELAY=${HILBERT_SHUTDOWN_DELAY:-1s}
 
 declare -g LOGLEVEL=${LOGLEVEL:-2}  # Default setting: show WARNINGs and ERRORs (but not DEBUG/INFO messages)
 declare -g DRY_RUN="${DRY_RUN:-}"  # NOTE: turn on dry mode (not actual service-runtime action execution) if non-empty
@@ -522,6 +523,7 @@ XHOST:       [${XHOST}: $(_which_ext "${XHOST}")]
 MKTEMP:      [${MKTEMP}: $(_which_ext "${MKTEMP}")]
 PRINTF:      [${PRINTF}: $(_which_ext "${PRINTF}")]
 REMOVE:      [${REMOVE}: $(_which_ext "${REMOVE}")]
+SETSID:      [${SETSID}: $(_which_ext "${SETSID}")]
 UNLINK:      [${UNLINK}: $(_which_ext "${UNLINK}")]
 DIRNAME:     [${DIRNAME}: $(_which_ext "${DIRNAME}")]
 BASENAME:    [${BASENAME}: $(_which_ext "${BASENAME}")]
@@ -568,7 +570,7 @@ EOF
     local H=($(${DOCKER} ps -qa --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" 2>/dev/null))
     if [[ -n "${H[*]}" ]]; then
         ${CAT} << EOF
-Previously started Hilbert's services/applications found:
+Previously started Hilbert services/applications found:
 $(${DOCKER} ps -a --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}")
 EOF
     else
@@ -2203,25 +2205,49 @@ function cmd_stop() {         ## @fn Stop Hilbert's current top application and 
     return $?
 }
 
+
+function cmd_delayed_shutdown() {         ## @fn Delayed Shutdown
+    local ret
+    local arg=$@
+    ${SLEEP} "${HILBERT_SHUTDOWN_DELAY}"
+    ${SUDO} -n ${SHUTDOWN} ${arg}
+    ret=$?
+    if [[ ${ret} -eq 0 ]]; then
+        return ${ERR_CODE_SUCCESS}
+    fi
+    ERROR "Failed to run [${SUDO} -n ${SHUTDOWN} ${arg}], exit code: $ret!"
+    return ${ERR_CODE_INT_ERROR}
+}
+
+
 function cmd_shutdown() {         ## @fn Shutdown PC
     local ret
     local arg=$@
     INFO "Attempting to shut-down this system using [${SHUTDOWN}] with arguments [${arg}]..."
-
-    local log="/tmp/shutdown_$(${DATE} +%s_%N).log"
-    DRYRUN ${TOUCH} ${_log}
-    DRYRUN sh -c "${NOHUP} sh -c 'sleep ${HILBERT_SHUTDOWN_DELAY}; ( ${SHUTDOWN} ${arg} ; ${SUDO} -n -P ${SHUTDOWN} ${arg} ) &>> ${_log};' &"
-    ret=$?
-
-    if [[ -z "${DRY_RUN}" && $ret -ne 0 ]]; then
-        ERROR "Could not schedule the shutdown via [${SHUTDOWN} ${arg}] and [${SUDO} -n -P ${SHUTDOWN} ${arg}] (delay: [${HILBERT_SHUTDOWN_DELAY}])!"
-        return ${ret}
-    elif [[ -z "${DRY_RUN}" && -n "${!}" ]]; then
-        DEBUG "Scheduled the shutdown via [${SHUTDOWN} ${arg}] and [${SUDO} -n -P ${SHUTDOWN} ${arg}] (delay: [${HILBERT_SHUTDOWN_DELAY}]) in background [${!}]."
+    if [[ -n "${DRY_RUN}" ]]; then 
+        DRYRUN_ECHO "${NOHUP} ${SETSID} ${SUDO} -n ${SH} -c '${SLEEP} ${HILBERT_SHUTDOWN_DELAY}; ${SHUTDOWN} ${arg}' </dev/null >/dev/null 2>&1 & disown -h"
+        return ${ERR_CODE_SUCCESS} 
     else
-        ERROR "Scheduled the shutdown via [${SHUTDOWN} ${arg}] and [${SUDO} -n -P ${SHUTDOWN} ${arg}] (delay: [${HILBERT_SHUTDOWN_DELAY}]) in background [${!}]."
+        # TODO: check for NOHUP on Windows!
+        # NOTE: see also https://unix.stackexchange.com/a/148698 for detailed BG execution info
+#        cmd_delayed_shutdown ${arg} </dev/null >/dev/null 2>&1 & disown -h
+#        ${NOHUP} ${SH} -c "${SLEEP} ${HILBERT_SHUTDOWN_DELAY}; ${SUDO} -n ${SHUTDOWN} ${arg}" </dev/null >/dev/null 2>&1 & disown -h 
+        ${NOHUP} ${SETSID} ${SUDO} -n ${SH} -c "${SLEEP} ${HILBERT_SHUTDOWN_DELAY}; ${SHUTDOWN} ${arg}" </dev/null >/dev/null 2>&1 & disown -h
+#        ${NOHUP} ${SETSID} ${SH} -c "${SLEEP} ${HILBERT_SHUTDOWN_DELAY} && ${SUDO} -n ${SHUTDOWN} ${arg}" </dev/null >/dev/null 2>&1 & disown -h
+        ret=$?
     fi
 
+    if [[ ${ret} -ne 0 || -z "${!}" ]]; then
+        ERROR "Could not schedule the shutdown! Ret. code: [$ret]"
+        return ${ERR_CODE_INT_ERROR}
+    fi
+
+    DEBUG "Scheduled the shutdown in background [${!}]."
+    return ${ERR_CODE_SUCCESS}
+
+##########################################################################
+
+ 
     DRYRUN ${SHUTDOWN} ${arg} &>/dev/null
 #    if [[ $? -eq 0 ]]; then
 #        return ${ERR_CODE_SUCCESS}
