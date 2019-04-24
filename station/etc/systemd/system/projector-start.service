@@ -1,0 +1,26 @@
+[Unit]
+Description=Projector Startup
+Wants=network-online.target syslog.target
+After=network-online.target network.target syslog.target
+
+[Service]
+Type=oneshot
+ExecStartPre=/usr/local/bin/projector.py STATUS
+ExecStart=/usr/bin/ls -l /usr/local/bin/projector.py /usr/bin/python3
+ExecStart=/usr/local/bin/projector.py ON
+TimeoutSec=900
+ExecStop=/usr/local/bin/projector.py STATUS
+# /usr/bin/echo "Done starting projector!"
+##
+#Restart=on-failure
+#Restart=always
+#RestartSec=2
+#StartLimitInterval=1100
+#StartLimitBurst=100
+##
+
+[Install]
+WantedBy=default.target
+# multi-user.target ?
+# graphical.target ?
+# display-manager.service ?

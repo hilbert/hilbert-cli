@@ -1,0 +1,34 @@
+[Unit]
+Description=Projector Shutdown
+Before=poweroff.target
+# Wants=network-online.target syslog.target
+After=network-online.target 
+# network.target syslog.target
+DefaultDependencies=no
+
+# local-fs.target
+
+[Service]
+Type=oneshot
+#ExecStartPre=/usr/bin/systemctl list-jobs
+ExecStartPre=/usr/local/bin/projector.py STATUS
+ExecStart=/usr/bin/ls -l /usr/local/bin/projector.py /usr/bin/python3
+ExecStart=/usr/local/bin/projector.py OFF
+ExecStop=/usr/local/bin/projector.py STATUS
+#/usr/bin/echo "Done stopping projector!"
+##
+TimeoutSec=900
+# 40
+
+#/usr/bin/echo "Stopping projector..."
+#Restart=on-failure
+#Restart=always
+#RestartSec=2
+#StartLimitInterval=1100
+#StartLimitBurst=100
+##
+
+# TimeoutStopSec=5
+
+[Install]
+WantedBy=poweroff.target
