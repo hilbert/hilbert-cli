@@ -2955,19 +2955,17 @@ class GlobalStations(BaseIDMap):
             while bool(_todo):
                 k, v = _todo.popitem()
 
-                _b = v.get_base()
-                assert k != _b  # no infinite self-recursive extensions!
+                _b = v.get_base() # get base
+                assert k != _b  # no infinite self-recursive extensions - statoion cannot extend itself!
 
-                # print(_b, ' :base: ', type(_b))
-                assert _b in _processed
-
+#                assert _b in _processed # enable multi-level extentions
                 if _b in _processed:
                     v.extend(_processed[_b])
                     _processed[k] = v
                     assert v.get_base() is None
                     _chg = True
                 else:
-                    _rest[k] = v
+                    _rest[k] = v # keep (k,v) for later (when its base will be processed!)
 
             _todo = _rest
 
