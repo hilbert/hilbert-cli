@@ -75,6 +75,7 @@ export CHMOD=${HILBERT_DEPENDENCY_CHMOD:-chmod}
 export FLOCK=${HILBERT_DEPENDENCY_FLOCK:-flock}
 export PIDOF=${HILBERT_DEPENDENCY_PIDOF:-pidof}
 export NOHUP=${HILBERT_DEPENDENCY_NOHUP:-nohup}
+export SLEEP=${HILBERT_DEPENDENCY_SLEEP:-sleep}
 
 # required for comparing config-dirs:
 export DIFF=${HILBERT_DEPENDENCY_DIFF:-diff}
@@ -511,6 +512,7 @@ SORT:        [${SORT}: $(_which_ext "${SORT}")]
 UNIQ:        [${UNIQ}: $(_which_ext "${UNIQ}")]
 NOHUP:       [${NOHUP}: $(_which_ext "${NOHUP}")]
 RSYNC:       [${RSYNC} ($(${RSYNC} --version 2>&1 | ${GREP} version)): $(_which_ext "${RSYNC}")]
+SLEEP:       [${SLEEP}: $(_which_ext "${SLEEP}")]
 WHICH:       [${WHICH}: $(_which_ext "${WHICH}")]
 MKDIR:       [${MKDIR}: $(_which_ext "${MKDIR}")]
 CHMOD:       [${CHMOD}: $(_which_ext "${CHMOD}")]
@@ -1722,7 +1724,7 @@ function cmd_compose_stop() { ## @fn Stop Docker-Compose service
     DEBUG "Stopping/Killing/Removing service [$d] using [${DOCKER_COMPOSE}]..."
 
     local _ret=${ERR_CODE_SUCCESS}
-    cmd_docker_compose kill -s SIGINT "$d" # && sleep "${hibert_station_process_kill_timeout}"
+    cmd_docker_compose kill -s SIGINT "$d" # && ${SLEEP} "${hibert_station_process_kill_timeout}"
     _ret=$?
 
 #    cmd_docker_compose kill -s SIGTERM "$d"  #    cmd_docker_compose kill -s SIGKILL "$d"
@@ -1751,7 +1753,7 @@ function cmd_docker_stop() {         ## @fn Stop/kill/remove docker container(s)
     local d=$*
     DEBUG "Stopping/Killing/Removing docker container(s) [$d] using [${DOCKER}]..."
 
-    cmd_docker kill -s SIGINT $d && sleep "${hibert_station_process_kill_timeout}"
+    cmd_docker kill -s SIGINT $d && ${SLEEP} "${hibert_station_process_kill_timeout}"
 #    cmd_docker kill -s SIGTERM $d #    cmd_docker kill -s SIGKILL $d
     cmd_docker stop -t "${hibert_station_process_kill_timeout}" $d
     cmd_docker rm -vf $d
@@ -2083,7 +2085,7 @@ function cmd_start() {         ## @fn (re)start services and top application [pr
     fi
 
 #    DEBUG "Sleeping for [${hilbert_autostart_delay}] sec (due to 'hilbert_autostart_delay' from [${HILBERT_CONFIG_DIR}/${HILBERT_CONFIG_FILE}])..."
-#    sleep "${hilbert_autostart_delay}"
+#    ${SLEEP} "${hilbert_autostart_delay}"
 
 
     # Start with general station preparation
