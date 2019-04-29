@@ -16,7 +16,7 @@ install_reqs = parse_requirements('requirements.txt', session='hack')
 tests_reqs = parse_requirements('requirements-dev.txt', session='hack')
 
 setup(name='hilbert_config',
-      version='0.3.0',
+      version='0.4.0',
       description='Hilbert Configuration tool (server part)',
       url='https://github.com/hilbert/hilbert-cli',
       author='Oleksandr Motsak',

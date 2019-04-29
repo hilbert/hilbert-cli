@@ -17,10 +17,12 @@ DIR = path.dirname(path.dirname(path.abspath(__file__)))
 if path.exists(path.join(DIR, 'hilbert_config', 'hilbert_cli_config.py')):
     sys.path.append(DIR)
     sys.path.append(path.join(DIR, 'hilbert_config'))
+    from hilbert_config import __version__
     from helpers import *
     from hilbert_cli_config import *
     from subcmdparser import *
 else:
+    from hilbert_config import __version__
     from hilbert_config.hilbert_cli_config import *
     from hilbert_config.helpers import *
     from hilbert_config.subcmdparser import *
@@ -47,7 +49,6 @@ logging.basicConfig(format='%(levelname)s  [%(filename)s:%(lineno)d]: %(message)
 # %(message)s         The result of record.getMessage(), computed just as the record is emitted
 
 log = logging.getLogger(__name__)  #
-
 
 __CLI_VERSION_ID = "$Id$"
 
@@ -943,7 +944,9 @@ def _version():
     import semantic_version
 
     log.debug("Running '--{}'".format('version'))
-    print("Hilbert Configuration API:      [{}]".format(Hilbert(None).get_api_version()))
+    print("hilbert tool version:         [{}]".format(__version__))
+    log.info("hilbert cli       version: [{}]".format(__CLI_VERSION_ID))
+    log.info("Hilbert Configuration API: [{}]".format(Hilbert(None).get_api_version()))
 
     log.info("Python (platform) version: {}".format(platform.python_version()))
     log.info("ruamel.yaml       version: {}".format(yaml.__version__))
