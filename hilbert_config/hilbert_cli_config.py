@@ -1860,6 +1860,18 @@ class WOL(BaseRecordValidator):
         return (retcode == 0)
 
 
+    
+###############################################################
+def shell_vstr(s, quote_char="'"):
+    """
+    add quotes before and after the value: [QUOTE_CHAR]<value>[QUOTE_CHAR]
+    """
+    
+    return ("{0}{1}{0}".format(quote_char, s))
+# str(s).replace(quote_char, "\\" + quote_char) # Safe exporting of strings into bash: ['] -> [\'] ???
+
+
+    
 ###############################################################
 class DockerComposeService(BaseRecordValidator):
     """DockerCompose :: Service data type"""
@@ -1921,7 +1933,7 @@ class DockerComposeService(BaseRecordValidator):
         _d = self.data_dump()
         _min_compose = [self._type_tag, self._ref_tag, self._file_tag, self._prerun_detections_hook_tag, self._preinit_hook_tag]
 
-        return ' '.join(["['{2}:{0}']='{1}'".format(k, _d[k], n) for k in _min_compose])
+        return ' '.join(["['{2}:{0}']={1}".format(k, shell_vstr(_d[k]), n) for k in _min_compose])
 
     @staticmethod
     def check_service(_f, _n):
@@ -2510,7 +2522,7 @@ class Station(BaseRecordValidator):  # Wrapper?
                 # hilbert_station_services_and_applications
                 # hilbert_station_profile_services
                 # hilbert_station_compatible_applications
-                tmp.write('declare -Agr hilbert_station_services_and_applications=(\\\n')
+                _config = 'declare -Ag hilbert_station_services_and_applications=(\\\n'
                 #               ss = []
                 for k in _serviceIDs:
                     s = all_services.get(k, None)  # TODO: check compatibility during verification!
@@ -2522,7 +2534,7 @@ class Station(BaseRecordValidator):  # Wrapper?
                         # TODO: s.check()
 
                         #                        ss.append(s.get_ref())
-                        tmp.write('  {} \\\n'.format(s.to_bash_array(k)))
+                        _config += '  {} \\\n'.format(s.to_bash_array(k))
 
                         s.copy(tmpdir)  # TODO: follow dependencies!!!
 
@@ -2535,21 +2547,23 @@ class Station(BaseRecordValidator):  # Wrapper?
                     # TODO: a.check()
 
                     #                    aa.append(a.get_ref())
-                    tmp.write('  {} \\\n'.format(a.to_bash_array(k)))
+                    _config += '  {} \\\n'.format(a.to_bash_array(k))
 
                     a.copy(tmpdir)  # TODO: follow dependencies!!!
 
-                tmp.write(')\n')
+                _config += ')\n'
+                tmp.write(_config)
 
+                tmp.write('declare -Ag hilbert_station_configuration=(\\\n')
                 for k in _d:
                     if k not in [Station._client_settings_tag, Station._compatible_applications_tag, Station._extends_tag]:
-                        tmp.write("declare -agr hilbert_station_configuration_{}='{}'\n".format(k, _d.get(k, '') ))
-                tmp.write("declare -agr hilbert_station_configuration_ID='{}'\n".format(self.get_id() ))
+                        tmp.write("  [{}]={} \\\n".format(shell_vstr(k), shell_vstr(_d.get(k, '')) ))
+                tmp.write(')\n')
+                tmp.write("declare -g hilbert_station_configuration_ID={}\n".format(shell_vstr(self.get_id()) ))
 
-
-                tmp.write("declare -agr hilbert_station_profile_services=({})\n".format(' '.join(_serviceIDs)))
+                tmp.write("declare -ag hilbert_station_profile_services=({})\n".format(' '.join(_serviceIDs)))
                 tmp.write(
-                    "declare -agr hilbert_station_compatible_applications=({})\n".format(' '.join(all_apps.keys())))
+                   "declare -ag hilbert_station_compatible_applications=({})\n".format(' '.join(all_apps.keys())))
 
                 app = _settings.get('hilbert_station_default_application', '')  # NOTE: ApplicationID!
                 if app != '':
@@ -2566,14 +2580,14 @@ class Station(BaseRecordValidator):  # Wrapper?
                 for k in sorted(_settings.keys(), reverse=True):
                     if k.startswith('HILBERT_'):
                         # NOTE: HILBERT_* are exports for services/applications (docker-compose.yml)
-                        tmp.write("declare -xg {0}='{1}'\n".format(k, str(_settings.get(k, ''))))
+                        tmp.write("declare -xg {0}={1}\n".format(k, shell_vstr(str(_settings.get(k, '')))))
                     elif k.startswith('hilbert_'):
                         # NOTE: hilbert_* are exports for client-side tool: `hilbert-station`
-                        tmp.write("declare -rg {0}='{1}'\n".format(k, str(_settings.get(k, ''))))
+                        tmp.write("declare -g {0}={1}\n".format(k, shell_vstr(str(_settings.get(k, '')))))
                     else:
                         if not PEDANTIC:
                             log.debug("Non-hilbert station setting: [%s]!")
-                            tmp.write("declare -xg {0}='{1}'\n".format(k, str(_settings.get(k, ''))))
+                            tmp.write("declare -xg {0}={1}\n".format(k, shell_vstr(str(_settings.get(k, '')))))
                         else:
                             log.warning("Non-hilbert station setting: [%s]! Not allowed in pedantic mode!")
 
