@@ -100,23 +100,41 @@ def send_requests(sock, action, Targets):  # should immediately respond with cur
 
 
 #################################################################
-def socket_communicator(sock, timeout, action_request=(lambda s: True), socket_recv_max_size=1024, socket_select_wait=0.5, idle_wait=1.5):  # https://stackoverflow.com/a/8387235
+def socket_communicator(sock, action_retry_timeout, action_request=(lambda s: True), socket_recv_max_size=1024, socket_select_wait=0.5, idle_wait=1.5, read_timeout = None):  # https://stackoverflow.com/a/8387235
+    if not sock:
+        return # nothing to read!
+
     assert sock
 
     run_main_loop = action_request(sock)
     t = time()
+    read_time = time()
     sock.setblocking(0)  # NOTE: side-effects are possible!
-    while run_main_loop:
+    _empty_buffer = 0
+    while run_main_loop and sock:
         # buffer += sock.recv(1024)  # NOTE: blocking read!
         read_ready, _a, _b = select.select([sock], [], [], socket_select_wait)
         if sock in read_ready:
             # The socket have data ready to be received
             continue_recv = True
 
-            while continue_recv:
+            while continue_recv and sock:
                 try:
                     # Try to receive some more data & convert to string
-                    yield (sock.recv(socket_recv_max_size).decode('utf-8'))
+                    b = sock.recv(socket_recv_max_size)
+                    read_time = time()
+
+                    if len(b) == 0:
+                        _empty_buffer += 1
+
+                        if _empty_buffer >= 50:
+                            print_timestamp('WARNING: possibly broken connection to Crestron (got {} empty responses)! Will try to reconnect...'.format(_empty_buffer))
+                            continue_recv = False
+                            run_main_loop = False
+                    else:
+                        _empty_buffer = 0
+
+                    yield (b.decode('utf-8'))
 
                 except socket.error as e:
                     if e.errno != errno.EWOULDBLOCK:
@@ -126,7 +144,19 @@ def socket_communicator(sock, timeout, action_request=(lambda s: True), socket_r
                     # If e.errno is errno.EWOULDBLOCK, then no more data
                     continue_recv = False
 
-        if time() - t >= timeout:  # timeout for resending original request
+                except BrokenPipeError as e:
+                    print_timestamp('ERROR: BrokenPipeError caught [{!r}]'.format(e))
+                    run_main_loop = False
+                    continue_recv = False
+
+        if (not run_main_loop) or (not sock):
+            break
+
+        if read_timeout is not None:
+            if time() - read_time >= read_timeout:
+                run_main_loop = False  # stop waiting to read from network
+
+        if time() - t >= action_retry_timeout:  # timeout for resending original request
             run_main_loop = action_request(sock)
             t = time()
         else:
