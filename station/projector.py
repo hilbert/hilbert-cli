@@ -41,9 +41,12 @@ import os
 from time import sleep, time
 import datetime
 
-# Comma-separated list of all known hosts with projectors
-LIST_ALL_PROJECTORS = os.environ.get('ALL_PROJECTORS', 'kiosk023106.ads.eso.org,kiosk023143.ads.eso.org,kiosk023212.ads.eso.org')
-PRJ = LIST_ALL_PROJECTORS.split(',') # kiosk023159.ads.eso.org - removed on 29.03.2019
+# Comma-separated list of all known hosts with projectors (overrides the list provided by Crestron):
+ENV_ALL_PROJECTORS = os.environ.get('ALL_PROJECTORS', None) 
+
+PRJ = [] # Global list of all projector IDs
+if ENV_ALL_PROJECTORS:
+    PRJ = ENV_ALL_PROJECTORS.split(',')
 
 # Crestron Server Connection details:
 CRESTRON_HOST = os.environ.get('CRESTRON_HOST', '172.16.31.13')
@@ -267,7 +270,7 @@ if __name__ == "__main__":
             print_timestamp('CLI arguments: [{}].'.format(sys.argv))
 
             print('ERROR: wrong target state spec: [{}] (should be ON, OFF, STATUS or LISTEN)'.format(_action))
-            print('Usage: {} [(STATUS|LISTEN|ON|OFF) [(all|kiosk023(106|143|159|212).ads.eso.org)]]'.format(sys.argv[0]))
+            print('Usage: {} [(STATUS|LISTEN|ON|OFF) [(all|kiosk023(106|143|212).ads.eso.org)]]'.format(sys.argv[0]))
             sys.exit(-1)
         #        print('WARNING: Ignoring wrong target state spec: [{}] (should be ON, OFF, STATUS or LISTEN), Default: [{}]'.format(a, _action))
 
@@ -287,7 +290,7 @@ if __name__ == "__main__":
         assert _action in ['ON', 'OFF', 'STATUS', 'LISTEN']
     else:
         # No CLI arguments...
-        print('Usage: {} [(STATUS|LISTEN|ON|OFF) [(all|kiosk023(106|143|159|212).ads.eso.org)]]'.format(sys.argv[0]))
+        print('Usage: {} [(STATUS|LISTEN|ON|OFF) [(all|kiosk023(106|143|212).ads.eso.org)]]'.format(sys.argv[0]))
         sys.exit(0)
 
     print_timestamp('Function: [{}], Target projector(s): [{}]'.format(_action, name))
@@ -312,5 +315,3 @@ if __name__ == "__main__":
         if STAT:
             print_timestamp("Final state(s): ", STAT)
         print_timestamp("Time spent: {} sec".format(time() - _start))
-
-        
