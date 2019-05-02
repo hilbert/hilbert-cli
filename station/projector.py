@@ -177,10 +177,11 @@ def server_connection():
                 continue
 
             return sock
-        sleep(i*3)
+        sleep(_i*3)
 
-    raise Exception('ERROR: cannot connect to the CrestronSystem (via {}:{}-{})'.format(CRESTRON_HOST, CRESTRON_PORT, CRESTRON_PORT + CRESTRON_PORT_COUNT))
+    raise Exception('Cannot connect to the CrestronSystem (via {}:{}-{})'.format(CRESTRON_HOST, CRESTRON_PORT, CRESTRON_PORT + CRESTRON_PORT_COUNT))
 #    return None
+
 
 ##########################################################################################
 def main_loop(action, target_spec):
