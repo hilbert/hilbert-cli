@@ -83,6 +83,14 @@ def get_stat(p, default='?'):
 
 
 #################################################################
+def send_request_prj_list(sock):  # should immediately respond with current list of targets
+    """Query for all known projectors"""
+    message = 'PRJ_LIST=?' + EOC
+    print_timestamp('Request: {!r}'.format(message))
+    return(sock.sendall(message.encode('utf-8')) is None)
+
+
+#################################################################
 def send_requests(sock, action, Targets):  # should immediately respond with current status
     """Query or control projectors"""
     if not Targets:
@@ -190,55 +198,98 @@ def server_connection():
 
 ##########################################################################################
 def main_loop(action, target_spec):
+    global PRJ
     # binary_stream = io.BytesIO()
+
+    # all possible Crestron responses:
     response_regexp = re.compile(r"PRJ_(.*)_STAT=([^=\n]+)$")
-    buffer = ''
+    list_response_regexp = re.compile(r"PRJ_LIST=(.*)$")
+    error_response_regexp = re.compile(r"PROTOCOL_ERROR: (.*)$")
+
     ret = 0
 
-    Targets = []
-
-    if target_spec == 'all':
-        Targets = PRJ
-    elif target_spec in PRJ:
-        Targets = [target_spec]
-    else:
-        print('WARNING: possibly wrong target projector spec: [{}]!'.format(target_spec))
-        Targets = [target_spec]
-
     _sock = None  ## Socket for connection with Crestron server
-    try:
+    _new_list = False
+    buffer = ''
 
-        while True:
+    try:
+        todos = ''
+
+        # initial stage:
+        while True and (not PRJ):
             while not _sock:
                 _sock = server_connection()
 
             assert _sock
 
-            _empty_buffer = 0
+            # if we need to know all projectors (and they were not specified from outside) then query them!
+            for b in socket_communicator(_sock, COMMAND_RETRY_TIMEOUT,
+                action_request=(lambda s: send_request_prj_list(s)), 
+                read_timeout = 4*60):
+
+                buffer += b
+                items = buffer.split(EOC)
+
+                buffer = ''
+
+                for s in items[:-1]:
+                    print_timestamp('Response: [{!r}].'.format(s))
+
+                    # PRJ_LIST=*,*,*
+                    match = list_response_regexp.match(s)
+                    if match:
+                        p = match.group(1)  # CSV list of projectors
+                        print_timestamp('List of all known projectors: [{}]'.format(p))
+
+                        # NOTE: Update the list of all projectors only if it was not set via ENV!
+                        PRJ = p.split(',')
+                        continue
+
+                    # else: keep unprocessed responses for later processing
+                    todos += s + EOC
+
+                buffer = items[-1]  # the rest after last EOC separator: ''!
+
+                if buffer != '':
+                    print_timestamp('WARNING: possibly missing End-of-response-separator. Tailing buffer: [{!r}]'.format(buffer))
+
+                if PRJ: # stop reading if we already to PRJ_LIST=....!
+                    break
+
+        buffer = todos + buffer # NOTE: unhandled respones - may go missing if nothing will be read from the socket :-(
+
+        Targets = []
+
+        if PRJ and (target_spec == 'all'):
+            for h in PRJ:
+                if h not in Targets:
+                    Targets.append(h)
+        elif PRJ and (target_spec in PRJ) and (target_spec not in Targets):
+            Targets.append(target_spec)
+        elif (target_spec != 'all'):
+            print('WARNING: possibly wrong target projector spec: [{}]!'.format(target_spec))
+            Targets.append(target_spec)
+
+        print_timestamp('Current targets for handling: {}'.format(Targets))
+
+        # main stage
+        while True:
+
+            while not _sock:
+                _sock = server_connection()
+
+            assert _sock
+
             for b in socket_communicator(_sock, COMMAND_RETRY_TIMEOUT,
                         action_request=(lambda s: send_requests(s, action, Targets))):
 
-                if len(b) == 0:
-                    if not _sock:
-                        break
-
-                    _empty_buffer += 1
-                    if _empty_buffer >= 5:
-                        print_timestamp('WARNING: possibly broken connection to Crestron (got {} empty responses)! About to reconnect...'.format(_empty_buffer))
-                        if _sock:
-                            _sock.close()
-                            _sock = None
-                        break
-                    else:
-                        continue
-                else:
-                    _empty_buffer = 0
-
                 buffer += b
-                print_timestamp('Response: {!r} [{}]'.format(buffer, len(buffer)))
 
                 items = buffer.split(EOC)
                 for s in items[:-1]:
+                    print_timestamp('Response: [{!r}]. Processing...'.format(s))
+
+                    # PRJ_*_STAT=*
                     match = response_regexp.match(s)
                     if match:
                         p = match.group(1)  # projector name
@@ -263,18 +314,55 @@ def main_loop(action, target_spec):
                                         if not Targets:
                                             return ret
                                 # assert (action == 'LISTEN')
+                        continue
 
-                    else:
-                        print_timestamp('WARNING: unexpected response: [{}]!'.format(s))
+
+                    # PRJ_LIST=*,*,*
+                    match = list_response_regexp.match(s)
+                    if match:
+                        print_timestamp('WARNING: projector list update is not expected on this stage!')
+
+                        p = match.group(1)  # CSV list of projectors
+                        print_timestamp('Updated list of projectors: [{}]'.format(p))
+
+                        if not PRJ:  # NOTE: Update the list of all projectors only if it was not set via ENV!
+                            PRJ = p.split(',')
+
+                            if target_spec == 'all':
+                                for h in PRJ:
+                                    if h not in Targets:
+                                        print_timestamp('New projector ID: [{}]'.format(h))
+                                        Targets.append(h)
+                                        # trigger general status update
+                                        _new_list = True
+
+                        continue
+
+                    # PROTOCOL_ERROR: ...
+                    match = error_response_regexp.match(s)
+                    if match: # TODO: the following is untested since it is not yet implemented on the server
+                        p = match.group(1)  # error message
+                        print_timestamp('WARNING: server could not handle some of our requests: [{}]! Please check projector IDs!'.format(p))
+                        continue
+
+                    # else
+                    print_timestamp('WARNING: unexpected response: [{}]!'.format(s))
 
                 buffer = items[-1]  # the rest after last EOC separator: ''!
-                assert buffer == ''
 
-                if not _sock:
-                    break
+                if buffer != '':
+                    print_timestamp('WARNING: possibly missing End-of-response-separator. Tailing buffer: [{!r}]'.format(buffer))
 
-            sleep(120)
+                if _new_list:
+                    send_requests(_sock, action, Targets)
+                    _new_list = False
 
+
+            sleep(10)
+
+    except BrokenPipeError as e:
+        print_timestamp('ERROR: BrokenPipeError caught [{!r}]'.format(e))
+        ret = -1
     except Exception as e:
         print_timestamp('ERROR: [{!r}]'.format(e))
         ret = -1
