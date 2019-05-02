@@ -84,6 +84,11 @@ def get_stat(p, default='?'):
 
 #################################################################
 def send_requests(sock, action, Targets):  # should immediately respond with current status
+    """Query or control projectors"""
+    if not Targets:
+        print_timestamp('No known handle-targets yet...')
+        return(True)
+
     message = ''
     for p in Targets:
         message += 'PRJ_' + p + '_PWR_'
