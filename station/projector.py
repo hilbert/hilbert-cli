@@ -306,8 +306,11 @@ if __name__ == "__main__":
         #        print('WARNING: Ignoring wrong target state spec: [{}] (should be ON, OFF, STATUS or LISTEN), Default: [{}]'.format(a, _action))
 
         if len(sys.argv) >= 3:
-            a = str(sys.argv[2]).lower()
-            if (a in PRJ) or (a == 'all'):
+            a = str(sys.argv[2])
+            if a.lower() == 'all':
+                a = 'all'
+
+            if (a == 'all') or (PRJ and (a in PRJ)):
                 name = a
             else:
                 print_timestamp('CLI arguments: [{}].'.format(sys.argv))
