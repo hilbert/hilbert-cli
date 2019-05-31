@@ -338,6 +338,7 @@ positional arguments:
    list_services           list of background services
    app_change <app_id>     change the currently running top application to specified
    start [app_id]          start Hilbert on the system
+   pause                   pause Hilbert on the system
    stop                    stop Hilbert on the system
    shutdown                shut down the system
 
@@ -1533,6 +1534,48 @@ function cmd_stop_service() { ## @fn Stop Hilbert Service, @param arg Applicatio
     return $?
 }
 
+
+function cmd_pause_service() { ## @fn Pause Hilbert Service, @param arg ApplicationID
+    ## NOTE: Application ID
+    local arg="$*"
+
+    if [[ -z "${arg}" ]]; then
+        ERROR "Wrong argument [${arg}]!"
+        cmd_usage
+        exit ${ERR_CODE_EXT_ERROR}
+    fi
+
+    cmd_read_configuration
+
+    local t
+    t="$(_service_get_type "${arg}")"
+
+    if [[ $? -ne 0 ]]; then
+        ERROR "Invalid service/application: [${arg}]!"
+        exit ${ERR_CODE_EXT_ERROR}
+    fi
+
+    local spec
+    spec=$(_service_get_type_spec "$t")
+    if [[ $? -ne 0 ]]; then
+        ERROR "Wrong or unsupported application: [${arg}] (type: [$t])"
+        exit ${ERR_CODE_EXT_ERROR}
+    fi
+
+    if [[ "x$t" = "xcompose" ]]; then
+        DEBUG "Pausing service/application via docker-compose: [${arg}]..."
+        cmd_compose_pause "${arg}"
+    elif [[ "x$t" = "xnative" ]]; then
+        DEBUG "Pausing native service/application via native: [${arg}]..."
+        cmd_native pause "${arg}"
+    else
+        ERROR "Unsupported application: [${arg}] (type: [$t])"
+        return ${ERR_CODE_INT_ERROR}
+    fi
+
+    return $?
+}
+
 function cmd_native() { ## @fn Action with a native service/application
     local cmd=$1; shift
     local arg=$1; shift # APP_ID!
@@ -1558,6 +1601,11 @@ function cmd_native() { ## @fn Action with a native service/application
 #    for pid in $(${PIDOF} -s "${TOOL}"); do
 
         ERROR "Sorry: stopping native service/application is currently not supported!"
+        return ${ERR_CODE_INT_ERROR}
+    elif [[ "x$cmd" = "xpause" ]]; then
+#    for pid in $(${PIDOF} -s "${TOOL}"); do
+
+        ERROR "Sorry: pausing native service/application is currently not supported!"
         return ${ERR_CODE_INT_ERROR}
     elif [[ "x$cmd" = "xrestart" ]]; then
         : "${SH}" -c "${HILBERT_APPLICATION_REF}"
@@ -1742,6 +1790,44 @@ function cmd_compose_stop() { ## @fn Stop Docker-Compose service
 }
 
 
+function cmd_compose_pause() { ## @fn Pause Docker-Compose service
+    local arg="$*"  # Application ID
+
+    local HILBERT_APPLICATION_FILE
+    local HILBERT_APPLICATION_REF
+    HILBERT_APPLICATION_FILE="$(_service_get_field "$arg" "file")"
+    HILBERT_APPLICATION_REF="$(_service_get_field "$arg" "ref")"
+
+    export HILBERT_APPLICATION_ID="$arg"  # NOTE: To be set as env. variable APP_ID within container...
+
+    ## NOTE: Simplify COMPOSE_FILE -> launch!
+    local PLAIN_COMPOSE_FILE="cache_for_${HILBERT_APPLICATION_ID}.yaml"
+    if [[ -r "${HILBERT_CONFIG_DIR}/${PLAIN_COMPOSE_FILE}" ]]; then
+        export COMPOSE_FILE="${PLAIN_COMPOSE_FILE}"
+    else
+        export COMPOSE_FILE="${HILBERT_APPLICATION_FILE:-docker-compose.yml}"  # Default value
+        local DOCKER_COMPOSE_OVERRIDE="override_for_${HILBERT_APPLICATION_ID}.yaml"
+        if [[ -r "${HILBERT_CONFIG_DIR}/${DOCKER_COMPOSE_OVERRIDE}" ]]; then
+            export COMPOSE_FILE="${COMPOSE_FILE}${COMPOSE_PATH_SEPARATOR}${DOCKER_COMPOSE_OVERRIDE}"
+        fi
+    fi
+
+    DEBUG "Pausing service/application: ${HILBERT_APPLICATION_ID} (${HILBERT_APPLICATION_REF} from ${COMPOSE_FILE})..."
+
+    local d="${HILBERT_APPLICATION_REF}"
+
+    DEBUG "Pausing service [$d] using [${DOCKER_COMPOSE}]..."
+
+    local _ret=${ERR_CODE_SUCCESS}
+    cmd_docker_compose pause "$d" # && ${SLEEP} "${hibert_station_process_kill_timeout}"
+    _ret=$?
+
+    unset -v HILBERT_APPLICATION_ID COMPOSE_FILE
+
+    return ${_ret}
+}
+
+
 function cmd_docker_restart() {         ## @fn Restart docker container(s)
     local d=$*
     DEBUG "Restarting docker container(s) [$d] using [${DOCKER}]..."
@@ -1762,6 +1848,16 @@ function cmd_docker_stop() {         ## @fn Stop/kill/remove docker container(s)
     cmd_docker rm -vf $d  # NOTE: to remove "dead" left-over containers!
 #    (cmd_docker rm $d || cmd_docker rm -vf $d)
 
+    return $?
+}
+
+
+function cmd_docker_pause() {          ## @fn Pause docker container(s)
+    local d=$*
+    DEBUG "Pause service/application [$d] using [${DOCKER}]..."
+
+    cmd_docker pause $d
+    
     return $?
 }
 
@@ -1819,13 +1915,63 @@ function cmd_docker() {         ## @fn Run low-level Docker command directly
 }
 
 
-#function cmd_docker_pause() {
-#    local d=$*
-#    DEBUG "Pause service/application [$d] using [${DOCKER}]..."
-#
-#    cmd_docker pause $d
-#    return $?
-#}
+
+
+function cmd_pause() {         ## @fn Pause Hilbert's current top application and background services
+    cmd_native_autodetect
+    cmd_read_configuration
+
+    cmd_detect_top_application
+    if [[ $? -ne 0 ]]; then
+        WARNING "Could not properly detect the current Hilbert applications or services!"
+    fi
+    if [[ -n "${current_top_application_id}" ]]; then
+        INFO "Previously started Hilbert's application(s) detected: [${current_top_application_id}, APP_ID: ${APP_ID}]"
+
+        if [[ -z "${APP_ID}" ]]; then
+            # ${DOCKER} ps -a --filter "label=is_top_app=1" --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}"
+            cmd_docker_pause ${current_top_application_id}
+        else
+            cmd_pause_service "${APP_ID}"
+        fi
+
+#        cmd_xsetroot "Paint X11 after stopping [${APP_ID}]"
+    else
+        INFO "No previously started applications are currently detected"
+    fi
+    # Array of indices
+
+    local indices=( ${!hilbert_station_profile_services[@]} )
+    local N=${#indices[@]}
+
+    if [[ $N -ne 0 ]]; then
+        local i
+        local sv
+
+        for ((i=$N - 1; i >= 0; i--)) ; do
+            sv="${hilbert_station_profile_services[indices[i]]}"
+            data="$(_service_get_info "$sv")"
+            if [[ $? -ne 0 ]]; then
+                WARNING "Trying to pause a bad service [${indices[i]}]: [${sv}]"
+            else
+                DEBUG "Pausing Service $sv: [$data]"
+            fi
+
+            cmd_pause_service "${sv}"
+
+            if [[ $? -ne 0 ]]; then
+                ERROR "Could not pause service: [${sv}] ($data)"
+                exit ${ERR_CODE_INT_ERROR}
+            fi
+        done
+
+#        cmd_xsetroot "Paint X11 after pausing all services..."
+    else
+        DEBUG "No services should be running on this station!"
+    fi
+
+    return $?
+}
 
 function cmd_detect_top_application() {  ## @fn Detect the currently running Hilbert (top) application
     ## NOTE: side effects:
@@ -2315,6 +2461,13 @@ function cmd_subcommand_handle() { ## @fn Main CLI parser, sub-command handler
         cmd_start_locking
         ## TODO: arguments?
         TIMER cmd_stop "$*"
+        exit $?
+        ;;
+    # NOTE/TODO: maybe also add "unpause"?
+    pause)
+        cmd_start_locking
+        ## TODO: arguments?
+        TIMER cmd_pause "$*"
         exit $?
         ;;
     shutdown)
