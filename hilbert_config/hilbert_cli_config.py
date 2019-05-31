@@ -2415,26 +2415,25 @@ class Station(BaseRecordValidator):  # Wrapper?
                 return False
 
         try:
-            ### ssh connection is supposed to be cut!
+            # NOTE: ssh connection is NOT supposed to be cut NOW!
             _ret = _a.ssh([_HILBERT_STATION, _HILBERT_STATION_OPTIONS, "shutdown", "now"])
-            log.warning("ssh connection was NOT cut during immediate station shutdown!?")
-            _ret = 0
+#            log.warning("ssh connection was NOT cut during immediate station shutdown!?")
+#            _ret = 0
         except:
-            log.debug("Ok, ssh connection was cut due to immediate station shutdown!")
-            _ret = 0
-#            s = "Could not schedule immediate shutdown on the station {}".format(_a)
-#            if not PEDANTIC:
-#                log.warning(s)
-#                return False
-#            else:
-#                log.exception(s)
-#                raise
-#
-#        if _ret != 0:
-#            log.error("Failed attempt to immediately shutdown the station {} ".format(_a))
-#            return False
+#            log.debug("Ok, ssh connection was cut due to immediate station shutdown!")
+            s = "Could not schedule immediate shutdown on the station {}".format(_a)
+            if not PEDANTIC:
+                log.warning(s)
+                return False
+            else:
+                log.exception(s)
+                raise
 
-        return (_ret == 0) or (_ret == 255)
+        if _ret != 0:
+            log.error("Failed attempt to immediately shutdown the station {} ".format(_a))
+            return False
+
+        return (_ret == 0) # or (_ret == 255)
 
         try:
             ### ssh connection is not supposed to be cut here! only in a minute!
