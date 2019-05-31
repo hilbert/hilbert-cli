@@ -2348,9 +2348,29 @@ class Station(BaseRecordValidator):  # Wrapper?
         assert isinstance(_a, HostAddress)
 
         _ret = 0
-
         try:
-            _ret = _a.ssh([_HILBERT_STATION, _HILBERT_STATION_OPTIONS, "reboot"])
+            _ret = _a.ssh([_HILBERT_STATION, _HILBERT_STATION_OPTIONS, "pause"]) # TODO!
+        except:
+            s = "Could not stop Hilbert on the station {}".format(_a)
+            log.exception(s)
+            if PEDANTIC:
+                raise
+            log.info('Going to reboot the station despite an error while pausing Hilbert there!')
+#                return False
+
+        if _ret != 0:
+            s = "Could not pause Hilbert on the station {}. Return code: [{}]".format(_a, _ret)
+            if not PEDANTIC:
+                log.warning(s)
+                log.info('Going to reboot the station despite an error while pausing Hilbert there!')
+            else:
+                log.error(s)
+                return False
+
+        
+        
+        try:
+            _ret = _a.ssh([_HILBERT_STATION, _HILBERT_STATION_OPTIONS, "reboot", "now"]) #!
         except:
             log.exception("Could not start rebooting the station {}".format(_a))
             _ret = -1
