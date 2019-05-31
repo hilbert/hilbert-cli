@@ -337,10 +337,12 @@ positional arguments:
    list_applications       list of (supported) applications
    list_services           list of background services
    app_change <app_id>     change the currently running top application to specified
+   app_restart             restart the currently running top application
    start [app_id]          start Hilbert on the system
    pause                   pause Hilbert on the system
    stop                    stop Hilbert on the system
    shutdown                shut down the system
+   reboot                  reboot the system
 
 optional arguments:
   -h                       show this help message [+internal commands/call tree, depending on verbosity] and exit
@@ -2332,7 +2334,7 @@ function cmd_stop() {         ## @fn Stop Hilbert's current top application and 
             if [[ $? -ne 0 ]]; then
                 WARNING "Trying to stop a bad service [${indices[i]}]: [${sv}]"
             else
-                DEBUG "Starting Service $sv: [$data]"
+                DEBUG "Stopping Service $sv: [$data]"
             fi
 
             cmd_stop_service "${sv}"
