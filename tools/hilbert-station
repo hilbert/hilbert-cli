@@ -688,7 +688,7 @@ fi
 DEBUG "Base Configuration directory [${HILBERT_CONFIG_BASEDIR}] exists and is readable..."
 
 if [[ ! -d "${HILBERT_CONFIG_DIR}" ]]; then
-    DEBUG "Configuration directory [${HILBERT_CONFIG_DIR}] is initialized yet!"
+    DEBUG "Configuration directory [${HILBERT_CONFIG_DIR}] is NOT initialized yet!"
 fi
 
 if [[ ! -r "${HILBERT_CONFIG_DIR}/${HILBERT_CONFIG_FILE}" ]]; then
@@ -780,19 +780,13 @@ function cmd_install_station_config() { ## @fn Try to Install new station config
     fi
 
 
-    ### TODO: check beforehand and if necessary pre stop everything ++ post start anew,
-    ### forget the currently running application choice??
-    ###    cmd_detect_changes
-    local _old="$(${READLINK} -f "${HILBERT_CONFIG_DIR}")"
-    # rsync -zavc src/ dest/ --dry-run # -zaic
-
     local base=$(${BASENAME} "${arg}")
     local new_cfg_dir=$(${MKTEMP} -u -d --tmpdir="${HILBERT_CONFIG_BASEDIR}" "$base.XXXXXXXXXX") # dry run: just output it!
     DEBUG "NOTE: new config is [${base}] => new_cfg_dir: [${new_cfg_dir}]"
 
     # NOTE: take over the deployed station configurations
     DEBUG "Moving ${arg} => ${new_cfg_dir}..."
-    DRYRUN ${MOVE} "${arg}" "${new_cfg_dir}" # rsync --backup --backup-dir
+    DRYRUN ${MOVE} -b "${arg}" "${new_cfg_dir}" # rsync --backup --backup-dir
     if [[ $? -ne 0 ]]; then
         ERROR "Failed to move temporary configuration directory [${arg}] to [${new_cfg_dir}]!"
         exit ${ERR_CODE_EXT_ERROR}
@@ -806,25 +800,43 @@ function cmd_install_station_config() { ## @fn Try to Install new station config
         exit ${ERR_CODE_INT_ERROR}
     fi
 
+
+    ### TODO: check beforehand and if necessary pre stop everything ++ post start anew,
+    ### forget the currently running application choice??
+    ###    cmd_detect_changes
+    local _ret
+    local _old="$(${READLINK} -e "${HILBERT_CONFIG_DIR}")"  # NOTE: What if ${HILBERT_CONFIG_DIR} does not exist!??
+    _ret=$?
+    # rsync -zavc src/ dest/ --dry-run # -zaic
+
+    # create ..../configs symbolic link!
     cmd_set_station_config_reference "$(${BASENAME} "${new_cfg_dir}")"
     # TODO: any non-zero return codes?
 
+    ls -la ~/.config/hilbert-station/ ~/.config/hilbert-station/configs "${new_cfg_dir}"
+
     # TODO: backup older config for a while. FIXME: limited number of backups?
-    DRYRUN ${MOVE} --backup=numbered -T "${_old}" "${HILBERT_CONFIG_BACKUP}"
+    if [[ ${_ret} -eq 0 && -n "${_old}" ]]; then # There is a target for our symbolic link
+      if [[ -d "${_old}" && ! -L "${_old}" ]]; then #! NOTE: Fixing bug if _old ==
+        DEBUG "Backing-up [${_old}] as [${HILBERT_CONFIG_BACKUP}]..."
+        DRYRUN ${MOVE} --backup=numbered -T "${_old}" "${HILBERT_CONFIG_BACKUP}"
 
-    # Max 10 backups!
-    local _max_backup="10"
-    if [[ -d "${HILBERT_CONFIG_BACKUP}.~${_max_backup}~" ]]; then
-        local _i=1
-
-        DRYRUN ${REMOVE} -Rf "${HILBERT_CONFIG_BACKUP}.~${_i}~"
-
-        for ((;;_i++)); do
+        # Max 10 backups!
+        local _max_backup="10"
+        # NOTE: the following is due to internal functioning of "${MOVE} --backup=numbered"!
+        if [[ -d "${HILBERT_CONFIG_BACKUP}.~${_max_backup}~" ]]; then # latest backup has highest number
+          local _i=1
+          DRYRUN ${REMOVE} -Rf "${HILBERT_CONFIG_BACKUP}.~${_i}~" # oldest backup
+          for ((;;_i++)); do
             [[ ${_i} -ge ${_max_backup} ]] && break
-
+            # shift downwards
             DRYRUN ${MOVE} -f "${HILBERT_CONFIG_BACKUP}.~$((_i+1))~" "${HILBERT_CONFIG_BACKUP}.~${_i}~"
-        done
+          done
+        fi
+      fi
     fi
+
+
 
     return ${ERR_CODE_SUCCESS}
 }
@@ -884,12 +896,13 @@ function cmd_init() {         ## @fn Install/Initialize/Prepare Station configur
 
     # Current configuration:
     local _old="$(${READLINK} -f "${HILBERT_CONFIG_DIR}")"
+    _ret=$?
 
     # by default: only rerun all possible initialization/preparation routines!
     if [[ -z "${_arg}" ]]; then # no new config. Just check current, refresh it [and restart]
 
         # -L "${HILBERT_CONFIG_DIR}" &&  ??
-        if [[ -d "${_old}" && -x "${_old}" && -r "${_old}" ]]; then
+        if [[ ${_ret} -eq 0 && -d "${_old}" && -x "${_old}" && -r "${_old}" ]]; then
             if [[ ! -r "${_old}/${HILBERT_CONFIG_FILE}" ]]; then
                 ERROR "Current station config file [${_old}/${HILBERT_CONFIG_FILE}] is not readable or missing!"
                 return ${ERR_CODE_INT_ERROR}
@@ -1091,11 +1104,13 @@ function cmd_compare_station_configs() { ## @fn compare some station configurati
         ERROR "Wrong configuration folder: [${arg}]!"
         exit ${ERR_CODE_INT_ERROR}
     fi
-
+ 
+    local _ret
     local _old="$(${READLINK} -f "${HILBERT_CONFIG_DIR}")"
+    _ret=$?
 
     # -L "${HILBERT_CONFIG_DIR}" && # ??
-    if [[ -d "${_old}" && -x "${_old}" && -r "${_old}" ]]; then
+    if [[ ${_ret} -eq 0 && -d "${_old}" && -x "${_old}" && -r "${_old}" ]]; then
         if [[ ! -r "${_old}/${HILBERT_CONFIG_FILE}" ]]; then
             WARNING "Current station config file [${_old}/${HILBERT_CONFIG_FILE}] is not readable or missing!"
             return 2
