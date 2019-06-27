@@ -314,7 +314,7 @@ EOF
     fi
 
     if [[ $LOGLEVEL -le -2 ]]; then
-        local FUN=$(${GREP} '^ *function .*()' "${TOOL_SH}" | ${SED} -e 's@function @@g' -e 's@().*$@|@g' | ${GREP} -vE '(_lock|_no_more_locking|_prepare_locking|exlock_now|exlock|shlock|unlock|DEBUG|INFO|WARNING|ERROR|DRYRUN|TIMER|_which_ext|_service_get_)' | ${XARGS} | ${SED} -e 's@| @|@g' -e 's@|$@@g' )
+        local FUN=$(${GREP} '^ *function .*()' "${TOOL_SH}" | ${SED} -e 's@function @@g' -e 's%().*$%|%g' | ${GREP} -vE '(_lock|_no_more_locking|_prepare_locking|exlock_now|exlock|shlock|unlock|DEBUG|INFO|WARNING|ERROR|DRYRUN|TIMER|_which_ext|_service_get_)' | ${XARGS} | ${SED} -e 's@| @|@g' -e 's%|$%%g' )
         ${CAT} << EOF
 Call tree for internal commands supported by this tool:
 
@@ -333,16 +333,17 @@ Hilbert - client part for Linux systems
 
 positional arguments:
  subcommands:
-   init [<cfg>]            init station based on given or installed configuration
-   list_applications       list of (supported) applications
-   list_services           list of background services
-   app_change <app_id>     change the currently running top application to specified
-   app_restart             restart the currently running top application
-   start [app_id]          start Hilbert on the system
-   pause                   pause Hilbert on the system
-   stop                    stop Hilbert on the system
-   shutdown                shut down the system
-   reboot                  reboot the system
+   init [<cfg>]             init station based on given or installed configuration
+   list_applications        list of (supported) applications
+   list_services            list of background services
+   app_change <app_id>      change the currently running top application to specified
+   app_restart              restart the currently running top application
+   start [<app_id>]         start Hilbert on the system
+   pause                    pause Hilbert on the system
+   stop                     stop Hilbert on the system
+   shutdown [now]           shut down the system
+   reboot [now]             reboot the system
+   docker_cleanup [--force] total cleanup of local docker engine (images, data volumes)
 
 optional arguments:
   -h                       show this help message [+internal commands/call tree, depending on verbosity] and exit
@@ -466,7 +467,7 @@ function cmd_native_autodetect() { ## @fn Native Auto-detections
 function _which_ext() {       ## @fn Determine and list external executable
     local _t
     # NOTE: try to remove variable-assignments, like " A=B " to get the real command:
-    _t="$(${ECHO} "$@" | ${SED} -e 's@^ *\( *[^= ][^ =]*=[^ ]* \)* *@@g' -e 's@ .*$@@g' 2>&1)"
+    _t="$(${ECHO} "$@" | ${SED} -e 's@^ *\( *[^= ][^ =]*=[^ ]* \)* *@@g' -e 's% .*$%%g' 2>&1)"
     _t="$(${WHICH} "${_t}" 2>&1)"
     if [[ $? -eq 0 ]]; then
       ${LIST} -l "${_t}" 2>&1
@@ -827,8 +828,8 @@ function cmd_install_station_config() { ## @fn Try to Install new station config
         if [[ -d "${HILBERT_CONFIG_BACKUP}.~${_max_backup}~" ]]; then # latest backup has highest number
           local _i=1
           DRYRUN ${REMOVE} -Rf "${HILBERT_CONFIG_BACKUP}.~${_i}~" # oldest backup
-          for ((;;_i++)); do
-            [[ ${_i} -ge ${_max_backup} ]] && break
+
+        for ((; _i < _max_backup; _i++)) ; do # for ((;;_i++)); do #  [[ ${_i} -ge ${} ]] && break
             # shift downwards
             DRYRUN ${MOVE} -f "${HILBERT_CONFIG_BACKUP}.~$((_i+1))~" "${HILBERT_CONFIG_BACKUP}.~${_i}~"
           done
@@ -1573,7 +1574,7 @@ function cmd_pause_service() { ## @fn Pause Hilbert Service, @param arg Applicat
     fi
 
     local spec
-    spec=$(_service_get_type_spec "$t")
+    spec=$(_service_get_type_spec "$t")  # NOTE: check presence!
     if [[ $? -ne 0 ]]; then
         ERROR "Wrong or unsupported application: [${arg}] (type: [$t])"
         exit ${ERR_CODE_EXT_ERROR}
@@ -1965,7 +1966,7 @@ function cmd_pause() {         ## @fn Pause Hilbert's current top application an
         local i
         local sv
 
-        for ((i=$N - 1; i >= 0; i--)) ; do
+        for ((i=N - 1; i >= 0; i--)) ; do
             sv="${hilbert_station_profile_services[indices[i]]}"
             data="$(_service_get_info "$sv")"
             if [[ $? -ne 0 ]]; then
@@ -2032,7 +2033,7 @@ function cmd_detect_top_application() {  ## @fn Detect the currently running Hil
     fi
 
     # NOTE: set "Env APP_ID=' to Application ID!
-    declare -gr APP_ID=$(${DOCKER} inspect --format='{{index .Config.Env }}' "${current_top_application_id}" 2>/dev/null | ${SED} -e 's@^.*APP_ID=@@g' -e 's@ .*$@@g')
+    declare -gr APP_ID=$(${DOCKER} inspect --format='{{index .Config.Env }}' "${current_top_application_id}" 2>/dev/null | ${SED} -e 's@^.*APP_ID=@@g' -e 's% .*$%%g')
     if [[ $? -ne 0 ]]; then
         ERROR "Could not inspect container [${current_top_application_id}] using ${DOCKER}"
         return ${ERR_CODE_EXT_ERROR}
@@ -2263,7 +2264,7 @@ function cmd_start() {         ## @fn (re)start services and top application [pr
         local i
         local sv
 
-        for ((i=0; i < $N; i++)) ; do
+        for ((i = 0; i < N; i++)) ; do
             sv="${hilbert_station_profile_services[indices[i]]}"
             data="$(_service_get_info "$sv")"
             if [[ $? -ne 0 ]]; then
@@ -2343,7 +2344,7 @@ function cmd_stop() {         ## @fn Stop Hilbert's current top application and 
         local i
         local sv
 
-        for ((i=$N - 1; i >= 0; i--)) ; do
+        for ((i = N - 1; i >= 0; i--)) ; do
             sv="${hilbert_station_profile_services[indices[i]]}"
             data="$(_service_get_info "$sv")"
             if [[ $? -ne 0 ]]; then
@@ -2382,6 +2383,113 @@ function cmd_delayed_shutdown() {         ## @fn Delayed Shutdown
     return ${ERR_CODE_INT_ERROR}
 }
 
+function cmd_docker_cleanup() {         ## @fn  total cleanup of local docker engine: images and data volumes
+    local ret=${ERR_CODE_SUCCESS}
+
+    local arg="$*"
+    
+    INFO "Going to cleanup local docker images and data volumes..."
+    if [[ -n "${arg}" ]]; then
+      INFO "NOTE: supplied arguments: [${arg}]!"
+    fi
+    
+    local _hilbert_is_running
+    cmd_detect_running_hilbert # 0 - nothing! 1 => Hilbert is running!
+    _hilbert_is_running=$?
+
+    if [[ "${_hilbert_is_running}" -eq 1 ]]; then
+      if [[ "${arg}" != "--force" ]]; then
+        ERROR "Cannot cleanup docker engine while Hilbert is running on the station!"
+        return ${ERR_CODE_EXT_ERROR}
+      else
+        WARNING "Trying to stop Hilbert due to '${arg}'!"
+	cmd_tool_subcall -L cmd_stop
+        if [[ $? -ne 0 ]]; then
+          ERROR "Could not properly stop Hilbert!.."
+	fi
+      fi
+    else
+      DEBUG "Hilbert is not running on the station!"
+    fi
+
+    # get current containers
+    local containers=$(${DOCKER} ps -a -q 2>/dev/null | ${SORT} | ${UNIQ} | ${XARGS} --no-run-if-empty)
+    if [[ $? -ne 0 ]]; then
+        ERROR "Could not query Docker Engine via ${DOCKER}!"
+        return ${ERR_CODE_EXT_ERROR}
+    fi    
+
+    # try to kill them
+    if [[ -n "${containers}" ]]; then
+      WARNING "There are some docker containers: [${containers}]!"      
+      if [[ "${arg}" == "--force" ]]; then 
+        INFO "Trying to kill (all) found docker containers: [${containers}]..."
+        cmd_docker_stop ${containers}
+        if [[ $? -ne 0 ]]; then
+          ERROR "Could not kill those containers!"
+	fi
+      fi
+    else
+      DEBUG "No containers are present at local docker engine!"      
+    fi
+    
+    # get current images
+    local dockerimages=$(${DOCKER} images -a -q 2>/dev/null | ${SORT} | ${UNIQ} | ${XARGS} --no-run-if-empty)
+    if [[ $? -ne 0 ]]; then
+        ERROR "Could not query Docker Engine via ${DOCKER}!"
+        return ${ERR_CODE_EXT_ERROR}
+    fi   
+     
+    # try to kill them
+    if [[ -n "${dockerimages}" ]]; then
+      DEBUG "Found docker images: [${dockerimages}]!"      
+      if [[ "${arg}" == "--force" ]]; then 
+        cmd_docker rmi "${arg}" ${dockerimages}
+	ret=$?
+      else
+        cmd_docker rmi ${dockerimages}      
+	ret=$?
+      fi
+
+      if [[ ${ret} -ne 0 ]]; then
+        ERROR "Could not remove present docker image(s): [${dockerimages}]! Exit code: [${ret}]!"
+        return ${ERR_CODE_EXT_ERROR}
+      fi
+    else
+      DEBUG "Found no docker image to remove!"      
+    fi
+
+    # get data volumes
+    local dockervolumes=$(${DOCKER} volume ls -q 2>/dev/null | ${SORT} | ${UNIQ} | ${XARGS} --no-run-if-empty)
+    if [[ $? -ne 0 ]]; then
+        ERROR "Could not query Docker Engine via ${DOCKER}!"
+        return ${ERR_CODE_EXT_ERROR}
+    fi   
+     
+    # try to kill them
+    if [[ -n "${dockervolumes}" ]]; then
+      DEBUG "Found docker volume(s): [${dockervolumes}]!"      
+      if [[ "${arg}" == "--force" ]]; then 
+        cmd_docker volume rm "${arg}" ${dockervolumes}
+	ret=$?
+      else
+        cmd_docker volume rm ${dockervolumes}
+	ret=$?
+      fi
+
+      if [[ ${ret} -ne 0 ]]; then
+        ERROR "Could not remove present docker volume(s) ([${dockervolumes}]). Exit code: [${ret}]!"
+        return ${ERR_CODE_EXT_ERROR}
+      fi
+    else
+      DEBUG "Found no docker volumes to remove!"      
+    fi
+
+
+
+#    local ret=${ERR_CODE_SUCCESS}
+    return ${ERR_CODE_SUCCESS}
+}
 
 function cmd_shutdown() {         ## @fn Shutdown PC
     local ret
@@ -2511,6 +2619,12 @@ function cmd_subcommand_handle() { ## @fn Main CLI parser, sub-command handler
         cmd_start_locking
         ## TODO: arguments?
         TIMER cmd_start "$*"
+        exit $?
+        ;;
+    docker_cleanup)
+        cmd_start_locking
+        ## TODO: arguments?
+        TIMER cmd_docker_cleanup "$*"
         exit $?
         ;;
     cmd_usage|cmd_tool_subcall|cmd_native_autodetect|cmd_start_locking|cmd_subcommand_handle)
