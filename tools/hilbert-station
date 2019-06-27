@@ -2387,12 +2387,12 @@ function cmd_docker_cleanup() {         ## @fn  total cleanup of local docker en
     local ret=${ERR_CODE_SUCCESS}
 
     local arg="$*"
-    
+
     INFO "Going to cleanup local docker images and data volumes..."
     if [[ -n "${arg}" ]]; then
       INFO "NOTE: supplied arguments: [${arg}]!"
     fi
-    
+
     local _hilbert_is_running
     cmd_detect_running_hilbert # 0 - nothing! 1 => Hilbert is running!
     _hilbert_is_running=$?
@@ -2403,10 +2403,10 @@ function cmd_docker_cleanup() {         ## @fn  total cleanup of local docker en
         return ${ERR_CODE_EXT_ERROR}
       else
         WARNING "Trying to stop Hilbert due to '${arg}'!"
-	cmd_tool_subcall -L cmd_stop
+        cmd_tool_subcall -L cmd_stop
         if [[ $? -ne 0 ]]; then
           ERROR "Could not properly stop Hilbert!.."
-	fi
+        fi
       fi
     else
       DEBUG "Hilbert is not running on the station!"
@@ -2417,38 +2417,38 @@ function cmd_docker_cleanup() {         ## @fn  total cleanup of local docker en
     if [[ $? -ne 0 ]]; then
         ERROR "Could not query Docker Engine via ${DOCKER}!"
         return ${ERR_CODE_EXT_ERROR}
-    fi    
+    fi
 
     # try to kill them
     if [[ -n "${containers}" ]]; then
-      WARNING "There are some docker containers: [${containers}]!"      
+      WARNING "There are some docker containers: [${containers}]!"
       if [[ "${arg}" == "--force" ]]; then 
         INFO "Trying to kill (all) found docker containers: [${containers}]..."
         cmd_docker_stop ${containers}
         if [[ $? -ne 0 ]]; then
           ERROR "Could not kill those containers!"
-	fi
+        fi
       fi
     else
-      DEBUG "No containers are present at local docker engine!"      
+      DEBUG "No containers are present at local docker engine!"
     fi
-    
+
     # get current images
     local dockerimages=$(${DOCKER} images -a -q 2>/dev/null | ${SORT} | ${UNIQ} | ${XARGS} --no-run-if-empty)
     if [[ $? -ne 0 ]]; then
         ERROR "Could not query Docker Engine via ${DOCKER}!"
         return ${ERR_CODE_EXT_ERROR}
-    fi   
-     
+    fi
+
     # try to kill them
     if [[ -n "${dockerimages}" ]]; then
-      DEBUG "Found docker images: [${dockerimages}]!"      
+      DEBUG "Found docker images: [${dockerimages}]!"
       if [[ "${arg}" == "--force" ]]; then 
         cmd_docker rmi "${arg}" ${dockerimages}
-	ret=$?
+        ret=$?
       else
-        cmd_docker rmi ${dockerimages}      
-	ret=$?
+        cmd_docker rmi ${dockerimages}
+        ret=$?
       fi
 
       if [[ ${ret} -ne 0 ]]; then
@@ -2456,7 +2456,7 @@ function cmd_docker_cleanup() {         ## @fn  total cleanup of local docker en
         return ${ERR_CODE_EXT_ERROR}
       fi
     else
-      DEBUG "Found no docker image to remove!"      
+      DEBUG "Found no docker image to remove!"
     fi
 
     # get data volumes
@@ -2464,30 +2464,27 @@ function cmd_docker_cleanup() {         ## @fn  total cleanup of local docker en
     if [[ $? -ne 0 ]]; then
         ERROR "Could not query Docker Engine via ${DOCKER}!"
         return ${ERR_CODE_EXT_ERROR}
-    fi   
-     
+    fi
+
     # try to kill them
     if [[ -n "${dockervolumes}" ]]; then
-      DEBUG "Found docker volume(s): [${dockervolumes}]!"      
-      if [[ "${arg}" == "--force" ]]; then 
-        cmd_docker volume rm "${arg}" ${dockervolumes}
-	ret=$?
-      else
-        cmd_docker volume rm ${dockervolumes}
-	ret=$?
-      fi
+      DEBUG "Found docker volume(s): [${dockervolumes}]!"
+#      if [[ "${arg}" == "--force" ]]; then 
+#        cmd_docker volume rm "${arg}" ${dockervolumes}  # only supported by new docker cli
+#        ret=$?
+#      else
+      cmd_docker volume rm ${dockervolumes}
+      ret=$?
+#      fi
 
       if [[ ${ret} -ne 0 ]]; then
         ERROR "Could not remove present docker volume(s) ([${dockervolumes}]). Exit code: [${ret}]!"
         return ${ERR_CODE_EXT_ERROR}
       fi
     else
-      DEBUG "Found no docker volumes to remove!"      
+      DEBUG "Found no docker volumes to remove!"
     fi
 
-
-
-#    local ret=${ERR_CODE_SUCCESS}
     return ${ERR_CODE_SUCCESS}
 }
 
