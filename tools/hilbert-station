@@ -211,7 +211,7 @@ function DRYRUN_ECHO() {
 function TIMER() {
 #  local _time_save="${TIMEFORMAT}"
    if [[ $LOGLEVEL -le 1 ]]; then
-     TIMEFORMAT="${COLOR_TIMER}TIMER   [$@] => User: %3lU, System: %3lS, Real: %3lR${COLOR_NONE}"
+     TIMEFORMAT="${COLOR_TIMER}TIMER   [$*] => User: %3lU, System: %3lS, Real: %3lR${COLOR_NONE}"
      time "$@"
    else
      "$@"
@@ -474,7 +474,7 @@ function _which_ext() {       ## @fn Determine and list external executable
       return $?
     else
       # No such command in the PATH?
-      ${ECHO} "?/$@/?"
+      ${ECHO} "?/$*/?"
       return ${ERR_CODE_EXT_ERROR}
     fi
 }
@@ -1075,7 +1075,7 @@ function cmd_init() {         ## @fn Install/Initialize/Prepare Station configur
 function cmd_tool_subcall() { ## @fn Execute this tool recursively. Add [-L] to avoid lock-guards for sub-process!
     # LOGLEVEL=${LOGLEVEL} DRY_RUN=${DRY_RUN} HILBERT_CONFIG_DIR=...?!
     local _cmd="${ENV} ${TOOL_SH} ${INPUT_OPT} $@"
-    DEBUG "Running [$TOOL $@] via [${_cmd}]"
+    DEBUG "Running [$TOOL $*] via [${_cmd}]"
     eval "${_cmd}"
     return $?
 }
@@ -1847,7 +1847,7 @@ function cmd_compose_pause() { ## @fn Pause Docker-Compose service
 
 
 function cmd_docker_restart() {         ## @fn Restart docker container(s)
-    local d=$*
+    local d="$*"
     DEBUG "Restarting docker container(s) [$d] using [${DOCKER}]..."
 
     cmd_docker restart $d
@@ -1856,7 +1856,7 @@ function cmd_docker_restart() {         ## @fn Restart docker container(s)
 
 
 function cmd_docker_stop() {         ## @fn Stop/kill/remove docker container(s)
-    local d=$*
+    local d="$*"
     DEBUG "Stopping/Killing/Removing docker container(s) [$d] using [${DOCKER}]..."
 
     cmd_docker kill -s SIGINT $d && ${SLEEP} "${hibert_station_process_kill_timeout}"
@@ -1871,7 +1871,7 @@ function cmd_docker_stop() {         ## @fn Stop/kill/remove docker container(s)
 
 
 function cmd_docker_pause() {          ## @fn Pause docker container(s)
-    local d=$*
+    local d="$*"
     DEBUG "Pause service/application [$d] using [${DOCKER}]..."
 
     cmd_docker pause $d
@@ -1881,7 +1881,7 @@ function cmd_docker_pause() {          ## @fn Pause docker container(s)
 
 function cmd_docker_compose() { ## @fn Run low-level Docker-Compose command directly
     if [[ -n "${DRY_RUN}" ]]; then # TODO: switch to using DRYRUN
-        DRYRUN_ECHO "COMPOSE_FILE='${COMPOSE_FILE}' ${DOCKER_COMPOSE} --skip-hostname-check $@"
+        DRYRUN_ECHO "COMPOSE_FILE='${COMPOSE_FILE}' ${DOCKER_COMPOSE} --skip-hostname-check $*"
         return $?
     fi
 
@@ -1898,7 +1898,7 @@ function cmd_docker_compose() { ## @fn Run low-level Docker-Compose command dire
     cd "${S}"
 
     if [[ ${ret} -ne 0 ]]; then
-        ERROR "Could not run [${DOCKER_COMPOSE} --skip-hostname-check $@] in [${HILBERT_CONFIG_DIR}] with COMPOSE_FILE=[${COMPOSE_FILE}]!"
+        ERROR "Could not run [${DOCKER_COMPOSE} --skip-hostname-check $*] in [${HILBERT_CONFIG_DIR}] with COMPOSE_FILE=[${COMPOSE_FILE}]!"
     fi
 
     return ${ret}
@@ -2372,7 +2372,7 @@ function cmd_stop() {         ## @fn Stop Hilbert's current top application and 
 
 function cmd_delayed_shutdown() {         ## @fn Delayed Shutdown
     local ret
-    local arg=$@
+    local arg="$@"
     ${SLEEP} "${HILBERT_SHUTDOWN_DELAY}"
     ${SUDO} -n ${SHUTDOWN} ${arg}
     ret=$?
@@ -2493,7 +2493,7 @@ function cmd_docker_cleanup() {         ## @fn  total cleanup of local docker en
 
 function cmd_shutdown() {         ## @fn Shutdown PC
     local ret
-    local arg=$@
+    local arg="$@"
     INFO "Attempting to shut-down this system using [${SHUTDOWN}] with arguments [${arg}]..."
     if [[ -n "${DRY_RUN}" ]]; then 
         DRYRUN_ECHO "${NOHUP} ${SETSID} ${SUDO} -n ${SH} -c '${SLEEP} ${HILBERT_SHUTDOWN_DELAY}; ${SHUTDOWN} ${arg}' </dev/null >/dev/null 2>&1 & disown -h"
@@ -2632,10 +2632,10 @@ function cmd_subcommand_handle() { ## @fn Main CLI parser, sub-command handler
         _ret=$?
 
         if [[ ${_ret} -ne 0 ]]; then
-            ERROR "Something went wrong in subcommand handler: [${subcommand} \"$@\"]. Exit code: ${_ret}!"
+            ERROR "Something went wrong in subcommand handler: [${subcommand} \"$*\"]. Exit code: ${_ret}!"
             exit ${_ret}
         else
-            DEBUG "Script successfully handled hidden subcommand: [${subcommand} \"$@\"]!"
+            DEBUG "Script successfully handled hidden subcommand: [${subcommand} \"$*\"]!"
             exit ${ERR_CODE_SUCCESS}
         fi
         ;;
@@ -2646,10 +2646,10 @@ function cmd_subcommand_handle() { ## @fn Main CLI parser, sub-command handler
         ${subcommand} "$@"
         _ret=$?
         if [[ ${_ret} -ne 0 ]]; then
-            ERROR "Something went wrong in subcommand handler: [${subcommand} \"$@\"]. Exit code: ${_ret}!"
+            ERROR "Something went wrong in subcommand handler: [${subcommand} \"$*\"]. Exit code: ${_ret}!"
             exit ${_ret}
         else
-            DEBUG "Script successfully handled hidden subcommand: [${subcommand} \"$@\"]!"
+            DEBUG "Script successfully handled hidden subcommand: [${subcommand} \"$*\"]!"
             exit ${ERR_CODE_SUCCESS}
         fi
         ;;
