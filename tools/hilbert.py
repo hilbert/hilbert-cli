@@ -704,6 +704,8 @@ def cmd_action(parser, context, args, Action=None, appIdRequired=False):
 
     elif 'action_args' in _args:
         action_args = _args.get('action_args', None)
+    elif 'force' in _args:
+        action_args = _args.get('force', None)
 
 
     stations = None
@@ -778,9 +780,9 @@ def cmd_reboot(parser, context, args):
     group.add_argument('--configdump', required=False,
                        help="specify input dump file")
 
+    parser.add_argument('--force', action='store_true', help="forces cleanup") # optional boolean (True) flag!
     parser.add_argument('StationID', help="station to cleanup via network")
-    #    parser.add_argument('action_args', nargs='?', help="optional arguments for poweron", metavar='args')
-
+    
     cmd_action(parser, context, args, Action=action, appIdRequired=False)
 
     return args
