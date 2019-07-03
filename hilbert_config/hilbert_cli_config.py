@@ -2341,6 +2341,23 @@ class Station(BaseRecordValidator):  # Wrapper?
 
         return _ret
 
+    def cleanup(self, action_args=None):
+        _a = self.get_address()
+
+        assert _a is not None
+        assert isinstance(_a, HostAddress)
+
+        try:
+            _ret = _a.ssh([_HILBERT_STATION, _HILBERT_STATION_OPTIONS, "docker_cleanup"])
+        except:
+            log.exception("Could not cleanup docker engine on the station {}".format(_a))
+            _ret = -1
+
+        if _ret != 0:
+            log.error("Failed running cleanup on the station {}".format(_a))
+
+        return _ret
+    
     def reboot(self, action_args=None):
         _a = self.get_address()
 
@@ -2705,6 +2722,7 @@ class Station(BaseRecordValidator):  # Wrapper?
                 start  (wakeup)
                 stop  (shutdown)
                 reboot
+                cleanup
                 cfg_deploy
                 app_restart
                 app_change       <ApplicationID>
@@ -2716,9 +2734,6 @@ class Station(BaseRecordValidator):  # Wrapper?
 #                start [<ServiceID/ApplicationID>]
 #                finish [<ServiceID/ApplicationID>]
 
-        if action not in ['start', 'stop', 'reboot', 'cfg_deploy', 'app_change', 'app_restart', 'run_shell_cmd']:
-            raise Exception("Running action '{0}({1})' is not supported!".format(action, action_args))
-
         # Run 'ssh address hilbert-station action action_args'?!
         if action == 'start':
             _ret = self.poweron(action_args)
@@ -2728,12 +2743,20 @@ class Station(BaseRecordValidator):  # Wrapper?
             _ret = self.shutdown(action_args)
         elif action == 'reboot':
             _ret = self.reboot(action_args)
+        elif action == 'cleanup':
+            _ret = self.cleanup(action_args)
         elif action == 'app_change':
             _ret = self.app_change(action_args)  # ApplicationID
         elif action == 'app_restart':
             _ret = self.app_restart(action_args)  # ApplicationID
         elif action == 'run_shell_cmd':
             _ret = self.run_remote_cmd(action_args)
+        else:
+            assert action not in ['start', 'stop', 'reboot', 'cfg_deploy', 'app_change', 'app_restart', 'run_shell_cmd', 'cleanup']
+            raise Exception("Running action '{0}({1})' is not supported!".format(action, action_args))
+
+            
+            
 
         # elif action == 'start':
         #            self.start_service(action_args)

@@ -766,6 +766,26 @@ def cmd_start(parser, context, args):
     return args
 
 
+@subcmd('cleanup', help='cleanup remote station')
+def cmd_reboot(parser, context, args):
+    action = 'cleanup'
+    log.debug("Running 'cmd_{}'".format(action))
+
+    group = parser.add_mutually_exclusive_group()
+
+    group.add_argument('--configfile', required=False,
+                       help="specify input .YAML file (default: 'Hilbert.yml')")
+    group.add_argument('--configdump', required=False,
+                       help="specify input dump file")
+
+    parser.add_argument('StationID', help="station to cleanup via network")
+    #    parser.add_argument('action_args', nargs='?', help="optional arguments for poweron", metavar='args')
+
+    cmd_action(parser, context, args, Action=action, appIdRequired=False)
+
+    return args
+
+
 @subcmd('reboot', help='reboot station')
 def cmd_reboot(parser, context, args):
     action = 'reboot'
