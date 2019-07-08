@@ -1867,7 +1867,9 @@ def shell_vstr(s, quote_char="'"):
     """
     add quotes before and after the value: [QUOTE_CHAR]<value>[QUOTE_CHAR]
     """
+    SUBS = {"'": '´'}
     
+    s = str(s).replace(quote_char, SUBS.get(quote_char, quote_char))
     return ("{0}{1}{0}".format(quote_char, s))
 # str(s).replace(quote_char, "\\" + quote_char) # Safe exporting of strings into bash: ['] -> [\'] ???
 
