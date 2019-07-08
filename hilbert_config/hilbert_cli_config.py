@@ -2349,16 +2349,16 @@ class Station(BaseRecordValidator):  # Wrapper?
 
         try:
             if action_args:
-                _ret = _a.ssh([_HILBERT_STATION, _HILBERT_STATION_OPTIONS, "docker_cleanup", "--force"])
+                _ret = _a.ssh([_HILBERT_STATION, _HILBERT_STATION_OPTIONS, "cleanup", "--force"])
             else:
-                _ret = _a.ssh([_HILBERT_STATION, _HILBERT_STATION_OPTIONS, "docker_cleanup"])
+                _ret = _a.ssh([_HILBERT_STATION, _HILBERT_STATION_OPTIONS, "cleanup"])
                 
         except:
-            log.exception("Could not cleanup docker engine on the station {} [force={}]".format(_a, action_args))
+            log.exception("Could not perform system cleanup on the station {} [force={}]".format(_a, action_args))
             _ret = -1
 
         if _ret != 0:
-            log.error("Failed running cleanup on the station {} [force={}]".format(_a, action_args))
+            log.error("Failed running system cleanup on the station {} [force={}]".format(_a, action_args))
 
         return _ret
     

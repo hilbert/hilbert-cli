@@ -768,7 +768,7 @@ def cmd_start(parser, context, args):
     return args
 
 
-@subcmd('cleanup', help='cleanup remote station')
+@subcmd('cleanup', help='perform system cleanup on remote station')
 def cmd_reboot(parser, context, args):
     action = 'cleanup'
     log.debug("Running 'cmd_{}'".format(action))

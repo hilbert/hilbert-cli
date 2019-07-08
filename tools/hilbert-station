@@ -343,6 +343,7 @@ positional arguments:
    stop                     stop Hilbert on the system
    shutdown [now]           shut down the system
    reboot [now]             reboot the system
+   cleanup [--force]        local system cleanup (identical to docker_cleanup on Linux host)
    docker_cleanup [--force] total cleanup of local docker engine (images, data volumes)
 
 optional arguments:
@@ -2618,9 +2619,8 @@ function cmd_subcommand_handle() { ## @fn Main CLI parser, sub-command handler
         TIMER cmd_start "$*"
         exit $?
         ;;
-    docker_cleanup)
+    cleanup|docker_cleanup)
         cmd_start_locking
-        ## TODO: arguments?
         TIMER cmd_docker_cleanup "$*"
         exit $?
         ;;
