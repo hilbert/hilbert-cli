@@ -15,10 +15,10 @@
 # BuildRoot:      %{buildroot}
 Summary:        Hilbert: client-side tools with a basic minimal configuration
 Name:           hilbert-cli
-Version:        0.9.4
+Version:        0.9.5
 
 License:        Apache License, Version 2.0
-Release:        11%{?dist}
+Release:        12%{?dist}
 
 URL:            https://github.com/hilbert/%{origname}
 Source0:        %{origname}.tar.gz
@@ -153,6 +153,9 @@ rm -rf $RPM_BUILD_ROOT
 # docker rmi hello-world:latest
 
 %changelog
+* Mon Jul 8 2019 Alex
+- added `cleanup` alias for `docker_cleanup` into `hilbert-station` for Linux hosts
+
 * Mon Jul 1 2019 Alex
 - added docker_cleanup + minor cosmetic improvements in `hilbert-station` to enable  local docker engine cleanup (images, volumes)
  
