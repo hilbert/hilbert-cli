@@ -1241,6 +1241,40 @@ class AutoDetectionScript(StringValidator):
         self.set_data(script)
         return True
 
+    
+###############################################################
+class OptionalString(StringValidator):
+    def __init__(self, *args, **kwargs):
+        super(OptionalString, self).__init__(*args, **kwargs)
+        self._default_input_data = '' # empty string by default!
+
+    def check(self):
+        return True
+
+
+    def validate(self, d):
+        """check whether data is a valid script"""
+        if d is None:
+            d = self._default_input_data
+
+        if (d is None) or (d == '') or (d == text_type('')):
+            self.set_data(text_type(''))
+            return True
+
+        s = ''
+        try:
+            s = StringValidator.parse(d, parent=self, parsed_result_is_data=True)
+
+            if not bool(s):  # NOTE: empty script is also fine!
+                self.set_data(s)
+                return True
+        except:
+            log.error("Wrong input to OptionalString::validate: {}".format(d))
+            return False
+
+        self.set_data(s)
+        return True
+    
 
 ###############################################################
 class DockerComposeServiceName(StringValidator):  # TODO: any special checks here?
@@ -1897,7 +1931,17 @@ class DockerComposeService(BaseRecordValidator):
             self._ref_tag: (True, DockerComposeServiceName),
             self._file_tag: (False, DockerComposeYAMLFile)
         }
+        
+        _v = self.get_version(default=semantic_version.Version('0.7.0'))
+        if _v >= semantic_version.Version('0.9.0'):
+            self._url_tag = text_type('url')
+            self._name_tag = text_type('name')
+            self._description_tag = text_type('description')
 
+            _compose_rule[self._url_tag] = (False, URI) # URI?
+            _compose_rule[self._name_tag] = (False, OptionalString)
+            _compose_rule[self._description_tag] = (False, OptionalString)
+        
         self._default_type = "default_dc_service"
         self._types = {self._default_type: _compose_rule}
 
