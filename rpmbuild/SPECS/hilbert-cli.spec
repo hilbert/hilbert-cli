@@ -24,9 +24,9 @@ URL:            https://github.com/hilbert/%{origname}
 Source0:        %{origname}.tar.gz
 # v%{version}.tar.gz
 # https://github.com/hilbert/hilbert-cli/archive/v%{version}.tar.gz
-Source1:        https://cloud.imaginary.org/index.php/s/WSGU4yEaR4RaH3T/download?path=%2F&files=hilbert-compose-customizer.tar.gz
+Source1:        https://cloud.imaginary.org/index.php/s/qo5tGE9FaAid2RY/download?path=%2F&files=hilbert-compose-customizer.tar.gz
 # hilbert-compose-customizer.tar.gz
-Source2:        https://cloud.imaginary.org/index.php/s/WSGU4yEaR4RaH3T/download?path=%2F&files=docker-compose.tar.gz
+Source2:        https://cloud.imaginary.org/index.php/s/qo5tGE9FaAid2RY/download?path=%2F&files=docker-compose.tar.gz
 # docker-compose.tar.gz
 
 #hilbert-default-config.tar.gz
