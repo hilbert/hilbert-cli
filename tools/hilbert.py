@@ -17,10 +17,12 @@ DIR = path.dirname(path.dirname(path.abspath(__file__)))
 if path.exists(path.join(DIR, 'hilbert_config', 'hilbert_cli_config.py')):
     sys.path.append(DIR)
     sys.path.append(path.join(DIR, 'hilbert_config'))
+    from hilbert_config import __version__
     from helpers import *
     from hilbert_cli_config import *
     from subcmdparser import *
 else:
+    from hilbert_config import __version__
     from hilbert_config.hilbert_cli_config import *
     from hilbert_config.helpers import *
     from hilbert_config.subcmdparser import *
@@ -702,6 +704,8 @@ def cmd_action(parser, context, args, Action=None, appIdRequired=False):
 
     elif 'action_args' in _args:
         action_args = _args.get('action_args', None)
+    elif 'force' in _args:
+        action_args = _args.get('force', None)
 
 
     stations = None
@@ -723,15 +727,24 @@ def cmd_action(parser, context, args, Action=None, appIdRequired=False):
     assert station is not None
 
     log.debug("StationID is valid according to the Configuration!")
-    log.debug("Running action: '{0} {1}' on station '{2}'".format(action, str(action_args), stationId))
+    log.debug("Running action: [{0}] (with args: [{1}]) on station [{2}]".format(action, str(action_args), stationId))
 
     set_log_level_options(_ctx)
 
     try:
-        station.run_action(action, action_args)  # NOTE: temporary API for now
+        _ret = station.run_action(action, action_args)  # NOTE: temporary API for now
     except:
-        log.exception("Could not run '{0} {1}' on station '{2}'".format(action, str(action_args), stationId))
+        log.exception("Could not run [{0}] (with args: [{1}]) on station [{2}]".format(action, str(action_args), stationId))
         sys.exit(1)
+
+    if (_ret == 0) or (_ret is True):
+        log.debug("Successfully run [{0}] (with args: [{1}]) on station [{2}]".format(action, str(action_args), stationId))
+    else:
+        log.error("Failed to run [{0}] (with args: [{1}]) on station [{2}]".format(action, str(action_args), stationId))
+        if type(_ret) is bool:
+            sys.exit(1)
+        sys.exit(_ret)
+
     return args
 
 
@@ -747,13 +760,52 @@ def cmd_start(parser, context, args):
     group.add_argument('--configdump', required=False,
                        help="specify input dump file")
 
+    parser.add_argument('StationID', help="station to power-ON via network (e.g. using wakeonlan)")
+    parser.add_argument('action_args', nargs='?', help="number of power-ONs to perform", metavar='args')
+
+    cmd_action(parser, context, args, Action=action, appIdRequired=False)
+
+    return args
+
+
+@subcmd('cleanup', help='perform system cleanup on remote station')
+def cmd_reboot(parser, context, args):
+    action = 'cleanup'
+    log.debug("Running 'cmd_{}'".format(action))
+
+    group = parser.add_mutually_exclusive_group()
+
+    group.add_argument('--configfile', required=False,
+                       help="specify input .YAML file (default: 'Hilbert.yml')")
+    group.add_argument('--configdump', required=False,
+                       help="specify input dump file")
+
+    parser.add_argument('--force', action='store_true', help="forces cleanup") # optional boolean (True) flag!
+    parser.add_argument('StationID', help="station to cleanup via network")
+    
+    cmd_action(parser, context, args, Action=action, appIdRequired=False)
+
+    return args
+
+
+@subcmd('reboot', help='reboot station')
+def cmd_reboot(parser, context, args):
+    action = 'reboot'
+    log.debug("Running 'cmd_{}'".format(action))
+
+    group = parser.add_mutually_exclusive_group()
+
+    group.add_argument('--configfile', required=False,
+                       help="specify input .YAML file (default: 'Hilbert.yml')")
+    group.add_argument('--configdump', required=False,
+                       help="specify input dump file")
+
     parser.add_argument('StationID', help="station to power-on via network")
     #    parser.add_argument('action_args', nargs='?', help="optional arguments for poweron", metavar='args')
 
     cmd_action(parser, context, args, Action=action, appIdRequired=False)
 
     return args
-
 
 @subcmd('poweroff', help='finalize Hilbert on a station and shut it down')
 def cmd_stop(parser, context, args):
@@ -795,9 +847,9 @@ def cmd_cfg_deploy(parser, context, args):
     return args
 
 
-# @subcmd('app_start', help='start an application on a station')
-def cmd_app_start(parser, context, args):
-    action = 'app_start'
+@subcmd('app_restart', help='restart current/default application on a station')
+def cmd_app_restart(parser, context, args):
+    action = 'app_restart'
     log.debug("Running 'cmd_{}'".format(action))
 
     group = parser.add_mutually_exclusive_group()
@@ -808,10 +860,10 @@ def cmd_app_start(parser, context, args):
                        help="specify input dump file")
 
     parser.add_argument('StationID', help="specify the station")
-    parser.add_argument('ApplicationID', help="specify the application to start")
+#    parser.add_argument('ApplicationID', help="specify the application to start")
     #    parser.add_argument('action_args', nargs='?', help="optional argument for start: ApplicationID/ServiceID ", metavar='id')
 
-    cmd_action(parser, context, args, Action=action, appIdRequired=True)
+    cmd_action(parser, context, args, Action=action, appIdRequired=False)
 
     return args
 
@@ -859,9 +911,10 @@ def cmd_app_change(parser, context, args):
     return args
 
 
-# @subcmd('run_action', help='run specified action on given station with given arguments...')
+@subcmd('run_shell_cmd', help='run specified shell command on given station...')
 def cmd_run_action(parser, context, args):
-    log.debug("Running 'cmd_{}'".format('run_action'))
+    action = 'run_shell_cmd'
+    log.debug("Running 'cmd_{}'".format(action))
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--configfile', required=False,
@@ -869,11 +922,10 @@ def cmd_run_action(parser, context, args):
     group.add_argument('--configdump', required=False,
                        help="specify input dump file")
 
-    parser.add_argument('Action', help="specify the action")
     parser.add_argument('StationID', help="specify the station")
-    parser.add_argument('action_args', nargs='?', help="optional arguments for the action", metavar='args')
+    parser.add_argument('action_args', nargs='+', help="specify the command to run", metavar='args')
 
-    cmd_action(parser, context, args, Action=None, appIdRequired=False)
+    cmd_action(parser, context, args, Action=action, appIdRequired=False)
 
     return args
 
@@ -914,7 +966,9 @@ def _version():
     import semantic_version
 
     log.debug("Running '--{}'".format('version'))
-    print("Hilbert Configuration API:      [{}]".format(Hilbert(None).get_api_version()))
+    print("hilbert tool version:         [{}]".format(__version__))
+    log.info("hilbert cli       version: [{}]".format(__CLI_VERSION_ID))
+    log.info("Hilbert Configuration API: [{}]".format(Hilbert(None).get_api_version()))
 
     log.info("Python (platform) version: {}".format(platform.python_version()))
     log.info("ruamel.yaml       version: {}".format(yaml.__version__))

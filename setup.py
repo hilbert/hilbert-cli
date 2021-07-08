@@ -4,13 +4,19 @@
 # from distutils.core import setup # no support for install_requires!
 from setuptools import setup # supports install_requires!
 
-from pip.req import parse_requirements
+#from pip.req import parse_requirements
 # See: https://stackoverflow.com/a/16624700
+# Fix: https://stackoverflow.com/a/25193001
+def parse_requirements(filename, session='hack'):
+    """ load requirements from a pip requirements file """
+    lineiter = (line.strip() for line in open(filename))
+    return [line for line in lineiter if line and not line.startswith("#")] # .req : line ?
+
 install_reqs = parse_requirements('requirements.txt', session='hack')
 tests_reqs = parse_requirements('requirements-dev.txt', session='hack')
 
 setup(name='hilbert_config',
-      version='0.3.0',
+      version='0.4.0',
       description='Hilbert Configuration tool (server part)',
       url='https://github.com/hilbert/hilbert-cli',
       author='Oleksandr Motsak',
@@ -35,8 +41,8 @@ setup(name='hilbert_config',
         'Programming Language :: Python :: 3.6',
       ],
       platforms=[''],  # data_files=[('config/templates', ['docker-compose.yml'])],
-      install_requires=[str(ir.req) for ir in install_reqs],
-      tests_require=[str(ir.req) for ir in tests_reqs]
+      install_requires=[str(ir) for ir in install_reqs],
+      tests_require=[str(ir) for ir in tests_reqs]
       )
 # glob.glob(os.path.join('mydir', 'subdir', '*.html'))
 # os.listdir(os.path.join('mydir', 'subdir'))

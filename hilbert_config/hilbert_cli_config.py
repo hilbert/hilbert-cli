@@ -22,6 +22,9 @@ import collections
 import sys
 import os
 import time
+import datetime
+import random
+import itertools 
 import re, tokenize
 import tempfile  # See also https://security.openstack.org/guidelines/dg_using-temporary-files-securely.html
 import subprocess  # See also https://pymotw.com/2/subprocess/
@@ -32,6 +35,7 @@ import json
 
 import pprint as PP
 from abc import *
+
 
 ###############################################################
 # logging.basicConfig(format='%(levelname)s  [%(filename)s:%(lineno)d]: %(message)s', level=logging.DEBUG)
@@ -258,17 +262,17 @@ def _execute(_cmd, shell=False, stdout=None, stderr=None, dry_run=False):  # Tru
         _shell = ' through the shell'
 
     retcode = None
-    try:
-        #    with subprocess.Popen(_cmd, shell=shell, stdout=stdout, stderr=stderr) as p:
-        # timeout=timeout,
-        if dry_run:
-            print("[Dry-Run-Mode] Execute [{0}]{1}".format(__cmd, _shell))
-            retcode = 0
-        else:
+    if dry_run:
+        print("[Dry-Run-Mode] Simulating execution of [{0}]{1}".format(__cmd, _shell))
+        retcode = 0
+    else:
+        try:
+            #    with subprocess.Popen(_cmd, shell=shell, stdout=stdout, stderr=stderr) as p:
+            # timeout=timeout,
             retcode = subprocess.call(_cmd, shell=shell, stdout=stdout, stderr=stderr)
-    except:
-        log.exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
-        raise
+        except:
+            log.exception("Could not execute [{}]!".format(__cmd))
+            raise
 
     assert retcode is not None
     log.debug("Exit code: '{}'".format(retcode))
@@ -287,6 +291,8 @@ def _execute(_cmd, shell=False, stdout=None, stderr=None, dry_run=False):  # Tru
 
 ###############################################################
 def _get_line_col(lc):
+    l = 0 ## ?
+    c = 0 ## ?
     if isinstance(lc, (list, tuple)):
         l = lc[0]
         c = lc[1]
@@ -294,8 +300,7 @@ def _get_line_col(lc):
         try:
             l = lc.line
         except:
-            log.exception("Cannot get line out of '{}': Missing .line attribute!".format(lc))
-            raise
+            log.warning("Cannot get line out of [{}]: Missing .line attribute!".format(lc))
 
         try:
             c = lc.col
@@ -303,8 +308,9 @@ def _get_line_col(lc):
             try:
                 c = lc.column
             except:
-                log.exception("Cannot get column out of '{}': Missing .col/.column attributes!".format(lc))
-                raise
+                log.warning("Cannot get column out of [{}]: Missing .col/.column attributes!".format(lc))
+                pass
+            pass
 
     return l, c
 
@@ -898,7 +904,7 @@ class SemanticVersionValidator(BaseValidator):
         try:
             _v = semantic_version.Version(_t, partial=self._partial)
         except:
-            log.exception("Wrong version data: '{0}' (see: '{1}')".format(d, sys.exc_info()))
+            log.exception("Wrong version data: [{0}]".format(d))
             return False
 
         self.set_data(_v)
@@ -1166,7 +1172,7 @@ class AutoDetectionScript(StringValidator):
                 # NOTE: Check for valid bash script
                 retcode = _execute(_cmd, dry_run=get_NO_LOCAL_EXEC_MODE())
             except:
-                log.exception("Error while running '{}' to check auto-detection script!".format(' '.join(_cmd)))
+                log.error("Error while running '{}' to check auto-detection script!".format(' '.join(_cmd)))
                 return False  # if PEDANTIC:  # TODO: add a special switch?
 
             if retcode != 0:
@@ -1181,7 +1187,7 @@ class AutoDetectionScript(StringValidator):
                 # NOTE: Check for valid bash script
                 retcode = _execute(_cmd, dry_run=get_NO_LOCAL_EXEC_MODE())
             except:
-                log.exception("Error while running '{}' to check auto-detection script!".format(' '.join(_cmd)))
+                log.error("Error while running '{}' to check auto-detection script!".format(' '.join(_cmd)))
                 return False
 
             if retcode != 0:
@@ -1229,12 +1235,46 @@ class AutoDetectionScript(StringValidator):
                 self.set_data(script)
                 return True
         except:
-            log.exception("Wrong input to AutoDetectionScript::validate: {}".format(d))
+            log.error("Wrong input to AutoDetectionScript::validate: {}".format(d))
             return False
 
         self.set_data(script)
         return True
 
+    
+###############################################################
+class OptionalString(StringValidator):
+    def __init__(self, *args, **kwargs):
+        super(OptionalString, self).__init__(*args, **kwargs)
+        self._default_input_data = '' # empty string by default!
+
+    def check(self):
+        return True
+
+
+    def validate(self, d):
+        """check whether data is a valid script"""
+        if d is None:
+            d = self._default_input_data
+
+        if (d is None) or (d == '') or (d == text_type('')):
+            self.set_data(text_type(''))
+            return True
+
+        s = ''
+        try:
+            s = StringValidator.parse(d, parent=self, parsed_result_is_data=True)
+
+            if not bool(s):  # NOTE: empty script is also fine!
+                self.set_data(s)
+                return True
+        except:
+            log.error("Wrong input to OptionalString::validate: {}".format(d))
+            return False
+
+        self.set_data(s)
+        return True
+    
 
 ###############################################################
 class DockerComposeServiceName(StringValidator):  # TODO: any special checks here?
@@ -1357,9 +1397,9 @@ class HostAddress(StringValidator):
         try:
             retcode = _execute(_cmd, **kwargs)
         except:
-            log.exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
+            log.exception("Could not execute '{0}'! ".format(__cmd))
             if not PEDANTIC:
-                return 1
+                return -1
             raise
 
         assert retcode is not None
@@ -1369,7 +1409,7 @@ class HostAddress(StringValidator):
         else:
             log.error("Could not run rsync.ssh command: '{0}'! Return code: {1}".format(__cmd, retcode))
             if PEDANTIC:
-                raise Exception("Could not run rsync/ssh command: '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
+                raise Exception("Could not run rsync/ssh command: '{0}'!".format(__cmd))
 
         return retcode
 
@@ -1390,19 +1430,20 @@ class HostAddress(StringValidator):
         try:
             retcode = _execute(_cmd, **kwargs)
         except:
-            log.exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
+            log.exception("Could not execute '{0}'!".format(__cmd))
             if not PEDANTIC:
-                return 1
+                return -1
             raise
 
         assert retcode is not None
+
         if not retcode:
             log.debug("Command ({}) execution success!".format(__cmd))
             return retcode
         else:
             log.error("Could not run scp command: '{0}'! Return code: {1}".format(__cmd, retcode))
-            if PEDANTIC:
-                raise Exception("Could not run scp command: '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
+#            if PEDANTIC:
+#                raise Exception("Could not run scp command: '{0}'!".format(__cmd))
 
         return retcode
 
@@ -1421,20 +1462,19 @@ class HostAddress(StringValidator):
 
         #            client = paramiko.SSHClient()
         #            client.load_system_host_keys()
+        retcode = None
         try:
             retcode = _execute(_cmd, **kwargs)
         except:
-            log.exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
+            log.exception("Could not execute [{0}]!".format(__cmd))
             raise
 
         assert retcode is not None
-        if not retcode:
-            log.debug("Command ({}) execution success!".format(__cmd))
-            return retcode
-        else:
-            log.error("Could not run remote ssh command: '{0}'! Return code: {1}".format(__cmd, retcode))
-            #            if PEDANTIC:
-            raise Exception("Could not run remote ssh command: '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
+#        if retcode:
+#            log.error("Could not run remote ssh command: '{0}'! Return code: {1}".format(__cmd, retcode))
+#            #            if PEDANTIC:
+#            raise Exception("Could not run remote ssh command: [{0}]!".format(__cmd))
+        log.debug("Command [{}] executed with return code: [{}]".format(__cmd, retcode))
         return retcode
 
     @classmethod
@@ -1460,9 +1500,9 @@ class HostAddress(StringValidator):
                 log.debug("Ssh alias '{0}' is functional!".format(text_type(_h)))
 
             return retcode == 0
+
         except:
-            log.exception("Non-functional ssh alias: '{0}'. Moreover: Unexpected error: {1}".format(text_type(_h),
-                                                                                                    sys.exc_info()))
+            log.exception("Error while checking ssh alias: [{0}]. ".format(text_type(_h)))
             if PEDANTIC:
                 raise
 
@@ -1565,7 +1605,7 @@ class VariadicRecordWrapper(BaseValidator):
         try:
             t = self._type_cls.parse(d[self._type_tag], parent=self, parsed_result_is_data=True, id=self._type_tag)
         except:
-            log.exception("Wrong type data: {}".format(d[self._type_tag]))
+            log.error("Wrong type data: {}".format(d[self._type_tag]))
             return False
 
         if t not in _rule:
@@ -1691,13 +1731,8 @@ class DockerMachine(BaseRecordValidator):
         try:
             _ret = _a.ssh(_cmd, shell=True)  # TODO: check for that shell=True!!!???
         except:
-            s = "Could not power-on virtual station {0} (at {1})".format(_n, _a)
-            if not PEDANTIC:
-                log.warning(s)
-                return False
-            else:
-                log.exception(s)
-                raise
+            log.error("Could not power-on virtual station {0} (at {1})".format(_n, _a))
+            return False
 
         return (_ret == 0)
 
@@ -1735,7 +1770,8 @@ class WOL(BaseRecordValidator):
         assert _MAC != ''
         return _MAC
 
-    def start(self):  # , action, action_args):
+    def start(self, action_args):
+
         _address = None
         _parent = self.get_parent(cls=Station)
 
@@ -1746,29 +1782,91 @@ class WOL(BaseRecordValidator):
                 assert isinstance(_address, HostAddress)
                 _address = _address.get_address()
 
+                
         _MAC = self.get_MAC()
+
+        log.debug("WOL execution( MAC: {}, IP/Addr: {}, Args: {}".format(_MAC, _address, action_args))
+        
+        N = action_args
+        
+        if (N is None) or (N == ''):
+            N = 5 # Default number of WOL!
+        else:
+            N = int(N)
+            
+        if N <= 0:
+            log.debug("WOL execution: nothing to do!")
+            return True
+            
 
         _cmd = [self._WOL, _MAC]  # NOTE: avoid IP for now? {"-i", _address, }
         __cmd = ' '.join(_cmd)
+
+        retcode = None
+
+        # Small initial sleep to avoid instant paralell WOL-spamming
+        time.sleep( random.uniform(0, 0.03) )
+
+        # measure time for a single WOL call:
+        _t = datetime.datetime.now()
+        
         try:
             retcode = _execute(_cmd, dry_run=get_NO_LOCAL_EXEC_MODE())
+        except:
+            log.exception("Could not execute [{0}]!".format(__cmd))
+            raise
+        
+        _t = (datetime.datetime.now() - _t).total_seconds() # convert it into seconds
+
+        assert retcode is not None
+        
+        if not retcode:
+            log.debug("Command ({}) execution success!".format(__cmd))
+        # return
+        else:
+            log.error("Could not wakeup via '{0}'! Return code: {1}".format(__cmd, retcode))
+#            if PEDANTIC:
+#                raise Exception("Could not execute '{0}'!".format(__cmd))
+
+        N = N - 1
+            
+        if N <= 0:
+            return (retcode == 0)
+        
+        # Estimate the number of parallel WOL executions = number of Stations in the current config file!
+        M = _parent.get_parent(cls=GlobalStations)
+        if M is not None:
+            M = M.get_data()
+            if M is not None:
+                M = len(M)
+                
+        if M is None:
+            M = 10
+        
+        _t = M * _t
+        
+        log.debug("WOL execution: assuming {} parallel execs => max. random delay: {}s ".format(M, _t))
+        
+        for _ in itertools.repeat(None, N):
+            time.sleep(random.uniform(0, _t))
+            try:
+                retcode = _execute(_cmd, dry_run=get_NO_LOCAL_EXEC_MODE())
+            except:
+                log.exception("Could not execute [{0}]!".format(__cmd))
+                raise
             assert retcode is not None
+        
             if not retcode:
                 log.debug("Command ({}) execution success!".format(__cmd))
-            # return
+                # return
             else:
                 log.error("Could not wakeup via '{0}'! Return code: {1}".format(__cmd, retcode))
-                if PEDANTIC:
-                    raise Exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
-        except:
-            log.exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
-            if not PEDANTIC:
-                return
-            raise
+
+        return (retcode == 0) # No point in extra targeted WOL - broadcasts should be enough!
 
         if (_address is None) or (_address == ''):
             log.warning("Sorry: could not get station's address for this WOL MethodObject!")
-            return
+            return (retcode == 0)
 
         # if PEDANTIC:  # NOTE: address should be present for other reasons anyway...
         #                raise Exception("Sorry: could not get station's address for this WOL MethodObject!")
@@ -1777,24 +1875,40 @@ class WOL(BaseRecordValidator):
         # Q: any problems with this?
         _cmd = [self._WOL, "-i", _address, _MAC]
         __cmd = ' '.join(_cmd)
+
+        retcode = None
         try:
             retcode = _execute(_cmd, dry_run=get_NO_LOCAL_EXEC_MODE())
-            assert retcode is not None
-            if not retcode:
-                log.debug("Command ({}) execution success!".format(__cmd))
-                return
-            else:
-                log.error("Could not wakeup via '{0}'! Return code: {1}".format(__cmd, retcode))
-                # if PEDANTIC:
-                #    raise Exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
         except:
-            log.exception("Could not execute '{0}'! Exception: {1}".format(__cmd, sys.exc_info()))
-            # if not PEDANTIC:
+            log.exception("Could not execute [{0}]!".format(__cmd))
+            if PEDANTIC:
+                raise
             #    return
-            # raise
-            pass
+#            pass
+
+        assert retcode is not None
+        if not retcode:
+            log.debug("Command ({}) execution success!".format(__cmd))
+        else:
+            log.error("Could not wakeup via '{0}'! Return code: {1}".format(__cmd, retcode))
+            
+        return (retcode == 0)
 
 
+    
+###############################################################
+def shell_vstr(s, quote_char="'"):
+    """
+    add quotes before and after the value: [QUOTE_CHAR]<value>[QUOTE_CHAR]
+    """
+    SUBS = {"'": '´'}
+    
+    s = str(s).replace(quote_char, SUBS.get(quote_char, quote_char))
+    return ("{0}{1}{0}".format(quote_char, s))
+# str(s).replace(quote_char, "\\" + quote_char) # Safe exporting of strings into bash: ['] -> [\'] ???
+
+
+    
 ###############################################################
 class DockerComposeService(BaseRecordValidator):
     """DockerCompose :: Service data type"""
@@ -1817,7 +1931,17 @@ class DockerComposeService(BaseRecordValidator):
             self._ref_tag: (True, DockerComposeServiceName),
             self._file_tag: (False, DockerComposeYAMLFile)
         }
+        
+        _v = self.get_version(default=semantic_version.Version('0.7.0'))
+        if _v >= semantic_version.Version('0.9.0'):
+            self._url_tag = text_type('url')
+            self._name_tag = text_type('name')
+            self._description_tag = text_type('description')
 
+            _compose_rule[self._url_tag] = (False, URI) # URI?
+            _compose_rule[self._name_tag] = (False, OptionalString)
+            _compose_rule[self._description_tag] = (False, OptionalString)
+        
         self._default_type = "default_dc_service"
         self._types = {self._default_type: _compose_rule}
 
@@ -1837,20 +1961,26 @@ class DockerComposeService(BaseRecordValidator):
         f = self.get_file()
         t = os.path.join(tmpdir, f)
 
-        log.info("Copying resource file: '%s' -> '%s'...", f, t)
+        log.debug("Copying resource file: '%s' -> '%s'...", f, t)
         if not os.path.exists(t):
             d = os.path.dirname(t)
             if not os.path.exists(d):
                 os.mkdir(d, 7 * 8 + 7)
             shutil.copy(f, t)
+
+        # TODO: FIXME: follow dependencies in docker-compose files manually !!! 
+        # 1. open, check 'version' string: '2', '2.1', '2.2', '2.3'
+        # 2. iterate 'services' mapping and look for '<item>/extends/file' strings -> try to copy / check for the file to be there already
+
         else:
             log.debug("Target resource '%s' already exists!", t)
+
 
     def to_bash_array(self, n):
         _d = self.data_dump()
         _min_compose = [self._type_tag, self._ref_tag, self._file_tag, self._prerun_detections_hook_tag, self._preinit_hook_tag]
 
-        return ' '.join(["['{2}:{0}']='{1}'".format(k, _d[k], n) for k in _min_compose])
+        return ' '.join(["['{2}:{0}']={1}".format(k, shell_vstr(_d[k]), n) for k in _min_compose])
 
     @staticmethod
     def check_service(_f, _n):
@@ -2079,6 +2209,7 @@ class StationType(BaseEnum):  # NOTE: to be redesigned/removed later on together
 
         # NOTE: the list of possible values of Station::type (will depend on format version)
         self._enum_list = [self._default_input_data,
+                           text_type('fake'),  # container of defaults 
                            text_type('standalone'),  # No remote control via SSH & Hilbert client...
                            text_type('server'),  # Linux with Hilbert client part installed but no remote control!
                            text_type('standard')  # Linux with Hilbert client part installed!
@@ -2091,6 +2222,7 @@ class Station(BaseRecordValidator):  # Wrapper?
 
     _extends_tag = text_type('extends')
     _client_settings_tag = text_type('client_settings')
+    _compatible_applications_tag = text_type('compatible_applications')
     _type_tag = text_type('type')
 
     def __init__(self, *args, **kwargs):
@@ -2108,14 +2240,14 @@ class Station(BaseRecordValidator):  # Wrapper?
 
         default_rule = {
             Station._extends_tag: (False, StationID),  # TODO: NOTE: to be redesigned later on: e.g. use Profile!?
-            self._name_tag: (True, BaseUIString),
-            text_type('description'): (True, BaseUIString),
-            text_type('icon'): (False, Icon),
-            self._profile_tag: (True, ProfileID),
+            self._name_tag: (True, BaseUIString),            # TODO: FIXME: should not be required for hidden!
+            text_type('description'): (True, BaseUIString),  # TODO: FIXME: should not be required for hidden!
+            text_type('icon'): (False, Icon),                # TODO: currently unused => delete?
+            self._profile_tag: (True, ProfileID), # TODO: FIXME: should not be required for fakes!
             self._address_tag: (True, HostAddress),
             self._poweron_tag: (False, StationPowerOnMethodWrapper),  # !! variadic, PowerOnType...
             self._ssh_options_tag: (False, StationSSHOptions),  # !!! record: user, port, key, key_ref
-            text_type('omd_tag'): (True, StationOMDTag),  # ! like ServiceType: e.g. agent. Q: Is this mandatory?
+            text_type('omd_tag'): (True, StationOMDTag),  # NOTE: like ServiceType: e.g. agent. TODO: FIXME: should not be required for fakes!
             self._ishidden_tag: (False, StationVisibility),  # Q: Is this mandatory?
             Station._client_settings_tag: (False, StationClientSettings),  # IDMap : (BaseID, BaseString)
             Station._type_tag: (False, StringValidator)  # NOTE: to be redesigned later on!
@@ -2138,7 +2270,7 @@ class Station(BaseRecordValidator):  # Wrapper?
         _d = super(Station, self).data_dump()
         l = self.get_compatible_applications()
         if l is not None:
-            _d['compatible_applications'] = sorted(l.keys())
+            _d[Station._compatible_applications_tag] = sorted(l.keys())
             # + ':' + self._compatible_applications[k].get_name()
         return _d
 
@@ -2238,29 +2370,144 @@ class Station(BaseRecordValidator):  # Wrapper?
         log.debug('HostAddress: {}'.format(_a))
         return _a
 
-    def shutdown(self):
+    def app_restart(self, action_args=None):
         _a = self.get_address()
 
         assert _a is not None
         assert isinstance(_a, HostAddress)
 
         try:
+            _ret = _a.ssh([_HILBERT_STATION, _HILBERT_STATION_OPTIONS, "app_restart"])
+        except:
+            log.exception("Could not start app-restarting on the station {}".format(_a))
+            _ret = -1
+
+        if _ret != 0:
+            log.error("Failed running app-restarting on the station {}".format(_a))
+
+        return _ret
+
+    def cleanup(self, action_args=None):
+        _a = self.get_address()
+
+        assert _a is not None
+        assert isinstance(_a, HostAddress)
+
+        try:
+            if action_args:
+                _ret = _a.ssh([_HILBERT_STATION, _HILBERT_STATION_OPTIONS, "cleanup", "--force"])
+            else:
+                _ret = _a.ssh([_HILBERT_STATION, _HILBERT_STATION_OPTIONS, "cleanup"])
+                
+        except:
+            log.exception("Could not perform system cleanup on the station {} [force={}]".format(_a, action_args))
+            _ret = -1
+
+        if _ret != 0:
+            log.error("Failed running system cleanup on the station {} [force={}]".format(_a, action_args))
+
+        return _ret
+    
+    def reboot(self, action_args=None):
+        _a = self.get_address()
+
+        assert _a is not None
+        assert isinstance(_a, HostAddress)
+
+        _ret = 0
+        try:
+            _ret = _a.ssh([_HILBERT_STATION, _HILBERT_STATION_OPTIONS, "pause"]) # TODO!
+        except:
+            s = "Could not stop Hilbert on the station {}".format(_a)
+            log.exception(s)
+            if PEDANTIC:
+                raise
+            log.info('Going to reboot the station despite an error while pausing Hilbert there!')
+#                return False
+
+        if _ret != 0:
+            s = "Could not pause Hilbert on the station {}. Return code: [{}]".format(_a, _ret)
+            if not PEDANTIC:
+                log.warning(s)
+                log.info('Going to reboot the station despite an error while pausing Hilbert there!')
+            else:
+                log.error(s)
+                return False
+
+        
+        
+        try:
+            _ret = _a.ssh([_HILBERT_STATION, _HILBERT_STATION_OPTIONS, "reboot", "now"]) #!
+        except:
+            log.exception("Could not start rebooting the station {}".format(_a))
+            _ret = -1
+
+        if _ret != 0:
+            log.error("Failed running rebooting on the station {}".format(_a))
+
+        return (_ret == 0)
+
+    def run_remote_cmd(self, action):
+        """
+        """
+        _a = self.get_address()
+
+        assert _a is not None
+        assert isinstance(_a, HostAddress)
+
+        try:
+            log.debug("Going to run action [{}] via ssh on the station [{}]".format(action, _a))
+            _ret = _a.ssh(action)
+        except:
+            log.exception("Could not run an action [{}] via ssh on the station [{}]".format(action, _a))
+            raise
+
+        if _ret == 255:
+            log.debug(
+                "Possibly connection was cut while running action [{}] via ssh on the station [{}] (returned exit code == 255!)".format(
+                    action, _a))
+        elif _ret != 0:
+            log.debug("Running action [{}] via ssh on the station [{}] returned non-zero exit code: [{}]".format(action, _a, _ret))
+
+        return _ret
+
+            
+    def shutdown(self, action_args=None):
+        """
+        Stop Hilbert stack on a station + power it off
+        """
+        _a = self.get_address()
+
+        assert _a is not None
+        assert isinstance(_a, HostAddress)
+
+        _ret = None
+        try:
             _ret = _a.ssh([_HILBERT_STATION, _HILBERT_STATION_OPTIONS, "stop"])
         except:
             s = "Could not stop Hilbert on the station {}".format(_a)
-            if not PEDANTIC:
-                log.warning(s)
-                return False
-            else:
-                log.exception(s)
+            log.exception(s)
+            if PEDANTIC:
                 raise
+            log.info('Going to shut the station down despite an error while stopping Hilbert there!')
+#                return False
 
         if _ret != 0:
-            return False
+            s = "Could not stop Hilbert on the station {}. Return code: [{}]".format(_a, _ret)
+            if not PEDANTIC:
+                log.warning(s)
+                log.info('Going to shut the station down despite an error while stopping Hilbert there!')
+            else:
+                log.error(s)
+                return False
 
         try:
+            # NOTE: ssh connection is NOT supposed to be cut NOW!
             _ret = _a.ssh([_HILBERT_STATION, _HILBERT_STATION_OPTIONS, "shutdown", "now"])
+#            log.warning("ssh connection was NOT cut during immediate station shutdown!?")
+#            _ret = 0
         except:
+#            log.debug("Ok, ssh connection was cut due to immediate station shutdown!")
             s = "Could not schedule immediate shutdown on the station {}".format(_a)
             if not PEDANTIC:
                 log.warning(s)
@@ -2270,23 +2517,35 @@ class Station(BaseRecordValidator):  # Wrapper?
                 raise
 
         if _ret != 0:
-            log.error("Bad attempt to immediately shutdown the station {} ".format(_a))
+            log.error("Failed attempt to immediately shutdown the station {} ".format(_a))
             return False
 
+        return (_ret == 0) # or (_ret == 255)
+
         try:
+            ### ssh connection is not supposed to be cut here! only in a minute!
             _ret = _a.ssh([_HILBERT_STATION, _HILBERT_STATION_OPTIONS, "shutdown"])
         except:
             s = "Could not schedule delayed shutdown on the station {}".format(_a)
+            log.exception(s)
+            if PEDANTIC:
+                raise
+            _ret = -1
+
+        if _ret != 0:
+            s = "Failed attempt to schedule a shutdown the station {} with default delay".format(_a)
             if not PEDANTIC:
                 log.warning(s)
-                return False
+                log.info('Going to shut the station down despite an error while stopping Hilbert there!')
             else:
-                log.exception(s)
-                raise
+                log.error(s)
+                return False
 
-        return (_ret == 0)
+            return False
 
-    def deploy(self):
+
+
+    def deploy(self, action_args=None):
         # TODO: get_client_settings()
         _d = self.get_data()
 
@@ -2350,7 +2609,7 @@ class Station(BaseRecordValidator):  # Wrapper?
                 # hilbert_station_services_and_applications
                 # hilbert_station_profile_services
                 # hilbert_station_compatible_applications
-                tmp.write('declare -Agr hilbert_station_services_and_applications=(\\\n')
+                _config = 'declare -Ag hilbert_station_services_and_applications=(\\\n'
                 #               ss = []
                 for k in _serviceIDs:
                     s = all_services.get(k, None)  # TODO: check compatibility during verification!
@@ -2362,9 +2621,9 @@ class Station(BaseRecordValidator):  # Wrapper?
                         # TODO: s.check()
 
                         #                        ss.append(s.get_ref())
-                        tmp.write('  {} \\\n'.format(s.to_bash_array(k)))
+                        _config += '  {} \\\n'.format(s.to_bash_array(k))
 
-                        s.copy(tmpdir)
+                        s.copy(tmpdir)  # TODO: follow dependencies!!!
 
                         # TODO: collect all **compatible** applications!
                         #                aa = []
@@ -2375,15 +2634,23 @@ class Station(BaseRecordValidator):  # Wrapper?
                     # TODO: a.check()
 
                     #                    aa.append(a.get_ref())
-                    tmp.write('  {} \\\n'.format(a.to_bash_array(k)))
+                    _config += '  {} \\\n'.format(a.to_bash_array(k))
 
-                    a.copy(tmpdir)
+                    a.copy(tmpdir)  # TODO: follow dependencies!!!
 
+                _config += ')\n'
+                tmp.write(_config)
+
+                tmp.write('declare -Ag hilbert_station_configuration=(\\\n')
+                for k in _d:
+                    if k not in [Station._client_settings_tag, Station._compatible_applications_tag, Station._extends_tag]:
+                        tmp.write("  [{}]={} \\\n".format(shell_vstr(k), shell_vstr(_d.get(k, '')) ))
                 tmp.write(')\n')
+                tmp.write("declare -g hilbert_station_configuration_ID={}\n".format(shell_vstr(self.get_id()) ))
 
-                tmp.write("declare -agr hilbert_station_profile_services=({})\n".format(' '.join(_serviceIDs)))
+                tmp.write("declare -ag hilbert_station_profile_services=({})\n".format(' '.join(_serviceIDs)))
                 tmp.write(
-                    "declare -agr hilbert_station_compatible_applications=({})\n".format(' '.join(all_apps.keys())))
+                   "declare -ag hilbert_station_compatible_applications=({})\n".format(' '.join(all_apps.keys())))
 
                 app = _settings.get('hilbert_station_default_application', '')  # NOTE: ApplicationID!
                 if app != '':
@@ -2400,14 +2667,14 @@ class Station(BaseRecordValidator):  # Wrapper?
                 for k in sorted(_settings.keys(), reverse=True):
                     if k.startswith('HILBERT_'):
                         # NOTE: HILBERT_* are exports for services/applications (docker-compose.yml)
-                        tmp.write("declare -xg {0}='{1}'\n".format(k, str(_settings.get(k, ''))))
+                        tmp.write("declare -xg {0}={1}\n".format(k, shell_vstr(str(_settings.get(k, '')))))
                     elif k.startswith('hilbert_'):
                         # NOTE: hilbert_* are exports for client-side tool: `hilbert-station`
-                        tmp.write("declare -rg {0}='{1}'\n".format(k, str(_settings.get(k, ''))))
+                        tmp.write("declare -g {0}={1}\n".format(k, shell_vstr(str(_settings.get(k, '')))))
                     else:
                         if not PEDANTIC:
                             log.debug("Non-hilbert station setting: [%s]!")
-                            tmp.write("declare -xg {0}='{1}'\n".format(k, str(_settings.get(k, ''))))
+                            tmp.write("declare -xg {0}={1}\n".format(k, shell_vstr(str(_settings.get(k, '')))))
                         else:
                             log.warning("Non-hilbert station setting: [%s]! Not allowed in pedantic mode!")
 
@@ -2421,11 +2688,10 @@ class Station(BaseRecordValidator):  # Wrapper?
             except:
                 log.debug("Exception during deployment!")
                 s = "Could not deploy new local settings to {}".format(_a)
+                log.exception(s)
                 if not PEDANTIC:
-                    log.warning(s)
                     return False
                 else:
-                    log.exception(s)
                     raise
 
                     #        except: # IOError as e:
@@ -2486,7 +2752,7 @@ class Station(BaseRecordValidator):  # Wrapper?
 
     #        raise NotImplementedError("Cannot switch to a different application on this station!")
 
-    def poweron(self):
+    def poweron(self, action_args=None):
         _d = self.get_data()
         assert _d is not None
 
@@ -2496,36 +2762,51 @@ class Station(BaseRecordValidator):  # Wrapper?
             log.error("Missing/wrong Power-On Method configuration for this station!")
             raise Exception("Missing/wrong Power-On Method configuration for this station!")
 
-        return poweron.start()  # , action_args????
+        return poweron.start(action_args)
 
     def run_action(self, action, action_args):
         """
         Run the given action on/with this station
 
-        :param action_args: arguments to the action
         :param action:
-                start  (poweron)
+                start  (wakeup)
                 stop  (shutdown)
+                reboot
+                cleanup
                 cfg_deploy
-                app_change <ApplicationID>
-#                start [<ServiceID/ApplicationID>]
-#                finish [<ServiceID/ApplicationID>]
+                app_restart
+                app_change       <ApplicationID>
+                run_shell_cmd <shell command to run remotely>
+        :param action_args: arguments to the action (see the action)
 
         :return: nothing.
         """
-
-        if action not in ['start', 'stop', 'cfg_deploy', 'app_change']:
-            raise Exception("Running action '{0}({1})' is not supported!".format(action, action_args))
+#                start [<ServiceID/ApplicationID>]
+#                finish [<ServiceID/ApplicationID>]
 
         # Run 'ssh address hilbert-station action action_args'?!
         if action == 'start':
-            _ret = self.poweron()  # action_args
+            _ret = self.poweron(action_args)
         elif action == 'cfg_deploy':
-            _ret = self.deploy()  # action_args
+            _ret = self.deploy(action_args)
         elif action == 'stop':
-            _ret = self.shutdown()  # action_args
+            _ret = self.shutdown(action_args)
+        elif action == 'reboot':
+            _ret = self.reboot(action_args)
+        elif action == 'cleanup':
+            _ret = self.cleanup(action_args)
         elif action == 'app_change':
             _ret = self.app_change(action_args)  # ApplicationID
+        elif action == 'app_restart':
+            _ret = self.app_restart(action_args)  # ApplicationID
+        elif action == 'run_shell_cmd':
+            _ret = self.run_remote_cmd(action_args)
+        else:
+            assert action not in ['start', 'stop', 'reboot', 'cfg_deploy', 'app_change', 'app_restart', 'run_shell_cmd', 'cleanup']
+            raise Exception("Running action '{0}({1})' is not supported!".format(action, action_args))
+
+            
+            
 
         # elif action == 'start':
         #            self.start_service(action_args)
@@ -2781,19 +3062,17 @@ class GlobalStations(BaseIDMap):
             while bool(_todo):
                 k, v = _todo.popitem()
 
-                _b = v.get_base()
-                assert k != _b  # no infinite self-recursive extensions!
+                _b = v.get_base() # get base
+                assert k != _b  # no infinite self-recursive extensions - statoion cannot extend itself!
 
-                # print(_b, ' :base: ', type(_b))
-                assert _b in _processed
-
+#                assert _b in _processed # enable multi-level extentions
                 if _b in _processed:
                     v.extend(_processed[_b])
                     _processed[k] = v
                     assert v.get_base() is None
                     _chg = True
                 else:
-                    _rest[k] = v
+                    _rest[k] = v # keep (k,v) for later (when its base will be processed!)
 
             _todo = _rest
 
